@@ -169,3 +169,11 @@ class StoryPatch(_Strict):
     request: str  # the user's revision request, verbatim
     ops: list[StoryPatchOp]
     reason: str
+
+
+class Revision(_Strict):
+    """A chat revision: story ops (possibly none) + the complete new finish plan."""
+
+    story_patch: StoryPatch
+    finish: FinishPlan
+    reply: str  # one line for the owner: what changed

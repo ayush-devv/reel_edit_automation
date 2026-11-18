@@ -27,20 +27,52 @@ def _cmd_probe(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_state(state: dict, ws) -> None:
+    for name, entry in state["stages"].items():
+        print(f"{name:10} {entry['status']:7} {json.dumps(entry.get('meta', {}), ensure_ascii=False)}")
+    print(f"\nworkspace: {ws.root}")
+    if ws.path("export", "reel.mp4").exists():
+        print(f"reel: {ws.path('export', 'reel.mp4')}")
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     from reel.runner import run_pipeline
-    from reel.stages import PIPELINE
-    from reel.workspace import Workspace
+    from reel.stages import EDIT_PIPELINE, PIPELINE
+    from reel.workspace import Workspace, atomic_write_json
 
     src = Path(args.input).resolve()
     project = Path(args.project).resolve() if args.project else Path.cwd() / "projects" / src.stem
     ws = Workspace.create(project)
+    absolute = lambda p: str(Path(p).resolve()) if p else None  # noqa: E731
     options = {"input": str(src), "fps": args.fps, "encoder": args.encoder, "language": args.language,
-               "brief": args.brief, "brand": args.brand, "asr_repo": args.asr_repo, "skip_visual": args.skip_visual}
-    state = run_pipeline(ws, PIPELINE, options=options, force=set(args.force or []))
-    for name, entry in state["stages"].items():
-        print(f"{name:10} {entry['status']:7} {json.dumps(entry.get('meta', {}))}")
-    print(f"\nworkspace: {ws.root}")
+               "brief": absolute(args.brief), "brand": absolute(args.brand), "asr_repo": args.asr_repo, "skip_visual": args.skip_visual}
+    atomic_write_json(ws.path("run_options.json"), options)  # `reel revise` reuses them
+    state = run_pipeline(ws, PIPELINE if args.analyse_only else EDIT_PIPELINE, options=options, force=set(args.force or []))
+    _print_state(state, ws)
+    return 0
+
+
+def _cmd_revise(args: argparse.Namespace) -> int:
+    """Chat revision: resume the Editor's finish session, apply story ops + new finish plan, re-render."""
+    from reel import decide
+    from reel.runner import StageContext, load_state, run_pipeline, save_state
+    from reel.stages import edit
+    from reel.workspace import Workspace
+
+    ws = Workspace(Path(args.project).resolve())
+    opts_file = ws.path("run_options.json")
+    options = json.loads(opts_file.read_text()) if opts_file.exists() else {}
+    with ws.lock():
+        res = decide.revise(decide.load_inputs(ws, options.get("brief"), options.get("brand")), args.request)
+        # the revised plans are the finish stage's output now: mark it done for its current inputs
+        state = load_state(ws)
+        ctx = StageContext(ws=ws, options=options)
+        state["stages"]["finish"] = {**state["stages"].get("finish", {}), "status": "done", "input_hash": edit.FINISH.input_hash(ctx),
+                                     "meta": {"revision": res}}
+        save_state(ws, state)
+    state = run_pipeline(ws, [edit.COMPILE, edit.RENDER], options=options)
+    print(f"Editor: {res['reply']}  ({res['calls']} call(s), ~${res['cost_usd']})")
+    _print_state(state, ws)
     return 0
 
 
@@ -91,6 +123,7 @@ SCHEMAS = {
     "story": ("reel.schemas.plan", "StoryPlan"),
     "finish": ("reel.schemas.plan", "FinishPlan"),
     "patch": ("reel.schemas.plan", "StoryPatch"),
+    "revision": ("reel.schemas.plan", "Revision"),
     "timeline": ("reel.schemas.timeline", "Timeline"),
     "words": ("reel.schemas.perception", "WordTable"),
 }
@@ -185,7 +218,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--brand", help="brand kit JSON (brands/<client>.json)")
     p.add_argument("--asr-repo", help="override the ASR model repo (default mlx-community/whisper-large-v3-turbo)")
     p.add_argument("--skip-visual", action="store_true", help="skip OCR, scenes, faces, palette, motion (faster)")
+    p.add_argument("--analyse-only", action="store_true", help="stop after the footage tables (no Claude calls)")
     p.set_defaults(func=_cmd_run)
+
+    p = sub.add_parser("revise", help="chat revision of an edited project, then re-render")
+    p.add_argument("--project", required=True)
+    p.add_argument("request", help='what to change, e.g. "start with the 10%% line and make it punchier"')
+    p.set_defaults(func=_cmd_revise)
 
     p = sub.add_parser("eval", help="eval harness")
     p.add_argument("--init", action="store_true", help="create/refresh eval/manifest.yaml from samples/gold/")
