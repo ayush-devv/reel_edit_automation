@@ -1,6 +1,7 @@
-"""Local asset libraries (build step 7): index an SFX folder (owner: Sonniss GDC bundles) and an
-owned music folder (ADR-0022). Files stay where the owner keeps them; the index stores absolute
-paths, measured timing (SFX peak, music beats) and the licence of each source.
+"""Local asset libraries (build step 7): index an SFX folder and a music folder (ADR-0022). Files
+stay where the owner keeps them; the index stores their path (relative to assets/ for files fetched
+into it by `reel assets fetch`, so the committed index works in any checkout; absolute otherwise),
+measured timing (SFX peak, music beats) and the licence of each source.
 """
 
 from __future__ import annotations
@@ -18,19 +19,19 @@ from reel.workspace import atomic_write_json
 AUDIO_EXT = {".wav", ".aif", ".aiff", ".flac"}
 MUSIC_EXT = AUDIO_EXT | {".mp3", ".m4a"}
 
-# first match wins; matched against "folder/file" lower-cased
+# first match wins; matched against "folder file" lower-cased, camelCase split ("impactPunch" → "impact punch")
 SFX_CATEGORIES: list[tuple[str, tuple[str, ...]]] = [
     ("riser", ("riser", "uplifter", "rise", "build up", "buildup", "swell", "sweep up")),
     ("whoosh", ("whoosh", "woosh", "swoosh", "swish", "pass by", "passby", "fly by", "flyby")),
     ("swipe", ("swipe", "slide", "page turn")),
     ("boom", ("boom", "sub drop", "subdrop", "bass drop", "downer")),
     ("hit", ("hit", "impact", "punch", "slam", "thud", "stinger", "smash")),
-    ("glitch", ("glitch", "digital", "data", "error", "static")),
-    ("pop", ("pop", "bubble", "pluck", "blip")),
-    ("click", ("click", "tick", "tap", "button", "ui ", "interface")),
-    ("ding", ("ding", "chime", "bell", "notification", "ping", "success")),
-    ("cash", ("cash", "coin", "register", "money", "kaching", "ka-ching")),
+    ("glitch", ("glitch", "digital", "data", "error", "static", "zap")),
+    ("pop", ("pop", "bubble", "pluck", "blip", "drop")),
     ("camera", ("shutter", "camera", "photo")),
+    ("click", ("click", "tick", "tap", "button", "ui ", "interface", "switch", "toggle", "select", "mouse")),
+    ("cash", ("cash", "coin", "register", "money", "kaching", "ka-ching")),
+    ("ding", ("ding", "chime", "bell", "notification", "ping", "success", "confirmation", "bong", "two tone", "three tone")),
     ("typing", ("typing", "keyboard", "typewriter")),
 ]
 SFX_MAX_S = 6.0
@@ -39,12 +40,21 @@ TYPICAL_MS = {"riser": 2500, "whoosh": 700, "swipe": 400, "boom": 1500, "hit": 7
               "click": 120, "ding": 800, "cash": 900, "camera": 400, "typing": 1500}  # longer files are ambiences/music beds, not edit SFX
 
 
-def _id(prefix: str, path: Path) -> str:
+def _id(prefix: str, path: Path | str) -> str:
     return f"{prefix}_{hashlib.sha1(str(path).encode()).hexdigest()[:8]}"
 
 
+def _stored_path(f: Path, rel_to: Path | None) -> str:
+    """Path written to the index: relative (posix) under `rel_to` — portable across checkouts — else absolute."""
+    f = f.resolve()
+    if rel_to is not None and f.is_relative_to(rel_to.resolve()):
+        return f.relative_to(rel_to.resolve()).as_posix()
+    return str(f)
+
+
 def sfx_category(path: Path) -> str | None:
-    key = f"{path.parent.name} {path.stem}".lower().replace("_", " ").replace("-", " ")
+    raw = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", f"{path.parent.name} {path.stem}")
+    key = raw.lower().replace("_", " ").replace("-", " ")
     for cat, words in SFX_CATEGORIES:
         if any(re.search(rf"\b{re.escape(w.strip())}", key) for w in words):
             return cat
@@ -69,7 +79,7 @@ def _peak_db(y: np.ndarray) -> float:
     return round(20 * np.log10(max(float(np.abs(y).max()) if y.size else 0.0, 1e-9)), 1)
 
 
-def index_sfx(folder: Path, *, source: str, license_: str) -> list[dict]:
+def index_sfx(folder: Path, *, source: str, license_: str, rel_to: Path | None = None) -> list[dict]:
     out = []
     for f in sorted(p for p in folder.rglob("*") if p.suffix.lower() in AUDIO_EXT and not p.name.startswith(".")):
         cat = sfx_category(f.relative_to(folder))
@@ -82,7 +92,8 @@ def index_sfx(folder: Path, *, source: str, license_: str) -> list[dict]:
         dur = y.size / rate
         if dur <= 0.02 or dur > SFX_MAX_S:
             continue
-        out.append({"id": _id(cat, f), "file": str(f.resolve()), "name": f.stem, "category": cat,
+        stored = _stored_path(f, rel_to)
+        out.append({"id": _id(cat, stored if rel_to is not None else f), "file": stored, "name": f.stem, "category": cat,
                     "duration_ms": int(round(dur * 1000)), "peak_ms": peak_ms(y, rate), "peak_dbfs": _peak_db(y),
                     "source": source, "license": license_})
     return out
@@ -104,7 +115,7 @@ def beats(y: np.ndarray, rate: int) -> tuple[float, list[int], list[int]]:
     return round(float(np.atleast_1d(tempo)[0]), 1), beat_ms, beat_ms[phase::4]
 
 
-def index_music(folder: Path, *, source: str, license_: str) -> list[dict]:
+def index_music(folder: Path, *, source: str, license_: str, rel_to: Path | None = None) -> list[dict]:
     import librosa
 
     out = []
@@ -116,7 +127,8 @@ def index_music(folder: Path, *, source: str, license_: str) -> list[dict]:
         bpm, beat_ms, down_ms = beats(y, rate)
         side = f.with_suffix(".json")
         meta = json.loads(side.read_text()) if side.exists() else {}
-        out.append({"id": _id("music", f), "file": str(f.resolve()), "title": meta.get("title", f.stem),
+        stored = _stored_path(f, rel_to)
+        out.append({"id": _id("music", stored if rel_to is not None else f), "file": stored, "title": meta.get("title", f.stem),
                     "duration_ms": int(round(y.size / rate * 1000)), "bpm": bpm, "beats_ms": beat_ms, "downbeats_ms": down_ms,
                     "mood": meta.get("mood") or f.parent.name.replace("_", " "), "energy": meta.get("energy"),
                     "source": meta.get("source", source), "license": meta.get("license", license_)})
@@ -131,15 +143,39 @@ def write_index(kind: str, entries: list[dict], *, replace: bool = False, root: 
     items = [e for e in data.get(key, []) if not (replace and e.get("source") in sources)]
     by = {e["id"]: e for e in items}
     by.update({e["id"]: e for e in entries})
-    atomic_write_json(path, {key: sorted(by.values(), key=lambda e: e["id"])})
+    atomic_write_json(path, {**{k: v for k, v in data.items() if k != key}, key: sorted(by.values(), key=lambda e: e["id"])})
     return path
 
 
 def sfx_menu(sfx: dict[str, dict], per_category: int = 6) -> dict[str, list[dict]]:
-    """What the Editor sees: a few short, clean options per category (not thousands of files)."""
+    """What the Editor sees: a few short, clean options per category (not thousands of files).
+    Closest to the category's typical length first, alternating sources so one pack never fills a category."""
+    by_cat: dict[str, dict[str, list[dict]]] = {}
+    for e in sorted(sfx.values(), key=lambda e: (abs(e["duration_ms"] - TYPICAL_MS.get(e.get("category"), 700)), e["id"])):
+        by_cat.setdefault(e.get("category", "other"), {}).setdefault(e.get("source", ""), []).append(e)
     menu: dict[str, list[dict]] = {}
-    for e in sorted(sfx.values(), key=lambda e: (e.get("category", ""), abs(e["duration_ms"] - TYPICAL_MS.get(e.get("category"), 700)), e["id"])):
-        cat = e.get("category", "other")
-        if len(menu.setdefault(cat, [])) < per_category:
-            menu[cat].append(e)
+    for cat in sorted(by_cat):
+        queues = [by_cat[cat][s] for s in sorted(by_cat[cat])]
+        picked: list[dict] = []
+        while len(picked) < per_category and any(queues):
+            for q in queues:
+                if q and len(picked) < per_category:
+                    picked.append(q.pop(0))
+        menu[cat] = picked
     return menu
+
+
+def credit_lines(tl, idx=None) -> list[str]:
+    """Attribution the post must carry for the music/SFX a timeline uses (CC BY tracks); [] when all
+    assets are owned, CC0 or royalty-free without attribution. One block per asset, in timeline order."""
+    if idx is None:
+        idx = assets_mod.load()
+    out: list[str] = []
+    for a in tl.audio:
+        if a.role not in ("music", "sfx"):
+            continue
+        meta = (idx.music if a.role == "music" else idx.sfx).get(a.asset) or idx.sfx.get(a.asset) or idx.music.get(a.asset) or {}
+        text = (meta.get("attribution") or "").strip()
+        if text and text not in out:
+            out.append(text)
+    return out
