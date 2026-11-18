@@ -11,6 +11,15 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+perception = [
+    "mediapipe>=1.2.3",
+    "mlx-whisper>=0.4.3",
+    "onnxruntime>=1.32.0",
+    "rapidocr-onnxruntime>=1.4.4",
+    "scenedetect[opencv-headless]>=0.7.3",
+    "silero-vad>=6.2.3",
+    "soundfile>=0.14.0",
+]
 
 [project.scripts]
 reel = "reel.cli:main"

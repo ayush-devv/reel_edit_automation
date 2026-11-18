@@ -53,8 +53,8 @@ def test_source_properties_detected(corpus_dir):
 def test_reel_run_end_to_end_idempotent(corpus_dir, tmp_path):
     src = next(corpus_dir.glob("cfr25_portrait.*"))
     ws = Workspace.create(tmp_path / "proj")
-    s1 = run_pipeline(ws, PIPELINE, options={"input": str(src)})
+    s1 = run_pipeline(ws, PIPELINE[:2], options={"input": str(src)})
     assert s1["stages"]["mezzanine"]["status"] == "done"
     finished = s1["stages"]["mezzanine"]["finished"]
-    s2 = run_pipeline(ws, PIPELINE, options={"input": str(src)})
+    s2 = run_pipeline(ws, PIPELINE[:2], options={"input": str(src)})
     assert s2["stages"]["mezzanine"]["finished"] == finished  # skipped on second run

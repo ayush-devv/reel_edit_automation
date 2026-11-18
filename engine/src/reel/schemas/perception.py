@@ -17,7 +17,13 @@ class Word(BaseModel):
     end_us: int
     prob: float = 1.0
     speaker: str | None = None
-    filler: bool = False
+    filler: bool = False  # non-lexical filler (um/uh/hmm) — safe to cut
+    candidate_filler: bool = False  # lexical filler (matlab/toh/like…) — Claude judges in context
+    suspect: bool = False  # word spans a pause or > 1.2 s — timing needs realignment
+    low_conf: bool = False  # ASR probability < 0.5 — check against vocabulary / proof list
+    original_text: str | None = None  # ASR text before vocabulary correction
+    vocab_suspect: bool = False  # looks like a name/brand that is not confirmed by the vocabulary → proof list
+    vocab_suggestion: str | None = None  # closest vocabulary term, if any
 
 
 class WordTable(BaseModel):

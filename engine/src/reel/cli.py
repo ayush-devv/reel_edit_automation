@@ -35,7 +35,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
     src = Path(args.input).resolve()
     project = Path(args.project).resolve() if args.project else Path.cwd() / "projects" / src.stem
     ws = Workspace.create(project)
-    options = {"input": str(src), "fps": args.fps, "encoder": args.encoder}
+    options = {"input": str(src), "fps": args.fps, "encoder": args.encoder, "language": args.language,
+               "brief": args.brief, "brand": args.brand, "asr_repo": args.asr_repo, "skip_visual": args.skip_visual}
     state = run_pipeline(ws, PIPELINE, options=options, force=set(args.force or []))
     for name, entry in state["stages"].items():
         print(f"{name:10} {entry['status']:7} {json.dumps(entry.get('meta', {}))}")
@@ -177,6 +178,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--fps", help="override project fps, e.g. 30 or 30000/1001")
     p.add_argument("--encoder", default="prores_ks", choices=["prores_ks", "prores_videotoolbox"])
     p.add_argument("--force", action="append", help="re-run a stage even if up to date (repeatable)")
+    p.add_argument("--language", help="speech language: en | hi (default: brief, else auto-detect)")
+    p.add_argument("--brief", help="client brief JSON (briefs/<project>.json)")
+    p.add_argument("--brand", help="brand kit JSON (brands/<client>.json)")
+    p.add_argument("--asr-repo", help="override the ASR model repo (default mlx-community/whisper-large-v3-turbo)")
+    p.add_argument("--skip-visual", action="store_true", help="skip OCR, scenes, faces, palette, motion (faster)")
     p.set_defaults(func=_cmd_run)
 
     p = sub.add_parser("eval", help="eval harness")

@@ -10,12 +10,14 @@ uv run reel doctor                # must print PASS
 ```
 On a TLS-intercepting network: `SSL_CERT_FILE=~/.mac-ca-bundle.pem UV_SYSTEM_CERTS=1 uv sync --extra dev`.
 
+Perception (ASR, VAD, faces, OCR, scenes): `uv sync --extra dev --extra perception`. First runs download the Whisper model (Hugging Face) and the BlazeFace model; on a TLS-intercepting network also set `REQUESTS_CA_BUNDLE=~/.mac-ca-bundle.pem`.
+
 ## Commands
 | Command | What it does |
 |---|---|
 | `reel doctor` | Checks the pinned ffmpeg (zscale, tonemap, libplacebo, libass/subtitles, drawtext, ProRes, VideoToolbox), ffprobe, node, claude |
 | `reel probe FILE` | fps, VFR, rotation, colour/HDR, audio of a clip |
-| `reel run INPUT [--project DIR] [--fps 30] [--force STAGE]` | Runs the pipeline (step 1: ingest → mezzanine) into a resumable workspace |
+| `reel run INPUT [--project DIR] [--fps 30] [--force STAGE] [--language en] [--brief F] [--brand F] [--skip-visual]` | Runs the pipeline (ingest → mezzanine → perception) into a resumable workspace |
 | `reel conformance [--real]` | Builds the synthetic corpus (25/60/29.97 fps, rotated, VFR, HDR-HLG, no-audio — each with a flash+beep sync probe), makes mezzanines, checks them; `--real` adds `samples/conformance/*` |
 | `reel schema story\|finish\|patch\|timeline\|words` | JSON Schema for `claude -p --json-schema` |
 | `reel validate --project P [--story F] [--finish F]` | Semantic checks with actionable fixes (exit 2 on errors) |
