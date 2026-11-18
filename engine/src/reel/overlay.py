@@ -79,12 +79,17 @@ def build_props(tl: Timeline, root: Path, faces: dict | None, ocr: dict | None =
             sizes[c.asset] = render.source_size(root / tl.assets[c.asset].uri)
         sw_, sh_ = sizes[c.asset]
         zones = text_zones(ocr, c.asset, sw_, sh_, tl.width, tl.height, faces)
-        shots = render.clip_shots(c, fps, faces, scenes)
+        shots = render.clip_shots(c, fps, faces, scenes, (sw_, sh_), (tl.width, tl.height))
         for k, shot in enumerate(shots):
             start = c.at_f + shot.start_f
             end = c.at_f + (shots[k + 1].start_f if k + 1 < len(shots) else c.dur_f)
             box = None
-            if shot.box:
+            if shot.box and shot.layout == "fill":  # whole frame fitted to the width, centred vertically
+                b, s = shot.box, tl.width / sw_
+                top = (tl.height - sh_ * s) / 2
+                box = {"x": round(b["x"], 4), "y": round((top + b["y"] * sh_ * s) / tl.height, 4),
+                       "w": round(b["w"], 4), "h": round(b["h"] * sh_ * s / tl.height, 4)}
+            elif shot.box:
                 sw, sh, x, y = render.cover_crop(sw_, sh_, tl.width, tl.height, shot.centre)
                 b = shot.box
                 box = {"x": round((b["x"] * sw - x) / tl.width, 4), "y": round((b["y"] * sh - y) / tl.height, 4),

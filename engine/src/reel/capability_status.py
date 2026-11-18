@@ -1,0 +1,120 @@
+"""What this build can actually do, per capability in knowledge/capabilities.yaml.
+
+`yes` = the Editor can ask for it (plan field) or the engine does it automatically;
+`auto` = done by the engine without an Editor decision; `partial` = a limited form exists;
+anything not listed = not available yet. Kept in code next to the renderer so it changes
+with it (the gap analysis in docs/research/gap-analysis.md is generated from this).
+"""
+
+from __future__ import annotations
+
+STATUS: dict[str, tuple[str, str]] = {
+    # cut / trim
+    "cap.cut.split": ("yes", "keep items are word ranges; any split point is a word edge"),
+    "cap.cut.hard_cut": ("yes", "default between items"),
+    "cap.cut.jump_cut": ("yes", "split a line into two items to drop the middle"),
+    "cap.cut.ripple_delete": ("yes", "items are laid back to back"),
+    "cap.cut.reorder": ("yes", "item order = output order"),
+    "cap.cut.b_roll_cutaway": ("yes", "finish.broll mode=full"),
+    "cap.cut.silence_removal": ("yes", "story.max_pause_ms: pauses inside a kept line longer than this become jump cuts (default 400 ms)"),
+    "cap.cut.filler_word_removal": ("partial", "fillers are marked; the Editor splits around them"),
+    "cap.cut.text_based_edit": ("yes", "the whole plan is word-index based"),
+    "cap.trim.trim_in_out": ("yes", "word_start / word_end"),
+    "cap.trim.ripple_trim": ("yes", "automatic"),
+    # transitions
+    "cap.transition.dip_to_black": ("yes", "finish.transitions type=dip_to_black"),
+    "cap.transition.dip_to_white": ("yes", "finish.transitions type=dip_to_white"),
+    "cap.transition.glitch": ("yes", "type=glitch (RGB split + noise + tear)"),
+    "cap.transition.zoom": ("yes", "type=zoom"),
+    "cap.transition.whip_pan": ("yes", "type=whip"),
+    "cap.transition.blur_dissolve": ("partial", "type=blur (blur through the cut, no overlap)"),
+    "cap.transition.flash_cut": ("yes", "type=flash (overlay)"),
+    # transform
+    "cap.transform.scale": ("yes", "punch-ins"),
+    "cap.transform.crop": ("auto", "cover crop to 9:16"),
+    "cap.transform.reframe_vertical": ("auto", "face-centred per shot"),
+    "cap.transform.auto_reframe": ("auto", "per camera shot: locked off when the face is still, smoothed speed-capped tracking when it moves"),
+    "cap.transform.blurred_fill": ("auto", "two people too far apart for one vertical crop: whole frame over a blurred copy"),
+    "cap.transform.punch_in": ("yes", "finish.punch_ins (instant or ramped)"),
+    "cap.transform.keyframe_easing": ("yes", "punch-in ease"),
+    # speed
+    "cap.speed.constant": ("yes", "finish.speeds on non-speech items"),
+    # colour
+    "cap.color.auto_balance": ("auto", "per-clip gray-world white balance"),
+    "cap.color.white_balance": ("auto", "per clip"),
+    "cap.color.exposure": ("auto", "only outside a comfortable band"),
+    "cap.color.contrast": ("partial", "through looks"),
+    "cap.color.saturation_vibrance": ("partial", "through looks"),
+    "cap.color.creative_lut": ("yes", "finish.grade look + strength (7 built-in looks)"),
+    "cap.color.film_look": ("yes", "look=film"),
+    "cap.color.hdr_tonemap": ("auto", "mezzanine"),
+    # audio
+    "cap.audio.clip_gain": ("yes", "sfx/music gain"),
+    "cap.audio.loudness_normalize": ("auto", "-14 LUFS, -1.5 dBTP"),
+    "cap.audio.high_pass": ("auto", "voice chain"),
+    "cap.audio.compression": ("auto", "voice chain"),
+    "cap.audio.limiter": ("auto", "true-peak limit in loudnorm"),
+    "cap.audio.noise_reduction": ("auto", "afftdn"),
+    "cap.audio.de_ess": ("auto", "voice chain"),
+    "cap.audio.declick": ("auto", "voice chain"),
+    "cap.audio.ducking": ("yes", "finish.music.duck_db, exact speech envelope"),
+    "cap.audio.fade": ("auto", "edge fades + music fades"),
+    "cap.audio.room_tone": ("auto", "looped under every clip"),
+    "cap.audio.music_bed": ("yes", "finish.music (needs the music library)"),
+    "cap.audio.music_library_select": ("yes", "pick by id from the music library"),
+    "cap.audio.sfx_add": ("yes", "finish.sfx (needs the SFX library)"),
+    "cap.audio.mix": ("auto", "dialogue/music/sfx buses"),
+    # text
+    "cap.text.title": ("yes", "finish.hook_title (card / behind)"),
+    "cap.text.auto_captions": ("auto", "word-timed captions"),
+    "cap.text.caption_style": ("yes", "finish.captions family + tokens"),
+    "cap.text.word_highlight": ("yes", "token highlight=word"),
+    "cap.text.kinetic": ("yes", "anim pop / slide_fade / fade"),
+    "cap.text.animation_preset": ("yes", "caption families"),
+    "cap.text.keyword_emphasis": ("yes", "finish.captions.emphasis_words"),
+    "cap.text.background_box": ("yes", "token box"),
+    "cap.text.safe_zone": ("auto", "platform safe zones"),
+    # compositing / effects / export
+    "cap.compositing.text_behind_subject": ("yes", "hook_title.style=behind (needs a visible person)"),
+    "cap.compositing.picture_in_picture": ("yes", "finish.broll mode=pip"),
+    "cap.compositing.track_matte": ("partial", "person matte for behind-subject titles"),
+    "cap.compositing.background_removal": ("partial", "person matte (title window only)"),
+    "cap.effect.flash_white": ("yes", "flash transition"),
+    "cap.effect.film_grain": ("yes", "finish.grade.grain (whole reel)"),
+    "cap.effect.vignette": ("yes", "finish.grade.vignette (whole reel)"),
+    "cap.effect.camera_shake": ("yes", "finish.effects type=shake (decaying, word window)"),
+    "cap.effect.chromatic_aberration": ("yes", "finish.effects type=rgb_split"),
+    "cap.effect.glitch": ("partial", "transition type=glitch; effects type=rgb_split"),
+    "cap.effect.light_leak": ("yes", "finish.effects type=light_leak (procedural, screen-blended)"),
+    "cap.effect.exposure_pulse": ("yes", "finish.effects type=exposure_pulse"),
+    "cap.transition.light_leak": ("partial", "effects type=light_leak across the cut"),
+    "cap.effect.motion_blur": ("partial", "inside whip transitions"),
+    "cap.export.h264_mp4": ("auto", "delivery encode"),
+    "cap.export.aspect_ratio": ("yes", "brief deliverables: feed_4x5, square"),
+    "cap.export.frame_rate": ("auto", "project fps"),
+    "cap.export.bitrate_quality": ("auto", "CRF 16"),
+    "cap.export.loudness_target": ("auto", "-14 LUFS"),
+    "cap.export.captions_sidecar": ("auto", "SRT/VTT in the package"),
+    "cap.export.captions_burn_in": ("auto", "overlay"),
+    "cap.export.color_tagging": ("auto", "bt709"),
+    "cap.export.alpha_overlay": ("auto", "ProRes 4444 overlay in the package"),
+    "cap.export.multi_version": ("yes", "variants"),
+    # analysis
+    "cap.analysis.scene_detection": ("auto", "PySceneDetect"),
+    "cap.analysis.silence_detection": ("auto", "Silero VAD"),
+    "cap.analysis.loudness_measurement": ("auto", "EBU R128"),
+    "cap.analysis.transcription": ("auto", "Whisper (word timings)"),
+    "cap.analysis.filler_detection": ("auto", "filler + candidate filler flags"),
+    "cap.analysis.beat_detection": ("partial", "music library indexing"),
+    "cap.analysis.face_detection": ("auto", "MediaPipe 4 fps"),
+    "cap.analysis.voice_activity": ("auto", "Silero VAD"),
+    "cap.analysis.palette_extraction": ("auto", "k-means palette"),
+    "cap.analysis.motion_estimation": ("auto", "frame difference energy"),
+    "cap.analysis.probe_metadata": ("auto", "ffprobe"),
+    "cap.analysis.contrast_check": ("auto", "QA gate"),
+    "cap.analysis.contact_sheet": ("auto", "tables + QA sheets"),
+}
+
+
+def status(cap_id: str) -> tuple[str, str]:
+    return STATUS.get(cap_id, ("no", "not available in this build"))

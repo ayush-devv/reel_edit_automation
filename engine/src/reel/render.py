@@ -48,6 +48,7 @@ def unsupported(tl: Timeline) -> list[str]:
             out.append(f"video clip {c.id}: pans render in build step 7")
     out += [f"audio clip {a.id}: unknown role {a.role}" for a in tl.audio if a.role not in ("voice", "sfx", "music")]
     out += [f"transition {t.id}: unknown type {t.type.value}" for t in tl.transitions if t.type.value not in TRANSITIONS]
+    out += [f"effect {e.id}: unknown type {e.type}" for e in tl.effects if e.type not in EFFECTS]
     return out
 
 
@@ -56,7 +57,8 @@ def unsupported(tl: Timeline) -> list[str]:
 # last ⌊N/2⌋ frames and the in-coming shot's first ⌈N/2⌉ frames. Shots keep their exact frame
 # ranges, need no handles, and audio is untouched — sync and layout stay exact.
 
-TRANSITIONS = {"cut", "zoom", "whip", "blur", "dip_to_black"}
+EFFECTS = {"shake", "rgb_split", "light_leak", "exposure_pulse"}
+TRANSITIONS = {"cut", "zoom", "whip", "blur", "dip_to_black", "dip_to_white", "glitch"}
 ZOOM_PEAK = 1.25
 
 
@@ -131,12 +133,80 @@ def transition_graph(k: int, inp: str, out: str, c: VideoClip, head, tail, w: in
                   f"[wb{k}]scale={sw}:{sh},crop={w}:{h}:x='({sw - w}/2)*(1+({kt})-({kh}))':y={(sh - h) // 2},dblur=angle=0:radius=120[wbb{k}]",
                   f"[wa{k}][wbb{k}]blend=all_expr='if(gt({m},0),B,A)'[tw{k}]"]
         cur = f"tw{k}"
+    g = _ramp(head, tail, c.dur_f, {"glitch"})
+    if g:  # RGB split + noise + a horizontal tear on the frames next to the cut
+        stmts += [f"[{cur}]split[ga{k}][gb{k}]",
+                  f"[gb{k}]rgbashift=rh=-18:bh=18:edge=wrap,noise=alls=45:allf=t,crop=iw-24:ih:12:0,scale={w}:{h}[gbb{k}]",
+                  f"[ga{k}][gbb{k}]blend=all_expr='if(gt({g},0.15),B,A)'[tg{k}]"]
+        cur = f"tg{k}"
     fades = []
-    if tail and tail[0] == "dip_to_black":
-        fades.append(f"fade=t=out:start_frame={c.dur_f - tail[1]}:nb_frames={tail[1]}")
-    if head and head[0] == "dip_to_black":
-        fades.append(f"fade=t=in:start_frame=0:nb_frames={head[1]}")
+    for kind, colour in (("dip_to_black", "black"), ("dip_to_white", "white")):
+        if tail and tail[0] == kind:
+            fades.append(f"fade=t=out:start_frame={c.dur_f - tail[1]}:nb_frames={tail[1]}:color={colour}")
+        if head and head[0] == kind:
+            fades.append(f"fade=t=in:start_frame=0:nb_frames={head[1]}:color={colour}")
     stmts.append(f"[{cur}]{','.join(fades) or 'null'}[{out}]")
+    return stmts
+
+
+# ------------------------------------------------------------------ footage effects (after the cut, whole frame)
+
+LEAK_COLOURS = ("0xff7a1a", "0xffc23d", "0xff3d6e", "0x000000")
+
+
+def effects_graph(tl: Timeline, inp: str, out: str, fps: Fraction) -> list[str]:
+    """Grain + vignette over the whole reel, then each timed effect on its own frame window.
+    Windowed effects are computed on a branch and shown only inside their window (overlay enable)."""
+    w, h = tl.width, tl.height
+    stmts, cur, k = [], inp, 0
+
+    def nxt() -> str:
+        nonlocal k
+        k += 1
+        return f"fx{k}"
+
+    look = []
+    if tl.grade.vignette > 0:
+        look.append(f"vignette=angle={0.2 + 0.6 * tl.grade.vignette:.3f}")
+    if tl.grade.grain > 0:
+        look.append(f"noise=c0s={round(4 + 30 * tl.grade.grain)}:c0f=t")
+    if look:
+        o = nxt()
+        stmts.append(f"[{cur}]{','.join(look)}[{o}]")
+        cur = o
+    for e in sorted(tl.effects, key=lambda e: e.start_f):
+        s0, s1, i = e.start_f, max(e.start_f + 1, e.end_f), e.intensity
+        n_on = f"between(n,{s0},{s1 - 1})"
+        o = nxt()
+        if e.type == "shake":  # decaying, non-repeating jitter inside a slightly enlarged frame
+            a = max(2, round(0.025 * h * i / 2) * 2)
+            decay = f"max(0,1-(n-{s0})/{s1 - s0})"
+            jx = f"{a}+{a}*(sin(n*2.3)+0.5*sin(n*5.1+1))/1.5*{decay}"
+            jy = f"{a}+{a}*(sin(n*1.7+2)+0.5*sin(n*4.3))/1.5*{decay}"
+            stmts += [f"[{cur}]split[{o}a][{o}b]",
+                      f"[{o}b]crop={w - 2 * a}:{h - 2 * a}:x='clip({jx},0,{2 * a})':y='clip({jy},0,{2 * a})',scale={w}:{h}[{o}c]",
+                      f"[{o}a][{o}c]overlay=0:0:enable='{n_on}'[{o}]"]
+        elif e.type == "rgb_split":
+            d = max(2, round(4 + 18 * i))
+            stmts.append(f"[{cur}]rgbashift=rh=-{d}:bh={d}:edge=smear:enable='{n_on}'[{o}]")
+        elif e.type == "exposure_pulse":  # peaks on the first word, gone in ~0.25 s
+            t0 = float(Fraction(s0) / fps)
+            stmts.append(f"[{cur}]eq=brightness='{0.35 * i:.3f}*exp(-pow((t-{t0:.4f})/0.09,2))':eval=frame[{o}]")
+        elif e.type == "light_leak":  # a soft moving gradient, screen-blended, fading in and out over the window
+            t0, t1 = float(Fraction(s0) / fps), float(Fraction(s1) / fps)
+            dur = float(Fraction(tl.duration_f) / fps) + 1
+            qw, qh = w // 4 // 2 * 2, h // 4 // 2 * 2
+            cols = ":".join(f"c{j}={c}" for j, c in enumerate(LEAK_COLOURS))
+            op = f"{0.75 * i:.3f}*sin(PI*clip((T-{t0:.4f})/{t1 - t0:.4f},0,1))"
+            stmts += [f"gradients=s={qw}x{qh}:{cols}:n=4:x0=0:y0=0:x1={qw}:y1={qh}:speed=0.03:seed=7:r={fps.numerator}/{fps.denominator}:d={dur:.3f},"
+                      f"scale={w}:{h},gblur=sigma=30,format=gbrp[{o}l]",
+                      f"[{cur}]split[{o}a][{o}b]", f"[{o}b]format=gbrp[{o}g]",
+                      f"[{o}g][{o}l]blend=all_expr='A*(1-({op}))+(255-(255-A)*(255-B)/255)*({op})':shortest=1,format=yuv420p[{o}c]",
+                      f"[{o}a][{o}c]overlay=0:0:enable='{n_on}'[{o}]"]
+        else:
+            raise RenderError(f"effect {e.id}: unknown type {e.type}")
+        cur = o
+    stmts.append(f"[{cur}]null[{out}]")
     return stmts
 
 
@@ -199,8 +269,15 @@ def lut_chain(lut: Path | None) -> str:
             f"scale=in_range=pc:out_color_matrix=bt709:out_range=tv,")
 
 
-def clip_shots(c: VideoClip, fps: Fraction, faces: dict | None, scenes: dict | None) -> list:
-    """Per-shot centres for a base clip (camera cuts inside it get their own framing)."""
+def crop_share(src_w: int, src_h: int, out_w: int, out_h: int) -> float:
+    """Width of the cover crop window as a share of the source width (1.0 = nothing cut at the sides)."""
+    s = max(out_w / src_w, out_h / src_h)
+    return min(1.0, out_w / (src_w * s))
+
+
+def clip_shots(c: VideoClip, fps: Fraction, faces: dict | None, scenes: dict | None, src_size: tuple[int, int] | None = None,
+               out_size: tuple[int, int] = (1080, 1920)) -> list:
+    """Per-shot framing for a base clip (camera cuts inside it get their own framing; see reel.framing)."""
     from reel import framing
 
     fallback = _face_centre(faces, c.asset)
@@ -208,20 +285,45 @@ def clip_shots(c: VideoClip, fps: Fraction, faces: dict | None, scenes: dict | N
     cuts = ((scenes or {}).get(c.asset) or {}).get("cuts_us", [])
     if not samples:
         return [framing.Shot(0, fallback, None)]
-    return framing.shots(c, fps, cuts, samples, fallback)
+    crop_w = crop_share(*src_size, *out_size) if src_size else 1.0
+    return framing.shots(c, fps, cuts, samples, fallback, crop_w=crop_w)
+
+
+def crop_x_expr(shots: list, crops: list[tuple[int, int, int, int]], sw: int, out_w: int) -> str:
+    """Crop x over clip-relative frames `n`: a jump at every shot start, linear moves along tracked paths."""
+    kfs = []
+    for s, cr in zip(shots, crops):
+        if s.path:
+            pts = [(f, min(max(round(cx * sw - out_w / 2), 0), sw - out_w)) for f, cx in s.path]
+            kfs.append(Keyframe(f=s.start_f, v=pts[0][1], ease=Ease.hold))
+            kfs += [Keyframe(f=f, v=x, ease=Ease.linear) for f, x in pts if f > s.start_f]
+        else:
+            kfs.append(Keyframe(f=s.start_f, v=cr[2], ease=Ease.hold))
+    if len({k.v for k in kfs}) == 1:
+        return str(kfs[0].v)
+    return scale_expr(kfs, var="n")
+
+
+def fill_chain(src_w: int, src_h: int, out_w: int, out_h: int) -> str:
+    """The whole frame fitted to the width over a blurred, darkened cover copy (blurred at ¼ size: cheap)."""
+    fg_h = min(out_h, round(src_h * out_w / src_w / 2) * 2)
+    qw, qh = out_w // 4 // 2 * 2, out_h // 4 // 2 * 2
+    return (f"split[fb][ff];[fb]scale={qw}:{qh}:force_original_aspect_ratio=increase,crop={qw}:{qh},gblur=sigma=6,"
+            f"scale={out_w}:{out_h},eq=brightness=-0.08:saturation=0.85[fbg];[ff]scale={out_w}:{fg_h}:flags=lanczos[ffg];"
+            f"[fbg][ffg]overlay=0:{(out_h - fg_h) // 2}")
 
 
 def _geometry(c: VideoClip, src_w: int, src_h: int, out_w: int, out_h: int, fps: Fraction, centre,
-              lut: Path | None = None) -> str:
-    """`centre` is one (cx, cy) or a list of framing.Shot (step-wise crop that follows each shot's face)."""
+              lut: Path | None = None, tag: str = "") -> str:
+    """`centre` is one (cx, cy) or a list of framing.Shot (per-shot crop: static, tracked or fill)."""
     from reel import framing
 
     shots = centre if isinstance(centre, list) else [framing.Shot(0, centre, None)]
     crops = [cover_crop(src_w, src_h, out_w, out_h, s.centre) for s in shots]
     sw, sh = crops[0][0], crops[0][1]
     starts = [s.start_f for s in shots]
-    xs, ys = [cr[2] for cr in crops], [cr[3] for cr in crops]
-    x = framing.piecewise(xs, starts) if len(set(xs)) > 1 else str(xs[0])
+    ys = [cr[3] for cr in crops]
+    x = crop_x_expr(shots, crops, sw, out_w)
     y = framing.piecewise(ys, starts) if len(set(ys)) > 1 else str(ys[0])
     chain = f"scale={sw}:{sh}:flags=lanczos,crop={out_w}:{out_h}:x='{x}':y='{y}',{lut_chain(lut)}format=yuv420p"
     if c.scale and any(k.v != 1.0 for k in c.scale):
@@ -233,7 +335,16 @@ def _geometry(c: VideoClip, src_w: int, src_h: int, out_w: int, out_h: int, fps:
         z = scale_expr(c.scale)
         chain += (f",zoompan=z='{z}':d=1:s={out_w}x{out_h}:fps={fps.numerator}/{fps.denominator}"
                   f":x='clip(({fx})*iw-iw/zoom/2,0,iw-iw/zoom)':y='clip(({fy})*ih-ih/zoom/2,0,ih-ih/zoom)'")
-    return chain
+    fills = [(s.start_f, shots[k + 1].start_f if k + 1 < len(shots) else c.dur_f) for k, s in enumerate(shots) if s.layout == "fill"]
+    if not fills:
+        return chain
+    # fill shots: a second branch shows the whole frame; it replaces the crop only during those shots
+    t = tag or "x"
+    fill = fill_chain(src_w, src_h, out_w, out_h).replace("[fb]", f"[fb{t}]").replace("[ff]", f"[ff{t}]").replace(
+        "[fbg]", f"[fbg{t}]").replace("[ffg]", f"[ffg{t}]")
+    on = "+".join(f"between(n,{a},{b - 1})" for a, b in fills)
+    return (f"split[gc{t}][gf{t}];[gc{t}]{chain}[gcc{t}];[gf{t}]{fill},{lut_chain(lut)}format=yuv420p[gff{t}];"
+            f"[gcc{t}][gff{t}]overlay=0:0:enable='{on}'")
 
 
 def source_size(path: Path) -> tuple[int, int]:
@@ -291,7 +402,7 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
         raise RenderError("timeline uses features the base renderer does not support yet: " + "; ".join(problems))
     fps = tb.parse_rate(tl.fps)
     base = sorted((c for c in tl.video if c.id.startswith("v_")), key=lambda c: c.at_f)
-    voice = {a.src.item: a for a in tl.audio if a.role == "voice" and a.src}
+    voice = {a.id[2:]: a for a in tl.audio if a.role == "voice"}  # a_<shot> pairs with v_<shot>
     extras = [a for a in tl.audio if a.role in ("sfx", "music")]
     room_tone = (room_tone or {}) if finish_audio else {}
     if not base:
@@ -364,9 +475,9 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
             timing = (f"trim=end_frame={src_frames},setpts=(PTS-STARTPTS)/{c.speed},"
                       f"fps={fps.numerator}/{fps.denominator},trim=end_frame={c.dur_f},setpts=PTS-STARTPTS")
         graph.append(f"[{k}:v]{timing},"
-                     f"{_geometry(cz, w, h, tl.width, tl.height, fps, clip_shots(c, fps, faces, scenes), (luts or {}).get(c.asset))},setsar=1[g{k}]")
+                     f"{_geometry(cz, w, h, tl.width, tl.height, fps, clip_shots(c, fps, faces, scenes, (w, h), (tl.width, tl.height)), (luts or {}).get(c.asset), tag=str(k))},setsar=1[g{k}]")
         graph += transition_graph(k, f"g{k}", f"v{k}", c, head, tail, tl.width, tl.height, fps)
-        a = voice.get(c.src.item)
+        a = voice.get(c.id[2:])
         if a is None:
             raise RenderError(f"no voice audio for {c.id}")
         start = tb.frame_to_sample(tb.us_to_frame(a.src_in_us, fps), fps)
@@ -388,16 +499,17 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
             else:
                 graph.append(f"anullsrc=r={AUDIO_RATE}:cl=stereo,atrim=end_sample={n},aformat=sample_fmts=fltp[rt{k}]")
             rt_in.append(f"[rt{k}]")
-    graph.append("".join(concat_in) + f"concat=n={len(base)}:v=1:a=1[{'vcut' if brolls else 'vout'}][vraw]")
+    graph.append("".join(concat_in) + f"concat=n={len(base)}:v=1:a=1[vcat][vraw]")
     # full-frame b-roll: time-shifted to its slot and laid over the cut (the voice underneath is untouched)
-    cur = "vcut"
+    cur = "vcat"
     for j, c in enumerate(brolls):
         w, h = sizes[c.asset]
-        nxt = "vout" if j == len(brolls) - 1 else f"vb{j}"
+        nxt = f"vb{j}"
         graph.append(f"[{broll_input[c.id]}:v]trim=end_frame={c.dur_f},setpts=PTS-STARTPTS+{c.at_f}*{fps.denominator}/{fps.numerator}/TB,"
                      f"{_geometry(c, w, h, tl.width, tl.height, fps, (0.5, 0.5), (luts or {}).get(c.asset))},setsar=1[brv{j}]")
         graph.append(f"[{cur}][brv{j}]overlay=0:0:eof_action=pass:repeatlast=0[{nxt}]")
         cur = nxt
+    graph += effects_graph(tl, cur, "vout", fps)
 
     if not finish_audio:
         graph.append("[vraw]anull[aout]")

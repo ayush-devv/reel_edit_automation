@@ -44,6 +44,9 @@ class StoryPlan(_Strict):
     hook: str  # id of the chosen hook option; its item must be items[0]
     items: list[KeepItem]  # in output order
     knowledge_used: list[str]  # knowledge node ids that drove decisions (failure attribution)
+    # Pauses inside an item longer than this are cut out (jump cut). 0 keeps every pause (a deliberate
+    # dramatic beat); 300–3000 otherwise (validated). Default 400 ms: dead air is the clearest amateur tell.
+    max_pause_ms: int = 400
 
 
 # ------------------------------------------------------------------ pass 2: finish
@@ -81,6 +84,8 @@ class TransitionType(str, Enum):
     blur = "blur"
     flash = "flash"
     dip_to_black = "dip_to_black"
+    dip_to_white = "dip_to_white"
+    glitch = "glitch"
 
 
 class Transition(_Strict):
@@ -148,6 +153,25 @@ class GradePlan(_Strict):
     look: str  # id from the look list in context/finish_context.md, or "none"
     strength: float  # 0–1 (validated); 0.3–0.6 is typical
     reason: str
+    grain: float = 0.0  # film grain over the whole reel, 0–0.6 (validated); 0.15–0.3 reads as texture, not noise
+    vignette: float = 0.0  # darkened corners, 0–0.7 (validated); pulls the eye to the centre
+
+
+class EffectType(str, Enum):
+    shake = "shake"  # camera shake that decays over the window (impact, punchline)
+    rgb_split = "rgb_split"  # chromatic RGB split (tech / glitchy energy), short
+    light_leak = "light_leak"  # warm light leak washing over the frame (nostalgic, dreamy, a reveal)
+    exposure_pulse = "exposure_pulse"  # a bright flash-pulse on the first word (a hit, a beat)
+
+
+class Effect(_Strict):
+    id: str
+    type: EffectType
+    item: str  # story item
+    from_word: int  # window starts at this word …
+    to_word: int  # … and ends with this word (same item)
+    intensity: float  # 0–1 (validated)
+    reason: str
 
 
 class FinishPlan(_Strict):
@@ -161,6 +185,7 @@ class FinishPlan(_Strict):
     music: MusicPlan
     broll: list[Broll]
     knowledge_used: list[str]
+    effects: list[Effect] = []  # footage effects on a word window (validated: limits per type)
 
 
 # ------------------------------------------------------------------ revisions

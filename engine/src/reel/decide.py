@@ -32,7 +32,7 @@ STORY_EFFORT = "high"
 FINISH_EFFORT = "medium"
 
 # What the step-5 renderer can draw (render.unsupported rejects the rest). Grows in steps 6–7.
-RENDERABLE_TRANSITIONS = {"cut", "flash", "zoom", "whip", "blur", "dip_to_black"}
+RENDERABLE_TRANSITIONS = {"cut", "flash", "zoom", "whip", "blur", "dip_to_black", "dip_to_white", "glitch"}
 
 Caller = Callable[..., claude_call.CallResult]
 
@@ -92,6 +92,7 @@ def story_pack(inp: Inputs) -> str:
     if ref.exists():
         lines += [ref.read_text(), ""]
     lines.append(knowledge.story_context(b.genre_hint if b else None))
+    lines.append(knowledge.LIBRARY_POINTER)
     return "\n".join(lines)
 
 
@@ -106,9 +107,14 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
              "- Colour: pick a look + strength (0.3–0.6 typical; `none` keeps the corrected footage).",
              "- Speed: constant 0.25–4× on items with no speech only (validator rejects speech).",
              "- Music: bed from the library (starts on a beat at the first cut, ducked under speech), or none.",
-             "- Transitions: hard cut (default, nothing to add); `flash`, `zoom`, `whip`, `blur`, `dip_to_black` (2–15 frames, centred on the cut). Use rarely, on a real beat change.",
+             "- Transitions: hard cut (default, nothing to add); `flash`, `zoom`, `whip`, `blur`, `dip_to_black`, `dip_to_white` (bright reset), `glitch` (RGB split + noise; tech/energy) — 2–15 frames, centred on the cut. Use rarely, on a real beat change.",
              "- Hook title: a short on-screen title over the opening line (≤ 7 words, ≤ 42 chars), or \"\" for none; style `card` or `behind` (behind the speaker's head — needs a clearly visible person).",
              "- Punch-ins: yes (scale 1.0–2.0, instant or ramped).",
+             "- Texture (whole reel, in `grade`): `grain` 0–0.6 (0.15–0.3 = filmic texture), `vignette` 0–0.7 (darker corners, eye to centre). 0 = off.",
+             "- Footage effects (`effects`, on a word window inside one item, intensity 0–1): `shake` (decaying camera shake, ≤ 1.5 s — impact or punchline), "
+             "`rgb_split` (≤ 0.7 s — glitchy/tech energy), `exposure_pulse` (bright hit peaking on the first word — a beat or reveal), "
+             "`light_leak` (warm wash, ≤ 3.5 s — nostalgic, dreamy, a soft reveal). Accents only: 0–3 per reel is typical, ≤ 6.",
+             "- Pauses inside lines were already tightened in the story pass (jump cuts); a punch-in on the shot after a jump cut hides the jump.",
              "- Captions: kinetic captions in the family you choose, with your emphasis words; a brand kit overrides family/tokens.", ""]
     if inp.brand:
         lines += ["# Brand kit (overrides your token choices)", "", json.dumps(inp.brand.model_dump(exclude_none=True), indent=1, ensure_ascii=False), ""]
@@ -140,6 +146,7 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
     if ref.exists():
         lines += [ref.read_text(), ""]
     lines.append(knowledge.finish_context(story.genre))
+    lines.append(knowledge.LIBRARY_POINTER)
     return "\n".join(lines)
 
 
@@ -248,6 +255,7 @@ def readback(inp: Inputs, story: StoryPlan) -> str:
 
 def story_pass(inp: Inputs, caller: Caller = claude_call.call) -> dict:
     ws = inp.ws
+    knowledge.write_library(ws)
     atomic_write_bytes(ws.path("context", "brief_and_knowledge.md"), story_pack(inp).encode())
     d1 = decide(caller, ws, label="story", prompt=STORY_PROMPT, model=StoryPlan, persona=STORY_PERSONA, effort=STORY_EFFORT,
                 check=_check_story(inp))
@@ -265,6 +273,7 @@ def story_pass(inp: Inputs, caller: Caller = claude_call.call) -> dict:
 def finish_pass(inp: Inputs, caller: Caller = claude_call.call) -> dict:
     ws = inp.ws
     story = project.load_json_model(StoryPlan, ws.path("plan", "story.json"))
+    knowledge.write_library(ws)
     atomic_write_bytes(ws.path("context", "finish_context.md"), finish_pack(inp, story).encode())
     d = decide(caller, ws, label="finish", prompt=FINISH_PROMPT, model=FinishPlan, persona=FINISH_PERSONA, effort=FINISH_EFFORT,
                check=_check_finish(inp, story))

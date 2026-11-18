@@ -118,6 +118,16 @@ class Grade(_Strict):
     look: str = owned("ffmpeg", default="none")
     strength: float = owned("ffmpeg", default=0.0)
     correct: bool = owned("ffmpeg", default=True)  # per-clip white balance + exposure toward neutral
+    grain: float = owned("ffmpeg", default=0.0)
+    vignette: float = owned("ffmpeg", default=0.0)
+
+
+class EffectEvent(_Strict):
+    id: str
+    type: str = owned("ffmpeg")  # shake | rgb_split | light_leak | exposure_pulse
+    start_f: int = owned("ffmpeg")
+    end_f: int = owned("ffmpeg")
+    intensity: float = owned("ffmpeg")
 
 
 class TitleEvent(_Strict):
@@ -160,6 +170,7 @@ class Timeline(_Strict):
     titles: list[TitleEvent] = Field(default_factory=list)
     flashes: list[FlashEvent] = Field(default_factory=list)
     pips: list[PipEvent] = Field(default_factory=list)
+    effects: list[EffectEvent] = Field(default_factory=list)
     plan_ref: dict[str, str] = Field(default_factory=dict)  # file hashes of the plans compiled
 
 
@@ -171,14 +182,14 @@ def field_owners(model: type[BaseModel] = Timeline, prefix: str = "") -> dict[st
         if "owner" in extra:
             out[f"{prefix}{name}"] = extra["owner"]
         ann = f.annotation
-        for sub in (VideoClip, AudioClip, Ducking, Grade, TransitionEvent, CaptionTrack, CaptionPage, CaptionWord, TitleEvent, FlashEvent, PipEvent):
+        for sub in (VideoClip, AudioClip, Ducking, Grade, TransitionEvent, CaptionTrack, CaptionPage, CaptionWord, TitleEvent, FlashEvent, PipEvent, EffectEvent):
             if ann is sub or (getattr(ann, "__args__", None) and sub in ann.__args__):
                 out.update(field_owners(sub, f"{prefix}{name}[]."))
     return out
 
 
 REMOTION_FIELDS = ("captions", "titles", "flashes", "pips")
-FFMPEG_FIELDS = ("assets", "video", "audio", "transitions", "ducking", "grade")
+FFMPEG_FIELDS = ("assets", "video", "audio", "transitions", "ducking", "grade", "effects")
 
 
 def part(tl: Timeline, fields: tuple[str, ...]) -> dict:

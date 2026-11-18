@@ -38,8 +38,9 @@ def _opt_file(path: str | None) -> str | None:
 def _knowledge_fp() -> str:
     from reel import config
 
-    files = sorted((config.KNOWLEDGE_DIR / "graph").glob("*.yaml")) + sorted((config.KNOWLEDGE_DIR / "learned").glob("*.yaml"))
-    return hash_inputs([file_fingerprint(f) for f in files])
+    files = (sorted((config.KNOWLEDGE_DIR / "graph").glob("*.yaml")) + sorted((config.KNOWLEDGE_DIR / "learned").glob("*.yaml"))
+             + [config.KNOWLEDGE_DIR / "capabilities.yaml"])
+    return hash_inputs([file_fingerprint(f) for f in files] + [_code_fp("knowledge", "capability_status")])
 
 
 def _assets_fp() -> str:

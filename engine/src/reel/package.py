@@ -171,14 +171,18 @@ def edit_list(tl: Timeline, story: StoryPlan, finish: FinishPlan, words) -> str:
     fps = tb.parse_rate(tl.fps)
     by = words.by_index()
     tc = lambda f: _ts(f, fps, ".")[3:]  # noqa: E731  mm:ss.mmm
-    clips = {c.src.item: c for c in tl.video if c.id.startswith("v_")}
+    clips: dict[str, list] = {}
+    for c in sorted((c for c in tl.video if c.id.startswith("v_")), key=lambda c: c.at_f):
+        clips.setdefault(c.src.item, []).append(c)
     lines = [f"# Edit list — {story.summary}", "", f"Genre `{story.genre}` · {len(story.items)} items · "
              f"{float(Fraction(tl.duration_f) / fps):.2f} s @ {tl.fps}", "", "## Story", "",
              "| out | item | beat | source | text | reason |", "|---|---|---|---|---|---|"]
     for it in story.items:
-        c = clips[it.id]
+        shots = clips[it.id]
+        c = shots[0]
         text = " ".join(by[i].text for i in range(it.word_start, it.word_end + 1))
-        src = f"{c.asset} {c.src_in_us / 1e6:.2f}–{c.src_out_us / 1e6:.2f} s" + (f" @ {c.speed}×" if c.speed != 1 else "")
+        src = (f"{c.asset} {c.src_in_us / 1e6:.2f}–{shots[-1].src_out_us / 1e6:.2f} s" + (f" @ {c.speed}×" if c.speed != 1 else "")
+               + (f" ({len(shots) - 1} pause cut{'s' if len(shots) > 2 else ''})" if len(shots) > 1 else ""))
         lines.append(f"| {tc(c.at_f)} | {it.id} | {it.beat} | {src} | {text} | {it.reason} |")
     hook = next((h for h in story.hook_options if h.id == story.hook), None)
     lines += ["", f"**Hook:** {hook.reason if hook else '—'}", "", "## Finish", ""]

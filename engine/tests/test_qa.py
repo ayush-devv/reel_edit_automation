@@ -241,3 +241,56 @@ def test_caption_words_are_tidied_not_the_audio():
     ws = [Word(i=k, clip="c", text=t, start_us=k, end_us=k + 1) for k, t in enumerate("back in the sunny d days i i thought ORANGE. CEO".split())]
     out = clean_caption_words(ws)
     assert [w.text for w in out] == ["Back", "in", "the", "sunny", "d", "days", "I", "thought", "orange.", "CEO"]
+
+
+def test_framing_holds_still_tracks_movement_and_fills_wide_two_shots():
+    from fractions import Fraction
+
+    from reel import framing
+
+    prov = Provenance(item="k0", words=[0, 0])
+    c = VideoClip(id="v_k0", asset="c01", at_f=0, dur_f=150, src_in_us=0, src_out_us=6_000_000, src=prov)
+    crop_w = 0.316  # 16:9 source → 9:16 crop
+    still = [{"t_us": t, "faces": [{"x": 0.45 + 0.005 * (t // 250_000 % 2), "y": 0.3, "w": 0.1, "h": 0.15}]} for t in range(0, 2_000_000, 250_000)]
+    walk = [{"t_us": t, "faces": [{"x": 0.2 + 0.25 * (t - 2_000_000) / 2_000_000, "y": 0.3, "w": 0.1, "h": 0.15}]}
+            for t in range(2_000_000, 4_000_000, 250_000)]
+    two = [{"t_us": t, "faces": [{"x": 0.1, "y": 0.3, "w": 0.12, "h": 0.2}, {"x": 0.78, "y": 0.3, "w": 0.11, "h": 0.19}]}
+           for t in range(4_000_000, 6_000_000, 250_000)]
+    shots = framing.shots(c, Fraction(25), cuts_us=[2_000_000, 4_000_000], samples=still + walk + two, crop_w=crop_w)
+    assert [s.layout for s in shots] == ["crop", "crop", "fill"]
+    assert shots[0].path is None  # small jitter stays inside the dead zone: a locked-off shot
+    path = shots[1].path
+    assert path and path[0][0] >= shots[1].start_f and path[-1][1] > path[0][1]  # follows the walk to the right
+    steps = [abs(b[1] - a[1]) / max(1, b[0] - a[0]) * 25 for a, b in zip(path, path[1:])]
+    assert max(steps) <= framing.MAX_SPEED * crop_w + 1e-6  # speed cap (crop widths per second)
+    # the second, smaller face never steals a tracked shot
+    assert framing.follow([{"t_us": 0, "faces": [{"x": 0.7, "y": 0, "w": 0.3, "h": 0.3}, {"x": 0.2, "y": 0, "w": 0.1, "h": 0.1}]}], 0.25)[0][1] == pytest.approx(0.25)
+
+
+def test_tracked_and_fill_shots_render_frame_exact(tmp_path):
+    from fractions import Fraction
+
+    from reel import render, tools
+    from reel.schemas.timeline import Asset, AssetKind, AudioClip, Timeline
+
+    src = tmp_path / "mezz" / "c01.mov"
+    src.parent.mkdir()
+    tools.ffmpeg(["-y", "-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=25:duration=6", "-f", "lavfi", "-i", "sine=f=440:d=6:r=48000",
+                  "-c:v", "prores_ks", "-profile:v", "2", "-c:a", "pcm_s16le", "-ac", "2", str(src)])
+    prov = Provenance(item="k0", words=[0, 0])
+    tl = Timeline(fps="25/1", width=1080, height=1920, duration_f=150, assets={"c01": Asset(id="c01", kind=AssetKind.video, uri="mezz/c01.mov")},
+                  video=[VideoClip(id="v_k0", asset="c01", at_f=0, dur_f=150, src_in_us=0, src_out_us=6_000_000,
+                                   scale=[Keyframe(f=0, v=1.0), Keyframe(f=20, v=1.2)], src=prov)],
+                  audio=[AudioClip(id="a_k0", asset="c01", at_f=0, dur_f=150, role="voice", src=prov)])
+    walk = [{"t_us": t, "faces": [{"x": 0.2 + 0.25 * t / 3_000_000, "y": 0.3, "w": 0.1, "h": 0.15}]} for t in range(0, 3_000_000, 250_000)]
+    two = [{"t_us": t, "faces": [{"x": 0.1, "y": 0.3, "w": 0.12, "h": 0.2}, {"x": 0.78, "y": 0.3, "w": 0.11, "h": 0.19}]} for t in range(3_000_000, 6_000_000, 250_000)]
+    faces = {"c01": {"samples": walk + two, "median_box": {"x": 0.3, "y": 0.3, "w": 0.1, "h": 0.15}}}
+    meta = render.render_base(tl, tmp_path, tmp_path / "base.mp4", faces=faces, scenes={"c01": {"cuts_us": [3_000_000]}}, finish_audio=False)
+    assert meta["frames"] == 150 and meta["size"] == "1080x1920"
+    # fill shot: top band is the blurred, darkened copy — far less detail than the sharp centre band
+    import numpy as np
+
+    frame = np.frombuffer(tools.run([str(render.ffmpeg_path()), "-v", "error", "-ss", "5", "-i", str(tmp_path / "base.mp4"), "-frames:v", "1",
+                                     "-f", "rawvideo", "-pix_fmt", "gray", "-"]).stdout, dtype=np.uint8).reshape(1920, 1080)
+    top, mid = frame[100:500].astype(float), frame[800:1100].astype(float)
+    assert np.abs(np.diff(top, axis=1)).mean() < 0.5 * np.abs(np.diff(mid, axis=1)).mean()

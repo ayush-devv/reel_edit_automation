@@ -196,7 +196,7 @@ def test_music_index_finds_tempo_and_beats(tmp_path):
 
 @pytest.mark.integration
 @pytest.mark.skipif(not READY, reason="needs pinned ffmpeg")
-@pytest.mark.parametrize("kind", ["zoom", "whip", "blur", "dip_to_black"])
+@pytest.mark.parametrize("kind", ["zoom", "whip", "blur", "dip_to_black", "dip_to_white", "glitch"])
 def test_transitions_keep_frames_and_sync(kind, tmp_path):
     from reel.conformance import checks, corpus
     from reel.schemas.plan import TransitionType
@@ -213,7 +213,7 @@ def test_transitions_keep_frames_and_sync(kind, tmp_path):
     meta = render.render_base(tl, tmp_path, out, finish_audio=False)
     assert meta["frames"] == total
     assert checks.beep_time(out) == pytest.approx(2.2, abs=0.01)
-    if kind != "dip_to_black":
+    if kind not in ("dip_to_black", "dip_to_white", "glitch"):  # flash detection is confused by the effect itself
         assert abs(checks.av_offset_ms(out)) <= 1000 / 25
 
 
@@ -317,3 +317,63 @@ def test_exposure_only_corrects_outside_the_comfortable_band():
     assert color.measure(grey(128))["exposure"] == 1.0  # 0.50: fine as shot
     assert color.measure(grey(40))["exposure"] > 1.1  # dark: lifted
     assert color.measure(grey(200))["exposure"] < 1.0  # very bright: pulled down a little
+
+
+def _gray_frame(path, t, size=(108, 192)):
+    import numpy as np
+
+    from reel import tools
+    from reel.config import ffmpeg_path
+
+    raw = tools.run([str(ffmpeg_path()), "-v", "error", "-ss", f"{t}", "-i", str(path), "-frames:v", "1", "-s", f"{size[0]}x{size[1]}",
+                     "-f", "rawvideo", "-pix_fmt", "gray", "-"]).stdout
+    return np.frombuffer(raw, dtype=np.uint8).reshape(size[1], size[0]).astype(float)
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not READY, reason="needs pinned ffmpeg")
+@pytest.mark.parametrize("kind", ["shake", "rgb_split", "light_leak", "exposure_pulse"])
+def test_footage_effects_only_touch_their_window(kind, tmp_path):
+    from reel import tools
+    from reel.schemas.timeline import EffectEvent
+
+    src = tmp_path / "mezz" / "c01.mov"
+    src.parent.mkdir()
+    tools.ffmpeg(["-y", "-f", "lavfi", "-i", "testsrc2=size=1080x1920:rate=25:duration=4", "-f", "lavfi", "-i", "sine=f=440:d=4:r=48000",
+                  "-c:v", "prores_ks", "-profile:v", "2", "-c:a", "pcm_s16le", "-ac", "2", str(src)])
+    prov = Provenance(item="k0", words=[0, 0])
+    plain = Timeline(fps="25/1", width=1080, height=1920, duration_f=100, assets={"c01": Asset(id="c01", kind=AssetKind.video, uri="mezz/c01.mov")},
+                     video=[VideoClip(id="v_k0", asset="c01", at_f=0, dur_f=100, src_in_us=0, src_out_us=4_000_000, src=prov)],
+                     audio=[AudioClip(id="a_k0", asset="c01", at_f=0, dur_f=100, role="voice", src=prov)])
+    fx = plain.model_copy(update={"effects": [EffectEvent(id="e1", type=kind, start_f=50, end_f=75, intensity=1.0)]})
+    a, b = tmp_path / "a.mp4", tmp_path / "b.mp4"
+    render.render_base(plain, tmp_path, a, finish_audio=False)
+    meta = render.render_base(fx, tmp_path, b, finish_audio=False)
+    assert meta["frames"] == 100
+    outside = abs(_gray_frame(a, 1.0) - _gray_frame(b, 1.0)).mean()
+    inside = abs(_gray_frame(a, 2.04) - _gray_frame(b, 2.04)).mean()
+    assert outside < 1.0, outside  # untouched before the window
+    assert inside > 3.0, inside  # visible inside it
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not READY, reason="needs pinned ffmpeg")
+def test_grain_and_vignette_cover_the_whole_reel(tmp_path):
+    from reel import tools
+    from reel.schemas.timeline import Grade
+
+    src = tmp_path / "mezz" / "c01.mov"
+    src.parent.mkdir()
+    tools.ffmpeg(["-y", "-f", "lavfi", "-i", "color=c=gray:size=1080x1920:rate=25:duration=2", "-f", "lavfi", "-i", "sine=f=440:d=2:r=48000",
+                  "-c:v", "prores_ks", "-profile:v", "2", "-c:a", "pcm_s16le", "-ac", "2", str(src)])
+    prov = Provenance(item="k0", words=[0, 0])
+    tl = Timeline(fps="25/1", width=1080, height=1920, duration_f=50, assets={"c01": Asset(id="c01", kind=AssetKind.video, uri="mezz/c01.mov")},
+                  video=[VideoClip(id="v_k0", asset="c01", at_f=0, dur_f=50, src_in_us=0, src_out_us=2_000_000, src=prov)],
+                  audio=[AudioClip(id="a_k0", asset="c01", at_f=0, dur_f=50, role="voice", src=prov)],
+                  grade=Grade(look="none", strength=0.0, correct=False, grain=0.4, vignette=0.6))
+    out = tmp_path / "g.mp4"
+    assert render.render_base(tl, tmp_path, out, finish_audio=False)["frames"] == 50
+    f = _gray_frame(out, 1.0)
+    assert f[:15, :15].mean() < f[90:100, 50:58].mean() - 10  # corners darker than the centre
+    full = _gray_frame(out, 1.0, size=(1080, 1920))
+    assert full[900:1000, 400:680].std() > 3.0  # grain: the flat grey is no longer flat (full resolution)

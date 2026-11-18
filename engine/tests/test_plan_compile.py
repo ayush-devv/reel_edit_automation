@@ -185,3 +185,43 @@ def test_every_timeline_field_has_one_owner():
     assert owners["video[].at_f"] == "ffmpeg"
     assert owners["captions[].pages"] == "remotion"
     assert set(owners.values()) <= {"ffmpeg", "remotion", "engine"}
+
+
+def _paused_words(gap_us=1_200_000, after=10):
+    """TEXT1 with a long pause after word `after` (inside item k01 = words 7–13)."""
+    ws = []
+    for w in WORDS.words:
+        shift = gap_us if w.clip == "c01" and w.i > after else 0
+        ws.append(w.model_copy(update={"start_us": w.start_us + shift, "end_us": w.end_us + shift}))
+    return WordTable(words=ws)
+
+
+def test_long_pause_inside_a_line_becomes_a_jump_cut():
+    from reel.compile import proof_list
+
+    words = _paused_words()
+    story = _story()
+    clips = {**CLIPS, "c01": ClipInfo("c01", "mezz/c01.mov", 12_000_000)}
+    tl = compile_timeline(story, _finish(), words, clips, FPS, IDX)
+    k01 = [c for c in tl.video if c.src.item == "k01"]
+    assert [c.id for c in k01] == ["v_k01", "v_k01.2"]
+    assert k01[0].src.words == [7, 10] and k01[1].src.words == [11, 13]
+    assert {a.id for a in tl.audio if a.role == "voice"} >= {"a_k01", "a_k01.2"}
+    # the 1.2 s pause is gone: output is far shorter than keeping the pause would be
+    kept = compile_timeline(story.model_copy(update={"max_pause_ms": 0}), _finish(), words, clips, FPS, IDX)
+    assert len([c for c in kept.video if c.src.item == "k01"]) == 1
+    assert kept.duration_f - tl.duration_f >= 30  # ≥ 1 s removed at 30 fps
+    # punch-in at word 10 is in shot 1; it holds through shot 2
+    assert k01[0].scale[-1].v == 1.2 and k01[1].scale and k01[1].scale[0].v == 1.2
+    # SFX after k01 lands on the end of its last shot
+    sfx = next(a for a in tl.audio if a.role == "sfx")
+    assert sfx.at_f == k01[1].at_f + k01[1].dur_f - 9
+    # read-back reports it; proof list still finds every word's shot
+    assert "1 pause(s) cut" in dry_run(story, words, clips, FPS, IDX)
+    assert isinstance(proof_list(tl, story, words), list)
+
+
+def test_max_pause_range_is_validated():
+    bad = _story().model_copy(update={"max_pause_ms": 100})
+    assert any(i.code == "out_of_range" for i in validate_story(bad, WORDS, set(CLIPS)))
+    assert not errors(validate_story(_story().model_copy(update={"max_pause_ms": 0}), WORDS, set(CLIPS)))

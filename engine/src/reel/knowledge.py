@@ -110,3 +110,71 @@ def finish_context(genre: str | None) -> str:
     lines += [_line(n) for n in playbook(genre, limit=45)
               if any(k in n["id"] for k in ("punch", "zoom", "caption", "type", "sfx", "music", "duck", "broll", "b_roll", "transition", "emph", "motion", "color", "colour"))]
     return "\n".join(lines) + "\n"
+
+
+# ------------------------------------------------------------------ full library on disk (the Editor reads on demand)
+
+LIBRARY_DIR = ("context", "knowledge")
+
+
+def _by_file() -> dict[str, list[dict]]:
+    """All nodes (overrides applied) grouped by graph file; learned additions go under `learned`."""
+    all_nodes, seen, out = nodes(), set(), {}
+    for f in sorted((config.KNOWLEDGE_DIR / "graph").glob("*.yaml")):
+        if f.name == "id_map.yaml":
+            continue
+        data = yaml.safe_load(f.read_text())
+        items = data if isinstance(data, list) else (data or {}).get("nodes", [])
+        ids = [n["id"] for n in items or [] if isinstance(n, dict) and n.get("id") in all_nodes]
+        out[f.stem] = [all_nodes[i] for i in ids]
+        seen.update(ids)
+    learned = [n for i, n in all_nodes.items() if i not in seen]
+    if learned:
+        out["learned"] = learned
+    return out
+
+
+def _detail(n: dict) -> str:
+    keep = {k: v for k, v in n.items() if k not in ("sources", "id_aliases") and v not in (None, "", [], {})}
+    return f"### `{n['id']}`\n\n" + yaml.safe_dump(keep, sort_keys=False, allow_unicode=True, width=120).strip() + "\n"
+
+
+def library_files() -> dict[str, str]:
+    """Relative path under context/knowledge/ -> markdown. index.md lists every node in one line;
+    <file>.md holds full node details; capabilities.md says what this build can render."""
+    from reel import capability_status
+
+    groups = _by_file()
+    total = sum(len(v) for v in groups.values())
+    idx = ["# Knowledge index (every node; read the file named in each heading for full details)", "",
+           f"{total} nodes. Rules marked [code] are enforced by the engine — you need not apply them.", ""]
+    files: dict[str, str] = {}
+    for stem, items in groups.items():
+        idx += [f"## {stem} → `context/knowledge/{stem}.md` ({len(items)})", ""]
+        idx += [f"- `{n['id']}` ({n.get('type', '?')}, {n.get('evidence_level', '?')}){' [code]' if _code_enforced(n) else ''} — "
+                f"{n.get('name', '')}: {' '.join(str(n.get('summary', '')).split())[:100]}" for n in items]
+        idx.append("")
+        files[f"{stem}.md"] = f"# {stem}\n\n" + "\n".join(_detail(n) for n in items)
+    files["index.md"] = "\n".join(idx)
+    caps = yaml.safe_load((config.KNOWLEDGE_DIR / "capabilities.yaml").read_text()).get("capabilities", [])
+    cap = ["# Editing capabilities: what this build can do", "",
+           "`yes` = you can ask for it in the plan; `auto` = the engine always does it; `partial` = limited form; "
+           "`no` = not available yet — do not plan around it.", ""]
+    for c in caps:
+        st, how = capability_status.status(c["id"])
+        cap.append(f"- `{c['id']}` **{st}** — {c.get('name', '')}{': ' + how if st != 'no' else ''}")
+    files["capabilities.md"] = "\n".join(cap) + "\n"
+    return files
+
+
+def write_library(ws) -> None:
+    from reel.workspace import atomic_write_bytes
+
+    for rel, text in library_files().items():
+        atomic_write_bytes(ws.path(*LIBRARY_DIR, rel), text.encode())
+
+
+LIBRARY_POINTER = ("\n## Full knowledge library\n\nThe nodes above are a starting shortlist. Every node (313+) is listed in "
+                   "`context/knowledge/index.md`; read the matching `context/knowledge/<file>.md` for full details of any node "
+                   "you may use, and `context/knowledge/capabilities.md` for what the renderer can and cannot do. "
+                   "Cite every node you relied on, from anywhere in the library.\n")

@@ -24,6 +24,7 @@ from reel.schemas.timeline import (
     CaptionTrack,
     CaptionWord,
     Ducking,
+    EffectEvent,
     FlashEvent,
     Grade,
     PipEvent,
@@ -66,6 +67,20 @@ def empty_finish(family: str = "bold_pop") -> FinishPlan:
 
 def _digest(model) -> str:
     return hashlib.sha256(json.dumps(model.model_dump(mode="json"), sort_keys=True).encode()).hexdigest()[:16]
+
+
+def pause_groups(item_words: list[Word], max_pause_us: int, edges: dict[int, tuple[int, int]] | None = None) -> list[list[Word]]:
+    """Split a kept line at pauses longer than `max_pause_us` (heard edges when known): each group
+    becomes its own shot, so dead air inside a line is cut out (a jump cut). 0 keeps every pause."""
+    edges = edges or {}
+    groups = [[item_words[0]]]
+    for a, b in zip(item_words, item_words[1:]):
+        gap = edges.get(b.i, (b.start_us, b.end_us))[0] - edges.get(a.i, (a.start_us, a.end_us))[1]
+        if max_pause_us and gap > max_pause_us:
+            groups.append([b])
+        else:
+            groups[-1].append(b)
+    return groups
 
 
 def _source_range(item_words: list[Word], clip_words: list[Word], clip: ClipInfo,
@@ -200,13 +215,15 @@ def proof_list(tl: Timeline, story: StoryPlan, words: WordTable) -> list[dict]:
     Uses the same word → output-frame mapping as the compiler."""
     fps = tb.parse_rate(tl.fps)
     by = words.by_index()
-    clips = {c.src.item: c for c in tl.video if c.id.startswith("v_")}
+    shots = [c for c in tl.video if c.id.startswith("v_")]
     out = []
     for it in story.items:
-        c = clips[it.id]
-        in_f = tb.us_to_frame(c.src_in_us, fps)
         for i in range(it.word_start, it.word_end + 1):
             w = by[i]
+            c = next((s for s in shots if s.src.item == it.id and s.src.words[0] <= i <= s.src.words[1]), None)
+            if c is None:
+                continue
+            in_f = tb.us_to_frame(c.src_in_us, fps)
             if w.filler or not (w.low_conf or w.vocab_suspect or w.suspect):
                 continue
             f = c.at_f + max(0, min(round((tb.us_to_frame(w.start_us, fps, mode="floor") - in_f) / c.speed), c.dur_f))
@@ -263,71 +280,96 @@ def compile_timeline(
     by = words.by_index()
     assets: dict[str, Asset] = {c.id: Asset(id=c.id, kind=AssetKind.video, uri=c.uri, duration_us=c.duration_us) for c in clips.values()}
 
-    # ---- base clips: word ranges → mezzanine frames → output grid
-    spans = []
+    # ---- base clips: word ranges → mezzanine frames → output grid. A line with long inner pauses
+    # becomes several shots (pause tightening); every shot keeps its own words for provenance.
+    max_pause_us = max(0, story.max_pause_ms) * 1000
+    spans = []  # (item, shot no., in_f, out_f, first word, last word)
     for it in story.items:
         clip = clips.get(it.clip)
         item_words = [by.get(i) for i in range(it.word_start, it.word_end + 1)]
         if clip is None or not item_words or any(w is None or w.clip != it.clip for w in item_words):
             raise CompileError(f"item {it.id}: invalid clip/word range — run `reel validate` first")
-        start_us, end_us = _source_range(item_words, words.clip_words(it.clip), clip, edges)
-        in_f = tb.us_to_frame(start_us, fps, mode="floor")
-        out_f = min(tb.us_to_frame(end_us, fps, mode="ceil"), tb.us_to_frame(clip.duration_us, fps, mode="floor"))
-        if out_f <= in_f:
-            out_f = in_f + 1
-        spans.append((it, in_f, out_f))
+        shots: list[list] = []
+        for group in pause_groups(item_words, max_pause_us, edges):
+            start_us, end_us = _source_range(group, words.clip_words(it.clip), clip, edges)
+            in_f = tb.us_to_frame(start_us, fps, mode="floor")
+            out_f = min(tb.us_to_frame(end_us, fps, mode="ceil"), tb.us_to_frame(clip.duration_us, fps, mode="floor"))
+            if out_f <= in_f:
+                out_f = in_f + 1
+            if shots and in_f <= shots[-1][1]:  # the pause is shorter than a frame after padding: no cut
+                shots[-1][1], shots[-1][3] = max(out_f, shots[-1][1]), group[-1].i
+            else:
+                shots.append([in_f, out_f, group[0].i, group[-1].i])
+        spans += [(it, n, a, b, w0, w1) for n, (a, b, w0, w1) in enumerate(shots)]
     rate = {sp.item: sp.rate for sp in finish.speeds}  # validator: non-speech items only, 0.25–4×
-    segments = tb.layout_segments([max(1, round((out - inn) / rate.get(it.id, 1.0))) for it, inn, out in spans])
+    segments = tb.layout_segments([max(1, round((out - inn) / rate.get(it.id, 1.0))) for it, _n, inn, out, _a, _b in spans])
 
     video: list[VideoClip] = []
     audio: list[AudioClip] = []
-    item_seg: dict[str, tuple[int, int, int]] = {}  # item id → (at_f, dur_f, in_f)
-    for (it, in_f, out_f), seg in zip(spans, segments):
-        prov = Provenance(item=it.id, words=[it.word_start, it.word_end])
-        video.append(VideoClip(
-            id=f"v_{it.id}", asset=it.clip, at_f=seg.out_start, dur_f=seg.out_frames,
-            src_in_us=tb.frame_to_us(in_f, fps), src_out_us=tb.frame_to_us(out_f, fps), speed=rate.get(it.id, 1.0), src=prov,
-        ))
+    item_seg: dict[str, list[tuple[int, int, int, int, int]]] = {}  # item id → shots (at_f, dur_f, in_f, first word, last word)
+    vclips: dict[str, list[VideoClip]] = {}
+    for (it, n, in_f, out_f, w0, w1), seg in zip(spans, segments):
+        prov = Provenance(item=it.id, words=[w0, w1])
+        sid = it.id if n == 0 else f"{it.id}.{n + 1}"
+        v = VideoClip(id=f"v_{sid}", asset=it.clip, at_f=seg.out_start, dur_f=seg.out_frames,
+                      src_in_us=tb.frame_to_us(in_f, fps), src_out_us=tb.frame_to_us(out_f, fps), speed=rate.get(it.id, 1.0), src=prov)
+        video.append(v)
         audio.append(AudioClip(
-            id=f"a_{it.id}", asset=it.clip, at_f=seg.out_start, dur_f=seg.out_frames,
+            id=f"a_{sid}", asset=it.clip, at_f=seg.out_start, dur_f=seg.out_frames,
             src_in_us=tb.frame_to_us(in_f, fps), speed=rate.get(it.id, 1.0), role="voice", src=prov,
         ))
-        item_seg[it.id] = (seg.out_start, seg.out_frames, in_f)
+        item_seg.setdefault(it.id, []).append((seg.out_start, seg.out_frames, in_f, w0, w1))
+        vclips.setdefault(it.id, []).append(v)
     total = segments[-1].out_end if segments else 0
-    vclip = {c.src.item: c for c in video}
+
+    def shot_of(item_id: str, wi: int) -> int:
+        shots = item_seg[item_id]
+        return next((k for k, s in enumerate(shots) if s[3] <= wi <= s[4]), len(shots) - 1)
+
+    def item_end(item_id: str) -> int:
+        at_f, dur_f, *_ = item_seg[item_id][-1]
+        return at_f + dur_f
 
     def word_out_frame(w: Word, item_id: str, *, end: bool = False) -> int:
-        at_f, dur_f, in_f = item_seg[item_id]
+        at_f, dur_f, in_f, _w0, _w1 = item_seg[item_id][shot_of(item_id, w.i)]
         f = tb.us_to_frame(w.end_us if end else w.start_us, fps, mode="ceil" if end else "floor") - in_f
         f = round(f / rate.get(item_id, 1.0))
         return at_f + max(0, min(f, dur_f))
 
-    # ---- punch-ins (clip-relative keyframes)
-    for p in sorted(finish.punch_ins, key=lambda p: (p.item, p.at_word)):
-        clip = vclip[p.item]
-        k = word_out_frame(by[p.at_word], p.item) - clip.at_f
-        if not clip.scale:
-            clip.scale.append(Keyframe(f=0, v=1.0, ease=Ease.hold))
-        if p.ramp_frames == 0:
-            clip.scale.append(Keyframe(f=k, v=p.scale, ease=Ease.hold))
-        else:
-            clip.scale.append(Keyframe(f=k, v=clip.scale[-1].v, ease=p.ease))
-            clip.scale.append(Keyframe(f=min(k + p.ramp_frames, clip.dur_f), v=p.scale, ease=p.ease))
+    # ---- punch-ins (clip-relative keyframes); a punch holds through the rest of its line, across
+    # the jump cuts that pause tightening made inside it
+    by_shot: dict[tuple[str, int], list] = {}
+    for p in finish.punch_ins:
+        by_shot.setdefault((p.item, shot_of(p.item, p.at_word)), []).append(p)
+    for item_id, shots in vclips.items():
+        carried = 1.0
+        for n, clip in enumerate(shots):
+            ps = sorted(by_shot.get((item_id, n), []), key=lambda p: p.at_word)
+            if ps or carried != 1.0:
+                clip.scale.append(Keyframe(f=0, v=carried, ease=Ease.hold))
+            for p in ps:
+                k = word_out_frame(by[p.at_word], p.item) - clip.at_f
+                if p.ramp_frames == 0:
+                    clip.scale.append(Keyframe(f=k, v=p.scale, ease=Ease.hold))
+                else:
+                    clip.scale.append(Keyframe(f=k, v=clip.scale[-1].v, ease=p.ease))
+                    clip.scale.append(Keyframe(f=min(k + p.ramp_frames, clip.dur_f), v=p.scale, ease=p.ease))
+            if clip.scale:
+                carried = clip.scale[-1].v
 
     # ---- transitions at cuts
     # ---- transitions at cuts: flashes are overlay events (Remotion), the rest need both shots (ffmpeg)
     transitions, flashes = [], []
     for t in finish.transitions:
-        at_f, dur_f, _ = item_seg[t.after_item]
         if t.type == TransitionType.flash:
-            flashes.append(FlashEvent(id=t.id, at_f=at_f + dur_f, frames=t.frames))
+            flashes.append(FlashEvent(id=t.id, at_f=item_end(t.after_item), frames=t.frames))
         else:
-            transitions.append(TransitionEvent(id=t.id, at_f=at_f + dur_f, type=t.type, frames=t.frames))
+            transitions.append(TransitionEvent(id=t.id, at_f=item_end(t.after_item), type=t.type, frames=t.frames))
 
     # ---- hook title over the opening line
     titles = []
     if finish.hook_title.text.strip() and story.items:
-        first_end = item_seg[story.items[0].id][1]
+        first_end = item_end(story.items[0].id)
         lo, hi = tb.us_to_frame(TITLE_MIN_US, fps, mode="ceil"), tb.us_to_frame(TITLE_MAX_US, fps)
         titles.append(TitleEvent(id="hook_title", text=finish.hook_title.text.strip(), start_f=0, end_f=min(max(first_end, lo), hi, total),
                                  layer="behind" if finish.hook_title.style == "behind" else "front"))
@@ -371,8 +413,7 @@ def compile_timeline(
     for c in finish.sfx:
         meta = idx.sfx[c.sfx]
         if c.anchor == SfxAnchor.cut_after_item:
-            at_f, dur_f, _ = item_seg[c.item]
-            anchor_f = at_f + dur_f
+            anchor_f = item_end(c.item)
         else:
             anchor_f = word_out_frame(by[c.word], c.item)
         peak_f = tb.us_to_frame(int(meta.get("peak_ms", 0)) * 1000, fps)
@@ -412,11 +453,19 @@ def compile_timeline(
         video.append(VideoClip(id=f"br_{b.id}", asset=b.asset, at_f=start, dur_f=end - start, src_in_us=src_in,
                                src_out_us=src_in + tb.frame_to_us(end - start, fps), src=Provenance(item=b.item, words=[b.from_word, b.to_word])))
 
+    # ---- footage effects on word windows (ffmpeg, after the cut)
+    effects = []
+    for e in finish.effects:
+        start = word_out_frame(by[e.from_word], e.item)
+        end = max(start + 2, word_out_frame(by[e.to_word], e.item, end=True))
+        effects.append(EffectEvent(id=e.id, type=e.type.value, start_f=start, end_f=min(end, total), intensity=e.intensity))
+
     return Timeline(
         fps=f"{fps.numerator}/{fps.denominator}", width=width, height=height, duration_f=total,
         assets=assets, video=video, audio=audio, transitions=transitions, ducking=ducking, captions=captions,
-        titles=titles, flashes=flashes, pips=pips,
-        grade=Grade(look=brand_look or finish.grade.look, strength=finish.grade.strength if finish.grade.look != "none" or brand_look else 0.0),
+        titles=titles, flashes=flashes, pips=pips, effects=effects,
+        grade=Grade(look=brand_look or finish.grade.look, strength=finish.grade.strength if finish.grade.look != "none" or brand_look else 0.0,
+                    grain=finish.grade.grain, vignette=finish.grade.vignette),
         plan_ref={"story": _digest(story), "finish": _digest(finish)},
     )
 
@@ -427,12 +476,17 @@ def dry_run(story: StoryPlan, words: WordTable, clips: dict[str, ClipInfo], fps:
     tl = compile_timeline(story, None, words, clips, fps, idx, edges=edges)
     by = words.by_index()
     lines = []
-    for c, it in zip(tl.video, story.items):
-        t0 = float(Fraction(c.at_f) / fps)
-        dur = float(Fraction(c.dur_f) / fps)
+    tightened = 0
+    for it in story.items:
+        shots = [c for c in tl.video if c.src.item == it.id]
+        t0 = float(Fraction(shots[0].at_f) / fps)
+        dur = float(Fraction(sum(c.dur_f for c in shots)) / fps)
         text = " ".join(by[i].text for i in range(it.word_start, it.word_end + 1))
-        lines.append(f"[{t0:6.2f}s +{dur:5.2f}s] {it.id} ({it.beat}): {text}")
+        tightened += len(shots) - 1
+        cut = f" [{len(shots) - 1} pause(s) cut]" if len(shots) > 1 else ""
+        lines.append(f"[{t0:6.2f}s +{dur:5.2f}s] {it.id} ({it.beat}): {text}{cut}")
     total_s = float(Fraction(tl.duration_f) / fps)
     cuts = max(0, len(story.items) - 1)
-    lines.append(f"TOTAL {total_s:.2f}s · {len(story.items)} items · {cuts} cuts · {cuts / total_s * 60 if total_s else 0:.1f} cuts/min")
+    lines.append(f"TOTAL {total_s:.2f}s · {len(story.items)} items · {cuts} cuts + {tightened} pause cuts (max_pause_ms={story.max_pause_ms}) · "
+                 f"{(cuts + tightened) / total_s * 60 if total_s else 0:.1f} cuts/min")
     return "\n".join(lines)

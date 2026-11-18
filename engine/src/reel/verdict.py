@@ -42,7 +42,7 @@ def run_gates(ws: Workspace, tl: Timeline, story: StoryPlan, brief: brief_mod.Br
     kept_text = " ".join(words[i].text for it in story.items for i in range(it.word_start, it.word_end + 1))
     faces, safe = _faces_props(ws)
     flashes = [(f.at_f - f.frames // 2 - 1, f.at_f + f.frames // 2 + 1) for f in tl.flashes]
-    dips = [(t.at_f - t.frames, t.at_f + t.frames) for t in tl.transitions if t.type.value == "dip_to_black"]
+    dips = [(t.at_f - t.frames, t.at_f + t.frames) for t in tl.transitions if t.type.value in ("dip_to_black", "dip_to_white")]
     proof = json.loads(ws.path("qa", "proof_list.json").read_text()) if ws.path("qa", "proof_list.json").exists() else []
     final, base, ov = ws.path("render", "final.mp4"), ws.path("render", "base.mov"), ws.path("render", "overlay.mov")
     results = [*qa.frame_and_loudness(tl, final), qa.proof_words(proof, confirmed_words(ws)), qa.brief_compliance(tl, kept_text, brief),

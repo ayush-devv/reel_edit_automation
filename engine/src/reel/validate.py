@@ -123,6 +123,10 @@ def validate_story(plan: StoryPlan, words: WordTable, clips: set[str], knowledge
             issues.append(Issue("overlap", f"items[{id2}]", f"Items {id1} and {id2} both use words {s2}–{min(e1, e2)}.",
                                 "Trim one item so no word is used twice (repeat a line only via a deliberate b-roll/callback)."))
 
+    if plan.max_pause_ms and not 300 <= plan.max_pause_ms <= 3000:
+        issues.append(Issue("out_of_range", "max_pause_ms", f"max_pause_ms {plan.max_pause_ms} is outside 300–3000.",
+                            "Use 0 to keep every pause, or 300–3000 (400 is a tight talking-head default)."))
+
     # hooks
     opt_ids = [h.id for h in plan.hook_options]
     if len(set(opt_ids)) != len(opt_ids):
@@ -145,6 +149,10 @@ def validate_story(plan: StoryPlan, words: WordTable, clips: set[str], knowledge
 
 
 # ------------------------------------------------------------------ finish
+
+
+EFFECT_MAX_MS = {"shake": 1500, "rgb_split": 700, "light_leak": 3500, "exposure_pulse": 1500}
+EFFECTS_MAX = 6
 
 
 def validate_finish(fin: FinishPlan, story: StoryPlan, words: WordTable, idx: Indexes, knowledge_ids: set[str] | None = None) -> list[Issue]:
@@ -252,6 +260,27 @@ def validate_finish(fin: FinishPlan, story: StoryPlan, words: WordTable, idx: In
     if m.track != "none":
         _range_check(issues, "music.gain_db", m.gain_db, -30, -6, "Music gain")
         _range_check(issues, "music.duck_db", m.duck_db, 6, 24, "Ducking depth")
+
+    _range_check(issues, "grade.grain", fin.grade.grain, 0.0, 0.6, "Grain")
+    _range_check(issues, "grade.vignette", fin.grade.vignette, 0.0, 0.7, "Vignette")
+    for n, e in enumerate(fin.effects):
+        path = f"effects[{n}]"
+        uid(f"{path}.id", e.id)
+        _range_check(issues, f"{path}.intensity", e.intensity, 0.0, 1.0, "Effect intensity")
+        if need_item(f"{path}.item", e.item):
+            in_item(f"{path}.from_word", e.item, e.from_word)
+            in_item(f"{path}.to_word", e.item, e.to_word)
+            if e.from_word <= e.to_word and by.get(e.from_word) and by.get(e.to_word):
+                dur_ms = (by[e.to_word].end_us - by[e.from_word].start_us) / 1000
+                cap = EFFECT_MAX_MS[e.type.value]
+                if dur_ms > cap:
+                    issues.append(Issue("effect_too_long", path, f"{e.type.value} spans {dur_ms:.0f} ms; the limit is {cap} ms.",
+                                        f"Shorten the word window — {e.type.value} only works as a short accent."))
+        if e.from_word > e.to_word:
+            issues.append(Issue("reversed_range", path, "from_word is after to_word.", "Swap them."))
+    if len(fin.effects) > EFFECTS_MAX:
+        issues.append(Issue("too_many_effects", "effects", f"{len(fin.effects)} effects in one reel.",
+                            f"Keep at most {EFFECTS_MAX}: effects lose their punch when they are everywhere.", "warning"))
 
     for n, b in enumerate(fin.broll):
         path = f"broll[{n}]"
