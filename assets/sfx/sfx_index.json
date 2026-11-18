@@ -1,0 +1,4 @@
+{
+  "_doc": "ADR-0008. Fill with CC0 / self-generated sounds. Fields: id, file, category, tags, duration_ms, peak_ms, loudness_lufs, use_for, license, source.",
+  "sfx": []
+}

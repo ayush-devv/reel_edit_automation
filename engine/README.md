@@ -17,6 +17,10 @@ On a TLS-intercepting network: `SSL_CERT_FILE=~/.mac-ca-bundle.pem UV_SYSTEM_CER
 | `reel probe FILE` | fps, VFR, rotation, colour/HDR, audio of a clip |
 | `reel run INPUT [--project DIR] [--fps 30] [--force STAGE]` | Runs the pipeline (step 1: ingest → mezzanine) into a resumable workspace |
 | `reel conformance [--real]` | Builds the synthetic corpus (25/60/29.97 fps, rotated, VFR, HDR-HLG, no-audio — each with a flash+beep sync probe), makes mezzanines, checks them; `--real` adds `samples/conformance/*` |
+| `reel schema story\|finish\|patch\|timeline\|words` | JSON Schema for `claude -p --json-schema` |
+| `reel validate --project P [--story F] [--finish F]` | Semantic checks with actionable fixes (exit 2 on errors) |
+| `reel dry-run --project P` | Read-back script of the story plan (running times, cut rate) |
+| `reel compile --project P` | Validate + compile plans into `timeline/timeline.json` |
 | `reel eval --init` / `reel eval [--set tuning]` | Creates `eval/manifest.yaml` from `samples/gold/`; runs a set and appends a row to `eval/scoreboard.jsonl` (holdout refused without `--holdout`) |
 
 ## Mezzanine contract (ADR-0015)

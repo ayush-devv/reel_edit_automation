@@ -1,0 +1,34 @@
+# Caption style families (ADR-0011/0017). Remotion components implement each family in build step 6.
+# Source: knowledge/graph/techniques_color_type_motion.yaml (caption-style recommendations).
+# `tokens` = defaults; Claude may override only keys listed here; brand kits override palette tokens.
+families:
+  - id: bold_pop
+    for: [genre.talking_head, genre.podcast_clip, genre.tutorial]
+    mood: high energy, hooks
+    max_words: 3
+    tokens: {font: "Inter Black", weight: "900", case: upper, base_color: "#FFFFFF", emph_color: "#FFD400",
+             highlight: word, anim: pop, anim_ms: "150", zone: lower_middle, stroke: "true"}
+  - id: clean_phrase
+    for: [genre.tutorial, genre.product]
+    mood: clear, explanatory
+    max_words: 6
+    tokens: {font: "Inter SemiBold", weight: "600", case: sentence, base_color: "#FFFFFF", emph_color: "#FFFFFF",
+             highlight: none, anim: fade, anim_ms: "120", zone: lower_middle, box: "true", box_color: "#000000B3"}
+  - id: editorial_kinetic
+    for: [genre.testimonial, genre.brand_story, genre.interview]
+    mood: premium, conversational
+    max_words: 4
+    tokens: {font: "Plus Jakarta Sans", weight: "500", case: title, base_color: "#F2EDE6", emph_color: "#FFFFFF",
+             emph_scale: "1.7", highlight: scale, anim: slide_fade, anim_ms: "220", zone: beside_face}
+  - id: minimal_calm
+    for: [genre.vlog, genre.montage, genre.brand_story]
+    mood: aesthetic, emotional
+    max_words: 5
+    tokens: {font: "Inter Light", weight: "300", case: lower, base_color: "#FFFFFF", emph_color: "#FFFFFF",
+             highlight: none, anim: fade, anim_ms: "400", zone: lower_third}
+  - id: speaker_coded
+    for: [genre.podcast_clip, genre.interview]
+    mood: multi-speaker clarity
+    max_words: 4
+    tokens: {font: "Inter Bold", weight: "700", case: sentence, speaker_a: "#FFFFFF", speaker_b: "#7FDBFF",
+             emph_color: "#FFD400", highlight: word, anim: pop, anim_ms: "120", zone: lower_middle}

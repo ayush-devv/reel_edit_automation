@@ -1,0 +1,4 @@
+{
+  "_doc": "ADR-0022. Licensed tracks only. Fields: id, file, licence, bpm, key, mood, duration_ms, sections [{name,start_ms,end_ms}], endings_ms [clean ending points], beats_ms (optional).",
+  "tracks": []
+}

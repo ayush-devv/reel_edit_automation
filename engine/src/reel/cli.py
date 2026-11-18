@@ -86,6 +86,80 @@ def _cmd_conformance(args: argparse.Namespace) -> int:
     return 0 if failures == 0 else 1
 
 
+SCHEMAS = {
+    "story": ("reel.schemas.plan", "StoryPlan"),
+    "finish": ("reel.schemas.plan", "FinishPlan"),
+    "patch": ("reel.schemas.plan", "StoryPatch"),
+    "timeline": ("reel.schemas.timeline", "Timeline"),
+    "words": ("reel.schemas.perception", "WordTable"),
+}
+
+
+def _cmd_schema(args: argparse.Namespace) -> int:
+    import importlib
+
+    mod, name = SCHEMAS[args.name]
+    model = getattr(importlib.import_module(mod), name)
+    print(json.dumps(model.model_json_schema(), indent=2))
+    return 0
+
+
+def _plan_inputs(args: argparse.Namespace):
+    from reel import assets, knowledge, project
+    from reel.schemas.plan import FinishPlan, StoryPlan
+    from reel.workspace import Workspace
+
+    ws = Workspace(Path(args.project).resolve())
+    story_path = Path(args.story) if args.story else ws.path("plan", "story.json")
+    story = project.load_json_model(StoryPlan, story_path)
+    finish = None
+    finish_path = Path(args.finish) if args.finish else ws.path("plan", "finish.json")
+    if finish_path.exists():
+        finish = project.load_json_model(FinishPlan, finish_path)
+    return ws, story, finish, project.word_table(ws), project.clip_infos(ws), project.project_fps(ws), assets.load(), knowledge.node_ids()
+
+
+def _cmd_validate(args: argparse.Namespace) -> int:
+    from reel.validate import errors, validate_finish, validate_story
+
+    ws, story, finish, words, clips, fps, idx, kids = _plan_inputs(args)
+    issues = validate_story(story, words, set(clips), kids)
+    if finish is not None and not errors(issues):
+        issues += validate_finish(finish, story, words, idx, kids)
+    print(json.dumps({"ok": not errors(issues), "issues": [i.as_dict() for i in issues]}, indent=2, ensure_ascii=False))
+    return 0 if not errors(issues) else 2
+
+
+def _cmd_compile(args: argparse.Namespace) -> int:
+    from reel.compile import compile_timeline
+    from reel.validate import errors, validate_finish, validate_story
+    from reel.workspace import atomic_write_json
+
+    ws, story, finish, words, clips, fps, idx, kids = _plan_inputs(args)
+    issues = validate_story(story, words, set(clips), kids) + (validate_finish(finish, story, words, idx, kids) if finish else [])
+    if errors(issues):
+        print(json.dumps({"ok": False, "issues": [i.as_dict() for i in errors(issues)]}, indent=2, ensure_ascii=False))
+        return 2
+    tl = compile_timeline(story, finish, words, clips, fps, idx)
+    out = ws.path("timeline", "timeline.json")
+    atomic_write_json(out, tl.model_dump(mode="json"))
+    print(f"timeline: {out} · {tl.duration_f} frames @ {tl.fps} · {len(tl.video)} video clips · {len(tl.captions.pages if tl.captions else [])} caption pages")
+    return 0
+
+
+def _cmd_dry_run(args: argparse.Namespace) -> int:
+    from reel.compile import dry_run
+    from reel.validate import errors, validate_story
+
+    ws, story, _finish, words, clips, fps, idx, kids = _plan_inputs(args)
+    issues = validate_story(story, words, set(clips), kids)
+    if errors(issues):
+        print(json.dumps({"ok": False, "issues": [i.as_dict() for i in errors(issues)]}, indent=2, ensure_ascii=False))
+        return 2
+    print(dry_run(story, words, clips, fps, idx))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="reel", description="Claude-driven reel editor engine")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -117,6 +191,21 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--real", action="store_true", help="also check samples/conformance/* (real phone clips)")
     p.add_argument("--encoder", default="prores_ks", choices=["prores_ks", "prores_videotoolbox"])
     p.set_defaults(func=_cmd_conformance)
+
+    p = sub.add_parser("schema", help="print a JSON Schema (for claude -p --json-schema)")
+    p.add_argument("name", choices=sorted(SCHEMAS))
+    p.set_defaults(func=_cmd_schema)
+
+    for name, func, help_text in (
+        ("validate", _cmd_validate, "check plans against the word table and libraries (exit 2 on errors)"),
+        ("compile", _cmd_compile, "validate + compile plans into timeline/timeline.json"),
+        ("dry-run", _cmd_dry_run, "read-back script of the story plan"),
+    ):
+        p = sub.add_parser(name, help=help_text)
+        p.add_argument("--project", required=True)
+        p.add_argument("--story", help="story plan JSON (default: <project>/plan/story.json)")
+        p.add_argument("--finish", help="finish plan JSON (default: <project>/plan/finish.json if present)")
+        p.set_defaults(func=func)
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s %(name)s: %(message)s")
