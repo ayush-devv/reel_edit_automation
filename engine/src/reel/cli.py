@@ -52,6 +52,25 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_library(args: argparse.Namespace) -> int:
+    from reel import library
+
+    folder = Path(args.folder).resolve()
+    if args.kind == "sfx":
+        entries = library.index_sfx(folder, source=args.source, license_=args.license)
+    else:
+        entries = library.index_music(folder, source=args.source, license_=args.license)
+    path = library.write_index(args.kind, entries, replace=args.replace)
+    cats: dict[str, int] = {}
+    for e in entries:
+        k = e.get("category") or e.get("mood") or "?"
+        cats[k] = cats.get(k, 0) + 1
+    print(f"indexed {len(entries)} {args.kind} file(s) → {path}")
+    for k, n in sorted(cats.items()):
+        print(f"  {k:12} {n}")
+    return 0
+
+
 def _cmd_revise(args: argparse.Namespace) -> int:
     """Chat revision: resume the Editor's finish session, apply story ops + new finish plan, re-render."""
     from reel import decide
@@ -220,6 +239,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--skip-visual", action="store_true", help="skip OCR, scenes, faces, palette, motion (faster)")
     p.add_argument("--analyse-only", action="store_true", help="stop after the footage tables (no Claude calls)")
     p.set_defaults(func=_cmd_run)
+
+    p = sub.add_parser("library", help="index a local SFX or music folder into assets/")
+    p.add_argument("kind", choices=["sfx", "music"])
+    p.add_argument("folder")
+    p.add_argument("--source", required=True, help='e.g. "Sonniss GDC 2024"')
+    p.add_argument("--license", required=True, help="licence summary stored with every file")
+    p.add_argument("--replace", action="store_true", help="drop previously indexed files from the same source first")
+    p.set_defaults(func=_cmd_library)
 
     p = sub.add_parser("revise", help="chat revision of an edited project, then re-render")
     p.add_argument("--project", required=True)

@@ -35,14 +35,27 @@ def test_idempotent_and_resume(tmp_path):
     assert calls == ["a", "b", "a", "b"]  # input change re-runs
 
 
-def test_missing_output_reruns_and_downstream_follows(tmp_path):
+def _reader(name, upstream, calls):
+    """A stage whose input hash is the content of the upstream stage's output."""
+    def run(ctx):
+        calls.append(name)
+        atomic_write_json(ctx.ws.path("log", f"{name}.json"), json.loads(ctx.ws.path("log", f"{upstream}.json").read_text()))
+        return {}
+
+    return Stage(name=name, input_hash=lambda ctx: ctx.ws.path("log", f"{upstream}.json").read_text(),
+                 outputs=lambda ctx: [ctx.ws.path("log", f"{name}.json")], run=run)
+
+
+def test_downstream_reruns_only_when_its_inputs_change(tmp_path):
     ws = Workspace.create(tmp_path / "p")
     calls = []
-    stages = [_stage("a", calls), _stage("b", calls)]
+    stages = [_stage("a", calls), _reader("b", "a", calls)]
     run_pipeline(ws, stages, options={"v": 1})
-    ws.path("log", "a.json").unlink()
+    ws.path("log", "a.json").unlink()  # a re-runs and writes the same output → b is still up to date
     run_pipeline(ws, stages, options={"v": 1})
-    assert calls == ["a", "b", "a", "b"]
+    assert calls == ["a", "b", "a"]
+    run_pipeline(ws, stages, options={"v": 2})  # a's output changes → b follows
+    assert calls == ["a", "b", "a", "a", "b"]
 
 
 def test_failure_recorded_then_resume(tmp_path):

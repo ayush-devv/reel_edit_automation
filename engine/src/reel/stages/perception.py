@@ -30,12 +30,16 @@ def _out(ctx: StageContext, name: str) -> Path:
     return ctx.ws.path("perception", f"{name}.json")
 
 
+def _content(path: str | None) -> str | None:
+    return file_fingerprint(Path(path)) if path else None
+
+
 def _input_hash(ctx: StageContext) -> str:
     report = ctx.ws.path("mezz", "report.json")
     o = ctx.options
     return hash_inputs({
         "mezz": file_fingerprint(report) if report.exists() else None,
-        "language": o.get("language"), "brief": o.get("brief"), "brand": o.get("brand"),
+        "language": o.get("language"), "brief": _content(o.get("brief")), "brand": _content(o.get("brand")),
         "asr": o.get("asr_repo"), "visual": not o.get("skip_visual"), "v": VERSION,
     })
 

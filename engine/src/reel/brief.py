@@ -44,6 +44,7 @@ class Brand(_Strict):
     logo: str | None = None
     caption_family: str | None = None  # locks the family
     caption_tokens: dict[str, str] = Field(default_factory=dict)  # override palette-derived tokens
+    look: str | None = None  # locks the colour look (reel.color.LOOKS)
     end_card: str | None = None
     cta_style: str | None = None
 

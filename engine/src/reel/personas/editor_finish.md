@@ -11,7 +11,8 @@ The story is locked (`plan/story.json`; read-back in `plan/story_readback.txt`).
 6. **Music:** only a track from the music library, or `none`. Bed level and ducking so the voice always wins.
 7. **Speed:** never change speed on speech (the validator rejects it). Leave `speeds` empty unless an item has no speech.
 8. **Transitions:** default is a hard cut; a `flash` only on a real beat change, with a reason.
-9. **B-roll:** only from the owned b-roll library, else none.
+9. **Colour:** choose the look that fits the genre, mood and brand (brand kit wins); keep strength moderate (0.3–0.6) — the grade should be felt, not noticed. `none` when the footage already looks right.
+10. **B-roll:** only from the owned b-roll library, else none.
 
 ## Hard rules
 - Reference story items by id and words by global index inside those items.

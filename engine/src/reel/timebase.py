@@ -62,6 +62,10 @@ def frame_to_sample(frame: int, fps: Fraction, rate: int = config.AUDIO_RATE) ->
     return int(Fraction(frame) * rate / fps + Fraction(1, 2))
 
 
+def us_to_sample(us: int, rate: int = config.AUDIO_RATE) -> int:
+    return int(Fraction(us) * rate / 1_000_000 + Fraction(1, 2))
+
+
 def samples_per_frame(fps: Fraction, rate: int = config.AUDIO_RATE) -> Fraction:
     return Fraction(rate) / fps
 

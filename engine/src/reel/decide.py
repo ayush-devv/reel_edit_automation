@@ -16,7 +16,7 @@ from typing import Callable
 
 from pydantic import BaseModel, ValidationError
 
-from reel import assets, claude_call, knowledge, project
+from reel import assets, claude_call, knowledge, library, project
 from reel import brief as brief_mod
 from reel.compile import ClipInfo, dry_run
 from reel.schemas.perception import WordTable
@@ -32,7 +32,7 @@ STORY_EFFORT = "high"
 FINISH_EFFORT = "medium"
 
 # What the step-5 renderer can draw (render.unsupported rejects the rest). Grows in steps 6–7.
-RENDERABLE_TRANSITIONS = {"cut", "flash"}
+RENDERABLE_TRANSITIONS = {"cut", "flash", "zoom", "whip", "blur", "dip_to_black"}
 
 Caller = Callable[..., claude_call.CallResult]
 
@@ -100,20 +100,32 @@ def _library(name: str, items: dict[str, dict], fields: tuple[str, ...]) -> list
 
 def finish_pack(inp: Inputs, story: StoryPlan) -> str:
     lines = ["# What the renderer can do in this build", "",
-             "- Transitions: hard cut (default, nothing to add) or `flash` (a short white flash on the cut, 2–6 frames; use rarely, on a big beat change).",
+             "- Colour: pick a look + strength (0.3–0.6 typical; `none` keeps the corrected footage).",
+             "- Speed: constant 0.25–4× on items with no speech only (validator rejects speech).",
+             "- Music: bed from the library (starts on a beat at the first cut, ducked under speech), or none.",
+             "- Transitions: hard cut (default, nothing to add); `flash`, `zoom`, `whip`, `blur`, `dip_to_black` (2–15 frames, centred on the cut). Use rarely, on a real beat change.",
              "- Hook title: a short on-screen title over the opening line (≤ 7 words, ≤ 42 chars), or \"\" for none.",
              "- Punch-ins: yes (scale 1.0–2.0, instant or ramped).",
-             "- Speed changes: none on speech; leave `speeds` empty.",
              "- Captions: kinetic captions in the family you choose, with your emphasis words; a brand kit overrides family/tokens.", ""]
     if inp.brand:
         lines += ["# Brand kit (overrides your token choices)", "", json.dumps(inp.brand.model_dump(exclude_none=True), indent=1, ensure_ascii=False), ""]
-    lines += ["# Caption families", ""]
+    from reel.color import LOOKS
+
+    lines += ["# Colour looks (each clip is first corrected toward neutral; the look is applied on top at `strength`)", ""]
+    lines += [f"- `{k}` — {d}" for k, (_, d) in LOOKS.items()]
+    lines += ["", "# Caption families", ""]
     for fid, f in inp.idx.caption_families.items():
         lines.append(f"- `{fid}` — for {', '.join(f.get('for', []))}; mood: {f.get('mood', '')}; max {f.get('max_words')} words/page; "
                      f"tokens you may override: {', '.join(sorted((f.get('tokens') or {}).keys()))}")
     lines.append("")
-    lines += _library("SFX library", inp.idx.sfx, ("category", "duration_ms", "peak_ms"))
-    lines += _library("Music library", inp.idx.music, ("mood", "bpm", "duration_ms"))
+    lines += ["## SFX library (pick by id; a handful per reel — ~8 reads as designed, ~20 as generic)", ""]
+    menu = library.sfx_menu(inp.idx.sfx)
+    if not menu:
+        lines += ["Empty — use none.", ""]
+    for cat, items in menu.items():
+        lines.append(f"- **{cat}**: " + ", ".join(f"`{e['id']}` ({e['duration_ms']} ms, peak at {e['peak_ms']} ms)" for e in items))
+    lines.append("")
+    lines += _library("Music library (bed starts so a beat lands on the first cut; ducked under speech)", inp.idx.music, ("title", "mood", "bpm", "energy", "duration_ms"))
     lines += _library("B-roll library", inp.idx.broll, ("description", "duration_ms"))
     lines.append(knowledge.finish_context(story.genre))
     return "\n".join(lines)

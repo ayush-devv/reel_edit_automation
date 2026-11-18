@@ -143,8 +143,15 @@ class HookTitle(_Strict):
     reason: str
 
 
+class GradePlan(_Strict):
+    look: str  # id from the look list in context/finish_context.md, or "none"
+    strength: float  # 0–1 (validated); 0.3–0.6 is typical
+    reason: str
+
+
 class FinishPlan(_Strict):
     hook_title: HookTitle
+    grade: GradePlan
     punch_ins: list[PunchIn]
     speeds: list[Speed]
     transitions: list[Transition]

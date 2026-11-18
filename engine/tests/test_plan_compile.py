@@ -7,7 +7,7 @@ from reel import assets
 from reel.compile import ClipInfo, compile_timeline, dry_run
 from reel.schemas.perception import Word, WordTable
 from reel.schemas.plan import (
-    CaptionPlan, Ease, FinishPlan, HookOption, HookTitle, KeepItem, MusicPlan, PatchOpKind, PunchIn, SfxAnchor, SfxCue,
+    CaptionPlan, Ease, FinishPlan, GradePlan, HookOption, HookTitle, KeepItem, MusicPlan, PatchOpKind, PunchIn, SfxAnchor, SfxCue,
     Speed, StoryPatch, StoryPatchOp, StoryPlan, Token,
 )
 from reel.schemas.timeline import field_owners
@@ -50,6 +50,7 @@ def _story(items=None, hook_item="k01"):
 def _finish(**kw):
     base = dict(
         hook_title=HookTitle(text="", reason="r"),
+        grade=GradePlan(look="clean", strength=0.4, reason="r"),
         punch_ins=[PunchIn(id="p01", item="k01", at_word=10, scale=1.2, ramp_frames=0, ease=Ease.hold, reason="r")],
         speeds=[], transitions=[],
         captions=CaptionPlan(family="bold_pop", tokens=[Token(key="emph_color", value="#00FF00")], emphasis_words=[9], script="latin", reason="r"),

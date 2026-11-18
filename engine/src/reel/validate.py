@@ -159,6 +159,12 @@ def validate_finish(fin: FinishPlan, story: StoryPlan, words: WordTable, idx: In
         issues.append(Issue("title_unconfirmed_name", "hook_title.text", "The hook title uses a name the ASR could not confirm.",
                             "Use the confirmed spelling from the brief, or leave the name out."))
 
+    from reel.color import LOOKS
+
+    if fin.grade.look not in LOOKS:
+        issues.append(Issue("unknown_look", "grade.look", f"Look '{fin.grade.look}' does not exist.", f"Use one of {sorted(LOOKS)}."))
+    _range_check(issues, "grade.strength", fin.grade.strength, 0.0, 1.0, "Look strength")
+
     for n, p in enumerate(fin.punch_ins):
         path = f"punch_ins[{n}]"
         uid(f"{path}.id", p.id)

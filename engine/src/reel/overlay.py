@@ -13,7 +13,7 @@ import shutil
 import time
 from pathlib import Path
 
-from reel import config, render, tools
+from reel import config, mix, render, tools
 from reel import timebase as tb
 from reel.schemas.timeline import Timeline
 from reel.workspace import atomic_write_json, file_fingerprint, hash_inputs, tmp_path_for
@@ -111,9 +111,17 @@ def composite(tl: Timeline, base: Path, overlay: Path, out: Path) -> dict:
     fps = tb.parse_rate(tl.fps)
     tmp = tmp_path_for(out)
     t0 = time.time()
+    before = mix.measure(base)  # loudnorm pass 1 on the finished mix
+    n = tb.frame_to_sample(tl.duration_f, fps)  # loudnorm pads its output: keep the exact sample count
     tools.ffmpeg(["-y", "-i", str(base), "-i", str(overlay),
-                  "-filter_complex", "[1:v]format=yuva444p10le[ov];[0:v][ov]overlay=0:0:format=auto:alpha=straight:eof_action=pass,format=yuv420p[v]",
-                  "-map", "[v]", "-map", "0:a", "-r", f"{fps.numerator}/{fps.denominator}", "-fps_mode", "cfr",
+                  "-filter_complex", "[1:v]format=yuva444p10le[ov];[0:v][ov]overlay=0:0:format=auto:alpha=straight:eof_action=pass,format=yuv420p[v];"
+                                     f"[0:a]{mix.loudnorm_filter(before)},apad=whole_len={n},atrim=end_sample={n},asetpts=N/SR/TB[a]",
+                  "-map", "[v]", "-map", "[a]", "-r", f"{fps.numerator}/{fps.denominator}", "-fps_mode", "cfr",
                   *render.encode_args(tmp)])
+    after = mix.measure(tmp)
+    problems = mix.check_delivery(after)
+    if problems:
+        raise OverlayError("delivery loudness out of spec: " + "; ".join(problems))
     tmp.replace(out)
-    return render.verify(tl, out) | {"composite_s": round(time.time() - t0, 1)}
+    return render.verify(tl, out) | {"composite_s": round(time.time() - t0, 1), "lufs_in": before["input_i"],
+                                     "lufs": after["input_i"], "true_peak_dbtp": after["input_tp"]}

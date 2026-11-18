@@ -90,14 +90,17 @@ def test_schema_violation_becomes_an_issue(ws):
     assert "schema" in fake.calls[1]["prompt"]
 
 
-def test_finish_rejects_transitions_the_renderer_cannot_draw(ws):
+def test_finish_accepts_renderable_transitions_and_rejects_bad_looks(ws):
     atomic_write_json(ws.path("plan", "story.json"), _story().model_dump(mode="json"))
     whip = _plain_finish(transitions=[{"id": "t01", "after_item": "k01", "type": TransitionType.whip, "frames": 6, "reason": "r"}])
-    fake = FakeClaude(whip, _plain_finish())
+    bad_look = dict(whip, grade={"look": "sepia_dream", "strength": 0.5, "reason": "r"})
+    fake = FakeClaude(bad_look, whip)
     meta = decide.finish_pass(decide.load_inputs(ws), fake)
-    assert "not_renderable" in fake.calls[1]["prompt"] and meta["calls"] == 2
-    assert FinishPlan.model_validate_json(ws.path("plan", "finish.json").read_text()).transitions == []
-    assert "SFX library" in ws.path("context", "finish_context.md").read_text()
+    assert "unknown_look" in fake.calls[1]["prompt"] and meta["calls"] == 2
+    fin = FinishPlan.model_validate_json(ws.path("plan", "finish.json").read_text())
+    assert [t.type for t in fin.transitions] == [TransitionType.whip]
+    ctx = ws.path("context", "finish_context.md").read_text()
+    assert "SFX library" in ctx and "teal_orange" in ctx
 
 
 def test_revision_applies_patch_and_keeps_history(ws):
@@ -123,9 +126,9 @@ def test_effective_target_never_exceeds_footage():
 
 def test_renderer_rejects_unsupported_features():
     tl = Timeline(fps="30/1", width=1080, height=1920, duration_f=30, assets={},
-                  video=[VideoClip(id="v_k01", asset="c01", at_f=0, dur_f=30, src_in_us=0, src_out_us=1_000_000, src=Provenance(item="k01", words=[0, 1]))],
-                  audio=[AudioClip(id="music", asset="m", at_f=0, dur_f=30, role="music")])
-    with pytest.raises(render.RenderError, match="music renders in build step 7"):
+                  video=[VideoClip(id="v_k01", asset="c01", at_f=0, dur_f=30, src_in_us=0, src_out_us=1_000_000, x=[Keyframe(f=0, v=0.1)], src=Provenance(item="k01", words=[0, 1]))],
+                  audio=[])
+    with pytest.raises(render.RenderError, match="pans render"):
         render.build_command(tl, config.REPO_ROOT, config.REPO_ROOT / "x.mp4")
 
 

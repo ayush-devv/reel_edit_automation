@@ -70,6 +70,7 @@ class AudioClip(_Strict):
     at_f: int = owned("ffmpeg")
     dur_f: int = owned("ffmpeg")
     src_in_us: int = owned("ffmpeg", default=0)
+    speed: float = owned("ffmpeg", default=1.0)  # retime (non-speech only, ADR-0015)
     gain_db: float = owned("ffmpeg", default=0.0)
     role: str = owned("ffmpeg")  # voice | music | sfx
     src: Provenance | None = None
@@ -81,6 +82,7 @@ class Ducking(_Strict):
     depth_db: float = owned("ffmpeg")
     attack_ms: int = owned("ffmpeg", default=200)
     release_ms: int = owned("ffmpeg", default=500)
+    regions_f: list[list[int]] = owned("ffmpeg", default_factory=list)  # speech spans [start, end) in output frames
 
 
 class TransitionEvent(_Strict):
@@ -111,6 +113,12 @@ class CaptionTrack(_Strict):
     pages: list[CaptionPage] = owned("remotion", default_factory=list)
 
 
+class Grade(_Strict):
+    look: str = owned("ffmpeg", default="none")
+    strength: float = owned("ffmpeg", default=0.0)
+    correct: bool = owned("ffmpeg", default=True)  # per-clip white balance + exposure toward neutral
+
+
 class TitleEvent(_Strict):
     id: str
     text: str = owned("remotion")
@@ -136,6 +144,7 @@ class Timeline(_Strict):
     audio: list[AudioClip]
     transitions: list[TransitionEvent] = Field(default_factory=list)
     ducking: list[Ducking] = Field(default_factory=list)
+    grade: Grade = Field(default_factory=Grade)
     captions: CaptionTrack | None = None
     titles: list[TitleEvent] = Field(default_factory=list)
     flashes: list[FlashEvent] = Field(default_factory=list)
@@ -150,14 +159,14 @@ def field_owners(model: type[BaseModel] = Timeline, prefix: str = "") -> dict[st
         if "owner" in extra:
             out[f"{prefix}{name}"] = extra["owner"]
         ann = f.annotation
-        for sub in (VideoClip, AudioClip, Ducking, TransitionEvent, CaptionTrack, CaptionPage, CaptionWord, TitleEvent, FlashEvent):
+        for sub in (VideoClip, AudioClip, Ducking, Grade, TransitionEvent, CaptionTrack, CaptionPage, CaptionWord, TitleEvent, FlashEvent):
             if ann is sub or (getattr(ann, "__args__", None) and sub in ann.__args__):
                 out.update(field_owners(sub, f"{prefix}{name}[]."))
     return out
 
 
 REMOTION_FIELDS = ("captions", "titles", "flashes")
-FFMPEG_FIELDS = ("assets", "video", "audio", "transitions", "ducking")
+FFMPEG_FIELDS = ("assets", "video", "audio", "transitions", "ducking", "grade")
 
 
 def part(tl: Timeline, fields: tuple[str, ...]) -> dict:

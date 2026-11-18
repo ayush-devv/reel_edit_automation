@@ -20,7 +20,7 @@ from fractions import Fraction
 from pathlib import Path
 
 from reel import timebase as tb
-from reel import tools
+from reel import mix, tools
 from reel.config import AUDIO_RATE, ffmpeg_path
 from reel.schemas.plan import Ease
 from reel.schemas.timeline import Keyframe, Timeline, VideoClip
@@ -28,6 +28,8 @@ from reel.workspace import tmp_path_for
 
 EDGE_FADE_S = 0.005
 CRF = 16
+MUSIC_FADE_IN_S = 0.5
+MUSIC_FADE_OUT_S = 1.5
 
 
 class RenderError(RuntimeError):
@@ -40,15 +42,102 @@ def unsupported(tl: Timeline) -> list[str]:
     for c in tl.video:
         if not c.id.startswith("v_"):
             out.append(f"video clip {c.id}: b-roll renders in build step 7")
-        elif c.speed != 1.0:
-            out.append(f"video clip {c.id}: speed changes render in build step 7")
+        elif not (0.25 <= c.speed <= 4.0):
+            out.append(f"video clip {c.id}: speed {c.speed} outside 0.25–4×")
         elif c.x or c.y:
             out.append(f"video clip {c.id}: pans render in build step 7")
-    out += [f"audio clip {a.id}: {a.role} renders in build step 7" for a in tl.audio if a.role != "voice"]
-    out += [f"transition {t.id}: {t.type.value} renders in build step 7" for t in tl.transitions if t.type.value != "cut"]
-    if tl.ducking:
-        out.append("ducking renders in build step 7")
+    out += [f"audio clip {a.id}: unknown role {a.role}" for a in tl.audio if a.role not in ("voice", "sfx", "music")]
+    out += [f"transition {t.id}: unknown type {t.type.value}" for t in tl.transitions if t.type.value not in TRANSITIONS]
     return out
+
+
+# ------------------------------------------------------------------ transitions (frame-local)
+# Each transition only changes the frames of the two shots around the cut: the out-going shot's
+# last ⌊N/2⌋ frames and the in-coming shot's first ⌈N/2⌉ frames. Shots keep their exact frame
+# ranges, need no handles, and audio is untouched — sync and layout stay exact.
+
+TRANSITIONS = {"cut", "zoom", "whip", "blur", "dip_to_black"}
+ZOOM_PEAK = 1.25
+
+
+def _windows(c: VideoClip, tl: Timeline) -> tuple[tuple[str, int] | None, tuple[str, int] | None]:
+    """(head, tail): the transition type and frame count touching this clip's start / end."""
+    head = tail = None
+    for t in tl.transitions:
+        if t.type.value == "cut":
+            continue
+        if t.at_f == c.at_f:
+            head = (t.type.value, max(1, t.frames - t.frames // 2))
+        if t.at_f == c.at_f + c.dur_f:
+            tail = (t.type.value, max(1, t.frames // 2))
+    return head, tail
+
+
+def _ramp(head: tuple[str, int] | None, tail: tuple[str, int] | None, dur: int, kinds: set[str], var: str = "N") -> str | None:
+    """Effect weight 0..1 over clip-relative frames: 1 on the cut frame, 0 outside the window."""
+    terms = []
+    if tail and tail[0] in kinds:
+        h = tail[1]
+        terms.append(f"clip(({var}-{dur - h}+1)/{h},0,1)")
+    if head and head[0] in kinds:
+        h = head[1]
+        terms.append(f"clip(1-{var}/{h},0,1)")
+    if not terms:
+        return None
+    return terms[0] if len(terms) == 1 else f"max({terms[0]},{terms[1]})"
+
+
+def _value_at(kfs: list[Keyframe], f: int) -> float:
+    v = 1.0
+    for k in sorted(kfs, key=lambda k: k.f):
+        if k.f <= f:
+            v = k.v
+    return v
+
+
+def with_transition_zoom(c: VideoClip, head, tail) -> VideoClip:
+    """Zoom transitions become scale keyframes (rendered by the same zoom path as punch-ins)."""
+    kfs = list(c.scale)
+    if tail and tail[0] == "zoom":
+        start = max(0, c.dur_f - tail[1] - 1)
+        v0 = _value_at(kfs, start)
+        kfs = [k for k in kfs if k.f < start] + [Keyframe(f=start, v=v0, ease=Ease.hold), Keyframe(f=c.dur_f - 1, v=v0 * ZOOM_PEAK, ease=Ease.ease_in)]
+    if head and head[0] == "zoom":
+        end = min(head[1], c.dur_f - 1)
+        v1 = _value_at(kfs, end)
+        kfs = [Keyframe(f=0, v=v1 * ZOOM_PEAK, ease=Ease.hold), Keyframe(f=end, v=v1, ease=Ease.ease_out)] + [k for k in kfs if k.f > end]
+    return c.model_copy(update={"scale": kfs}) if kfs != list(c.scale) else c
+
+
+WHIP_ZOOM = 1.4
+
+
+def transition_graph(k: int, inp: str, out: str, c: VideoClip, head, tail, w: int, h: int, fps: Fraction) -> list[str]:
+    """Filter statements turning [inp] into [out] with blur / whip / dip windows applied."""
+    stmts, cur = [], inp
+    blur_k = _ramp(head, tail, c.dur_f, {"blur", "zoom"})
+    if blur_k:
+        stmts += [f"[{cur}]split[ta{k}][tb{k}]", f"[tb{k}]gblur=sigma=28[tbb{k}]",
+                  f"[ta{k}][tbb{k}]blend=all_expr='A*(1-({blur_k}))+B*({blur_k})'[tbl{k}]"]
+        cur = f"tbl{k}"
+    if any(x and x[0] == "whip" for x in (head, tail)):
+        # a whip pan never shows black: enlarge, pan inside the enlarged frame, smear horizontally;
+        # the out-going shot pans to its right edge, the in-coming one continues from its left edge
+        kt = _ramp(None, tail, c.dur_f, {"whip"}, var="n") or "0"
+        kh = _ramp(head, None, c.dur_f, {"whip"}, var="n") or "0"
+        m = _ramp(head, tail, c.dur_f, {"whip"})
+        sw, sh = round(w * WHIP_ZOOM / 2) * 2, round(h * WHIP_ZOOM / 2) * 2
+        stmts += [f"[{cur}]split[wa{k}][wb{k}]",
+                  f"[wb{k}]scale={sw}:{sh},crop={w}:{h}:x='({sw - w}/2)*(1+({kt})-({kh}))':y={(sh - h) // 2},dblur=angle=0:radius=120[wbb{k}]",
+                  f"[wa{k}][wbb{k}]blend=all_expr='if(gt({m},0),B,A)'[tw{k}]"]
+        cur = f"tw{k}"
+    fades = []
+    if tail and tail[0] == "dip_to_black":
+        fades.append(f"fade=t=out:start_frame={c.dur_f - tail[1]}:nb_frames={tail[1]}")
+    if head and head[0] == "dip_to_black":
+        fades.append(f"fade=t=in:start_frame=0:nb_frames={head[1]}")
+    stmts.append(f"[{cur}]{','.join(fades) or 'null'}[{out}]")
+    return stmts
 
 
 def _ease(e: Ease, t: str) -> str:
@@ -101,10 +190,20 @@ def face_box_out(faces: dict | None, asset: str, src_w: int, src_h: int, out_w: 
             "w": round(box["w"] * sw / out_w, 4), "h": round(box["h"] * sh / out_h, 4)}
 
 
-def _geometry(c: VideoClip, src_w: int, src_h: int, out_w: int, out_h: int, fps: Fraction, centre: tuple[float, float]) -> str:
+def lut_chain(lut: Path | None) -> str:
+    """Per-clip colour LUT in RGB, with explicit bt709 matrices both ways (ADR-0023)."""
+    if lut is None:
+        return ""
+    f = str(lut).replace("\\", "/").replace("'", "\\'")
+    return (f"scale=in_color_matrix=bt709:in_range=tv:out_range=pc,format=gbrp,lut3d=file='{f}':interp=tetrahedral,"
+            f"scale=in_range=pc:out_color_matrix=bt709:out_range=tv,")
+
+
+def _geometry(c: VideoClip, src_w: int, src_h: int, out_w: int, out_h: int, fps: Fraction, centre: tuple[float, float],
+              lut: Path | None = None) -> str:
     sw, sh, x, y = cover_crop(src_w, src_h, out_w, out_h, centre)
     cx, cy = centre
-    chain = f"scale={sw}:{sh}:flags=lanczos,crop={out_w}:{out_h}:{x}:{y},format=yuv420p"
+    chain = f"scale={sw}:{sh}:flags=lanczos,crop={out_w}:{out_h}:{x}:{y},{lut_chain(lut)}format=yuv420p"
     if c.scale and any(k.v != 1.0 for k in c.scale):
         # face position inside the cropped frame, so the punch-in keeps the face centred
         fx, fy = (cx * sw - x) / out_w, (cy * sh - y) / out_h
@@ -131,13 +230,47 @@ def encode_args(out: Path, *, crf: int = CRF) -> list[str]:
             "-c:a", "aac", "-b:a", "256k", "-ar", str(AUDIO_RATE), "-ac", "2", "-movflags", "+faststart", str(out)]
 
 
-def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = None, crf: int = CRF) -> list[str]:
+def atempo_chain(rate: float) -> list[float]:
+    """atempo factors (each 0.5–2.0) whose product is `rate`."""
+    out = []
+    while rate > 2.0:
+        out.append(2.0)
+        rate /= 2.0
+    while rate < 0.5:
+        out.append(0.5)
+        rate /= 0.5
+    return out + [rate]
+
+
+def duck_expr(regions_f: list[list[int]], fps: Fraction, depth_db: float, attack_ms: int, release_ms: int) -> str:
+    """Music gain (linear) over time: −depth_db while speech plays, ramping down over `attack`
+    before each region and back up over `release` after it."""
+    if not regions_f:
+        return "1"
+    a, r = attack_ms / 1000, release_ms / 1000
+    terms = []
+    for s_f, e_f in regions_f:
+        s, e = float(Fraction(s_f) / fps), float(Fraction(e_f) / fps)
+        terms.append(f"clip(min((t-{s - a:.4f})/{a:.4f},({e + r:.4f}-t)/{r:.4f}),0,1)")
+    d = terms[0]
+    for t in terms[1:]:
+        d = f"max({d},{t})"
+    return f"pow(10,-{depth_db:.2f}*({d})/20)"
+
+
+def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = None, crf: int = CRF,
+                  room_tone: dict[str, tuple[int, int, float]] | None = None, finish_audio: bool = True,
+                  luts: dict[str, Path] | None = None) -> list[str]:
+    """`room_tone`: per mezzanine asset, the (start_us, end_us, dBFS) stretch to loop under its segments.
+    `finish_audio=False` renders the raw cut voice only (used by sync tests)."""
     problems = unsupported(tl)
     if problems:
         raise RenderError("timeline uses features the base renderer does not support yet: " + "; ".join(problems))
     fps = tb.parse_rate(tl.fps)
-    base = sorted(tl.video, key=lambda c: c.at_f)
+    base = sorted((c for c in tl.video if c.id.startswith("v_")), key=lambda c: c.at_f)
     voice = {a.src.item: a for a in tl.audio if a.role == "voice" and a.src}
+    extras = [a for a in tl.audio if a.role in ("sfx", "music")]
+    room_tone = (room_tone or {}) if finish_audio else {}
     if not base:
         raise RenderError("timeline has no video clips")
     cursor = 0
@@ -147,6 +280,7 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
         cursor += c.dur_f
     if cursor != tl.duration_f:
         raise RenderError(f"base clips cover {cursor} frames, timeline says {tl.duration_f}")
+    total_samples = tb.frame_to_sample(tl.duration_f, fps)
 
     args: list[str] = [str(ffmpeg_path()), "-hide_banner", "-nostdin", "-loglevel", "error", "-y"]
     sizes: dict[str, tuple[int, int]] = {}
@@ -159,30 +293,43 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
         if in_f > 0:
             args += ["-ss", f"{float((Fraction(in_f) - Fraction(1, 2)) / fps):.6f}"]
         args += ["-i", str(uri)]
-    # audio inputs: one unseeked input per asset (sample-exact trims)
+    # audio inputs: one unseeked input per asset (sample-exact trims) — mezzanines, SFX, music
     audio_input: dict[str, int] = {}
-    for c in base:
-        if c.asset not in audio_input:
-            audio_input[c.asset] = len(base) + len(audio_input)
-            args += ["-i", str(root / tl.assets[c.asset].uri)]
+    for asset in [c.asset for c in base] + [a.asset for a in extras]:
+        if asset not in audio_input:
+            audio_input[asset] = len(base) + len(audio_input)
+            uri = Path(tl.assets[asset].uri)
+            args += ["-i", str(uri if uri.is_absolute() else root / uri)]
 
     uses: dict[str, int] = {}
     for c in base:
-        uses[c.asset] = uses.get(c.asset, 0) + 1
+        uses[c.asset] = uses.get(c.asset, 0) + 1 + (1 if c.asset in room_tone else 0)
+    for a in extras:
+        uses[a.asset] = uses.get(a.asset, 0) + 1
     graph: list[str] = []
     a_label: dict[str, list[str]] = {}
     for asset, n in uses.items():
         k = audio_input[asset]
         labels = [f"src_{k}_{j}" for j in range(n)]
-        graph.append(f"[{k}:a]aresample={AUDIO_RATE}," + (f"asplit={n}" + "".join(f"[{l}]" for l in labels) if n > 1 else f"anull[{labels[0]}]"))
+        graph.append(f"[{k}:a]aresample={AUDIO_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo,"
+                     + (f"asplit={n}" + "".join(f"[{l}]" for l in labels) if n > 1 else f"anull[{labels[0]}]"))
         a_label[asset] = labels
 
     bounds = tb.audio_bounds(tb.layout_segments([c.dur_f for c in base]), fps)
-    concat_in = []
+    concat_in, rt_in = [], []
     for k, (c, (s0, s1)) in enumerate(zip(base, bounds)):
         w, h = sizes[c.asset]
-        graph.append(f"[{k}:v]trim=end_frame={c.dur_f},setpts=PTS-STARTPTS,"
-                     f"{_geometry(c, w, h, tl.width, tl.height, fps, _face_centre(faces, c.asset))},setsar=1[v{k}]")
+        head, tail = _windows(c, tl)
+        cz = with_transition_zoom(c, head, tail)
+        if c.speed == 1.0:
+            timing = f"trim=end_frame={c.dur_f},setpts=PTS-STARTPTS"
+        else:  # retime, then resample to the project grid and cut to the exact output length
+            src_frames = int(c.dur_f * c.speed) + 2
+            timing = (f"trim=end_frame={src_frames},setpts=(PTS-STARTPTS)/{c.speed},"
+                      f"fps={fps.numerator}/{fps.denominator},trim=end_frame={c.dur_f},setpts=PTS-STARTPTS")
+        graph.append(f"[{k}:v]{timing},"
+                     f"{_geometry(cz, w, h, tl.width, tl.height, fps, _face_centre(faces, c.asset), (luts or {}).get(c.asset))},setsar=1[g{k}]")
+        graph += transition_graph(k, f"g{k}", f"v{k}", c, head, tail, tl.width, tl.height, fps)
         a = voice.get(c.src.item)
         if a is None:
             raise RenderError(f"no voice audio for {c.id}")
@@ -190,20 +337,64 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
         n = s1 - s0
         fade_out = max(0.0, n / AUDIO_RATE - EDGE_FADE_S)
         gain = f",volume={a.gain_db}dB" if a.gain_db else ""
-        graph.append(f"[{a_label[c.asset].pop(0)}]atrim=start_sample={start}:end_sample={start + n},asetpts=PTS-STARTPTS,"
+        src_n = round(n * a.speed)
+        tempo = "".join(f",atempo={f:.6f}" for f in atempo_chain(a.speed)) + f",atrim=end_sample={n}" if a.speed != 1.0 else ""
+        graph.append(f"[{a_label[c.asset].pop(0)}]atrim=start_sample={start}:end_sample={start + src_n},asetpts=PTS-STARTPTS{tempo},"
                      f"afade=t=in:d={EDGE_FADE_S},afade=t=out:st={fade_out:.6f}:d={EDGE_FADE_S}{gain},apad=whole_len={n}[a{k}]")
         concat_in.append(f"[v{k}][a{k}]")
-    graph.append("".join(concat_in) + f"concat=n={len(base)}:v=1:a=1[vout][aout]")
+        if room_tone:
+            if c.asset in room_tone:
+                r0, r1, _db = room_tone[c.asset]
+                rs, re_ = tb.us_to_sample(r0), tb.us_to_sample(r1)
+                # loop the raw stretch (fading it would dip the room every loop); noise has no pitch to click
+                graph.append(f"[{a_label[c.asset].pop(0)}]atrim=start_sample={rs}:end_sample={re_},asetpts=PTS-STARTPTS,"
+                             f"aloop=loop=-1:size={re_ - rs},atrim=end_sample={n},asetpts=PTS-STARTPTS[rt{k}]")
+            else:
+                graph.append(f"anullsrc=r={AUDIO_RATE}:cl=stereo,atrim=end_sample={n},aformat=sample_fmts=fltp[rt{k}]")
+            rt_in.append(f"[rt{k}]")
+    graph.append("".join(concat_in) + f"concat=n={len(base)}:v=1:a=1[vout][vraw]")
+
+    if not finish_audio:
+        graph.append("[vraw]anull[aout]")
+    else:
+        floors = [db for (_s, _e, db) in room_tone.values()]
+        floor = min(floors) if floors else None
+        graph.append(f"[vraw]{mix.voice_chain(floor)}[voice]")
+        mix_in = ["[voice]"]
+        if rt_in:
+            graph.append("".join(rt_in) + f"concat=n={len(rt_in)}:v=0:a=1,{mix.room_tone_chain(floor)}[rt]")
+            mix_in.append("[rt]")
+        duck = tl.ducking[0] if tl.ducking else None
+        for j, a in enumerate(extras):
+            at = tb.frame_to_sample(a.at_f, fps)
+            length = tb.frame_to_sample(a.at_f + a.dur_f, fps) - at
+            src0 = tb.us_to_sample(a.src_in_us)
+            chain = f"atrim=start_sample={src0}:end_sample={src0 + length},asetpts=PTS-STARTPTS,volume={a.gain_db}dB"
+            if a.role == "music":
+                fade_out = max(0.0, length / AUDIO_RATE - MUSIC_FADE_OUT_S)
+                chain += f",afade=t=in:d={MUSIC_FADE_IN_S},afade=t=out:st={fade_out:.3f}:d={MUSIC_FADE_OUT_S}"
+                if duck and duck.target_role == "music":
+                    expr = duck_expr(duck.regions_f, fps, duck.depth_db, duck.attack_ms, duck.release_ms)
+                    chain += f",asetpts=PTS+{at}/SR/TB,volume='{expr}':eval=frame,asetpts=PTS-STARTPTS"
+            chain += f",adelay=delays={at}S:all=1,apad=whole_len={total_samples},atrim=end_sample={total_samples}"
+            graph.append(f"[{a_label[a.asset].pop(0)}]{chain}[x{j}]")
+            mix_in.append(f"[x{j}]")
+        if len(mix_in) > 1:
+            graph.append("".join(mix_in) + f"amix=inputs={len(mix_in)}:normalize=0:duration=first:dropout_transition=0[aout]")
+        else:
+            graph.append("[voice]anull[aout]")
 
     args += ["-filter_complex", ";".join(graph), "-map", "[vout]", "-map", "[aout]",
              "-r", f"{fps.numerator}/{fps.denominator}", "-fps_mode", "cfr", *encode_args(out, crf=crf)]
     return args
 
 
-def render_base(tl: Timeline, root: Path, out: Path, *, faces: dict | None = None) -> dict:
+def render_base(tl: Timeline, root: Path, out: Path, *, faces: dict | None = None,
+                room_tone: dict[str, tuple[int, int, float]] | None = None, finish_audio: bool = True,
+                luts: dict[str, Path] | None = None) -> dict:
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = tmp_path_for(out)
-    cmd = build_command(tl, root, tmp, faces=faces)
+    cmd = build_command(tl, root, tmp, faces=faces, room_tone=room_tone, finish_audio=finish_audio, luts=luts)
     t0 = time.time()
     tools.run(cmd)
     tmp.replace(out)

@@ -30,7 +30,7 @@ def _read(ctx: StageContext, name: str) -> dict:
 def _input_hash(ctx: StageContext) -> str:
     files = [_p(ctx, "perception", f"{n}.json") for n in ("words", "segments", "prosody", "faces", "energy", "scenes", "palette", "ocr")]
     return hash_inputs({"perception": [file_fingerprint(f) if f.exists() else None for f in files],
-                        "brief": ctx.options.get("brief"), "v": VERSION})
+                        "brief": file_fingerprint(Path(ctx.options["brief"])) if ctx.options.get("brief") else None, "v": VERSION})
 
 
 def _outputs(ctx: StageContext) -> list[Path]:

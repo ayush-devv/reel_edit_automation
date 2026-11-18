@@ -6,7 +6,7 @@ _Plan date: 2026-11-18 · Implements: ADR-0004 (ffmpeg base + Remotion transpare
 - `reel run` on `_speech` → `export/reel.mp4` with kinetic `bold_pop` captions, the Editor's hook title ("The 10% rule for saving money") and the base picture/voice. Frames 268/268, audio = video. Overlay 7–16 s, composite 6 s for a 9 s reel.
 - All 5 families render (`assets/step6-families.png`, same frame each).
 - Layout fixes found on the first render: the hook title collided with text burned into the footage → OCR text zones (persistent, ≥ 3 letters) are mapped to output coordinates and titles/captions are pushed clear of them; balanced title wrapping; caption pages shrink to one line (≥ 62 % of base size); emphasised words get extra spacing (transforms take no layout space).
-- A renderer-only change re-ran just `overlay` + `composite` (the base was not re-rendered).
+- A renderer-only change re-ran just `overlay` + `composite` (the base was not re-rendered). _Correction (step 7): a caption-only **plan** change still re-rendered the base because the runner re-ran everything downstream of any stage that ran; fixed in step 7 and verified._
 - Tests: **85 passed, 1 skipped** (7 new; the Remotion integration test checks the base is untouched outside the text and changed under it).
 - Known limits (planned): legibility on busy/same-colour backgrounds (contrast gate step 9, palette-adaptive tokens step 10); `speaker_coded` uses one colour until diarisation (step 8); brand fonts other than Inter / Plus Jakarta Sans fall back to Inter.
 

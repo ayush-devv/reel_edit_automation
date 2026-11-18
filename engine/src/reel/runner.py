@@ -66,14 +66,15 @@ def run_pipeline(ws: Workspace, stages: list[Stage], *, options: dict | None = N
     ctx = StageContext(ws=ws, options=options or {})
     with ws.lock():
         state = load_state(ws)
-        invalidated = False
         for stage in stages:
             entry = state["stages"].get(stage.name, {})
+            # computed after upstream stages ran: every input hash covers the upstream outputs it
+            # reads, so a stage re-runs exactly when its own inputs changed (a caption-only change
+            # re-renders the overlay, never the base)
             ih = stage.input_hash(ctx)
-            if not invalidated and stage.name not in force and _is_done(ctx, stage, entry, ih):
+            if stage.name not in force and _is_done(ctx, stage, entry, ih):
                 log.info("skip %s (up to date)", stage.name)
                 continue
-            invalidated = True  # everything downstream must re-check against fresh inputs
             log.info("run %s", stage.name)
             state["stages"][stage.name] = {"status": "running", "input_hash": ih, "started": time.time()}
             save_state(ws, state)

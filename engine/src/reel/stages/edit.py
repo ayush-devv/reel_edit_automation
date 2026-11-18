@@ -13,7 +13,7 @@ import shutil
 from pathlib import Path
 
 from reel import brief as brief_mod
-from reel import claude_call, decide, overlay, project, render
+from reel import claude_call, decide, mix, overlay, project, render
 from reel.compile import compile_timeline
 from reel.runner import Stage, StageContext
 from reel.schemas.plan import FinishPlan, StoryPlan
@@ -116,7 +116,8 @@ def _compile(ctx: StageContext) -> dict:
     story = project.load_json_model(StoryPlan, ctx.ws.path("plan", "story.json"))
     fin = project.load_json_model(FinishPlan, ctx.ws.path("plan", "finish.json"))
     family, tokens = brief_mod.brand_caption_overrides(inp.brand)
-    tl = compile_timeline(story, fin, inp.words, inp.clips, inp.fps, inp.idx, edges=inp.edges, brand_family=family, brand_tokens=tokens)
+    tl = compile_timeline(story, fin, inp.words, inp.clips, inp.fps, inp.idx, edges=inp.edges, brand_family=family, brand_tokens=tokens,
+                          brand_look=inp.brand.look if inp.brand else None)
     atomic_write_json(ctx.ws.path("timeline", "timeline.json"), tl.model_dump(mode="json"))
     return {"frames": tl.duration_f, "fps": tl.fps, "clips": len(tl.video), "caption_pages": len(tl.captions.pages if tl.captions else [])}
 
@@ -145,14 +146,58 @@ def _mezz_fps(ctx: StageContext) -> list:
     return [_fp(ctx, f"mezz/{c['id']}.mov") for c in manifest["clips"]]
 
 
+def _render_code_fp() -> str:
+    """The base render's own code: a change to the renderer, mix or colour re-renders."""
+    from reel import color
+
+    return hash_inputs([file_fingerprint(Path(m.__file__)) for m in (render, mix, color)])
+
+
 def _render_hash(ctx: StageContext) -> str:
     # only the ffmpeg-owned slice: a caption-only change never re-renders the base
     return hash_inputs({"timeline": part(_timeline(ctx), FFMPEG_FIELDS), "faces": _fp(ctx, "perception/faces.json"),
+                        "vad": _fp(ctx, "perception/vad.json"), "assets": _assets_fp(), "code": _render_code_fp(),
                         "mezz": _mezz_fps(ctx), "v": VERSION, "crf": render.CRF})
 
 
-RENDER = Stage(name="render", input_hash=_render_hash, outputs=lambda ctx: [ctx.ws.path("render", "base.mov")],
-               run=lambda ctx: render.render_base(_timeline(ctx), ctx.ws.root, ctx.ws.path("render", "base.mov"), faces=_faces(ctx)))
+def room_tones(ctx: StageContext) -> dict[str, tuple[int, int, float]]:
+    from reel.perception.audio import ANALYSIS_RATE, read_pcm
+
+    vad = _read_json(ctx, "perception", "vad.json") or {}
+    out = {}
+    for clip_id, v in vad.items():
+        mezz = ctx.ws.path("mezz", f"{clip_id}.mov")
+        if mezz.exists():
+            region = mix.room_tone_region(read_pcm(mezz), ANALYSIS_RATE, v.get("speech", []))
+            if region:
+                out[clip_id] = region
+    return out
+
+
+def clip_luts(ctx: StageContext, tl: Timeline) -> tuple[dict, dict]:
+    """Per-clip LUT = correction toward neutral (measured) + the reel's look at its strength."""
+    from reel import color
+    from reel.perception.audio import read_frames
+
+    luts, measured = {}, {}
+    for asset in sorted({c.asset for c in tl.video if c.id.startswith("v_")}):
+        m = color.measure(read_frames(ctx.ws.root / tl.assets[asset].uri, fps=1.0, width=160)[0])
+        gains, exposure = (m["gains"], m["exposure"]) if tl.grade.correct else ([1.0, 1.0, 1.0], 1.0)
+        measured[asset] = m
+        if color.needs_lut(gains, exposure, tl.grade.look, tl.grade.strength):
+            luts[asset] = color.write_lut(ctx.ws.path("render", "luts", f"{asset}.cube"), gains, exposure, tl.grade.look, tl.grade.strength)
+    return luts, measured
+
+
+def _render(ctx: StageContext) -> dict:
+    rt = room_tones(ctx)
+    tl = _timeline(ctx)
+    luts, measured = clip_luts(ctx, tl)
+    meta = render.render_base(tl, ctx.ws.root, ctx.ws.path("render", "base.mov"), faces=_faces(ctx), room_tone=rt, luts=luts)
+    return meta | {"grade": {"look": tl.grade.look, "strength": tl.grade.strength, "clips": measured}, "room_tone": {k: {"s": round(v[0] / 1e6, 2), "e": round(v[1] / 1e6, 2), "dbfs": v[2]} for k, v in rt.items()}}
+
+
+RENDER = Stage(name="render", input_hash=_render_hash, outputs=lambda ctx: [ctx.ws.path("render", "base.mov")], run=_render)
 
 
 def _overlay_hash(ctx: StageContext) -> str:
