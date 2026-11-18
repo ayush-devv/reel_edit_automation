@@ -83,7 +83,16 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _download(url: str, timeout: int = 120) -> bytes:
+def _tls() -> ssl.SSLContext:
+    """The OS trust store when `truststore` is installed (GitHub's release-asset host does not verify
+    against certifi's bundle alone), else $SSL_CERT_FILE / certifi / Python's default."""
+    if not os.environ.get("SSL_CERT_FILE"):
+        try:
+            import truststore
+
+            return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        except ImportError:
+            pass
     cafile = os.environ.get("SSL_CERT_FILE")
     if not cafile:
         try:  # python.org builds ship without a CA bundle
@@ -92,7 +101,11 @@ def _download(url: str, timeout: int = 120) -> bytes:
             cafile = certifi.where()
         except ImportError:
             cafile = None
-    ctx = ssl.create_default_context(cafile=cafile)
+    return ssl.create_default_context(cafile=cafile)
+
+
+def _download(url: str, timeout: int = 120) -> bytes:
+    ctx = _tls()
     with urllib.request.urlopen(url, context=ctx, timeout=timeout) as r:  # noqa: S310 — fixed https URL
         return r.read()
 

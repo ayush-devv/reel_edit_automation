@@ -74,6 +74,19 @@ def test_title_is_the_hook_title_or_the_hook_line_in_six_words():
     assert 1 <= len(lines) <= 3 and " ".join(lines) == "Save ten percent of every single" and size >= 60
 
 
+def test_pinned_downloads_reject_a_checksum_mismatch(tmp_path, monkeypatch):
+    monkeypatch.setattr(cover, "MODEL_DIR", tmp_path / "models")
+    monkeypatch.setattr(cover, "FONT_DIR", tmp_path / "fonts")
+    monkeypatch.setattr(cover, "_download", lambda url, timeout=120: b"not the pinned file")
+    with pytest.raises(RuntimeError, match="checksum mismatch"):
+        cover.landmarker_model()
+    with pytest.raises(RuntimeError, match="checksum mismatch"):
+        cover.inter_font()
+    assert not (tmp_path / "models" / "face_landmarker.task").exists()  # nothing unverified is cached
+    font, note = cover.cover_font("Save money")  # offline / tampered: a system font, and the README says so
+    assert "fallback" in note
+
+
 try:
     config.ffmpeg_path()
     READY = True

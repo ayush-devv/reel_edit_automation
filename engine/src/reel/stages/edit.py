@@ -418,7 +418,7 @@ def _package(ctx: StageContext) -> dict:
 
 PACKAGE = Stage(name="package", input_hash=_package_hash,
                 outputs=lambda ctx: [ctx.ws.path("export", "package", f) for f in ("reel.mp4", "overlay.mov", "timeline.fcpxml", "timeline.otio",
-                                                                                     "captions.srt", "edit_list.md", "README.md", "cover.jpg")],
+                                                                                     "captions.srt", "edit_list.md", "README.md")],
                 run=_package)
 
 # ------------------------------------------------------------------ delivery variants + review copy
