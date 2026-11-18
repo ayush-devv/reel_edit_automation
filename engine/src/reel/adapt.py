@@ -19,9 +19,9 @@ from reel import qa
 from reel import timebase as tb
 from reel.schemas.timeline import Timeline
 
-BAND = (0.55, 0.75)  # caption band, share of frame height
+BAND = (0.45, 0.85)  # where captions can sit (below the chin, above the platform UI), share of frame height
 CLASH_RATIO = 2.0  # a pixel this close in luminance contrast makes text over it vanish
-MAX_CLASH = 0.20  # more than this share of the band → change the colour
+MAX_CLASH = 0.10  # more than this share of the band → change the colour / add an outline
 ACCENTS = ["#FFD400", "#00E5FF", "#FF3B6B", "#7CFF4F", "#FFFFFF", "#FF8A00"]
 
 
@@ -76,10 +76,12 @@ def adapt(tl: Timeline, root: Path, palette: list[str], locked: set[str]) -> tup
     changes = []
     base = t.get("base_color") or "#FFFFFF"
     fill_clash = clash_share(base, lum)
-    if fill_clash > MAX_CLASH and not _on(t.get("stroke")) and not _on(t.get("box")) and "stroke" not in locked:
+    if not _on(t.get("stroke")) and not _on(t.get("box")) and "stroke" not in locked:
+        # captions over live video always get an outline unless they sit on a plate: real footage (white
+        # sugar, bright windows) defeats any fill colour somewhere, and sampling can't see every frame
         outline = "#000000" if qa.luminance(qa.hex_rgb(base)[:3]) > 0.4 else "#FFFFFF"
         t["stroke"] = outline
-        changes.append(f"fill {base} vanishes on {fill_clash:.0%} of the caption band → outline {outline}")
+        changes.append(f"no outline or plate (fill vanishes on {fill_clash:.0%} of sampled background) → outline {outline}")
     emph = t.get("emph_color")
     if emph and "emph_color" not in locked and clash_share(emph, lum) > MAX_CLASH:
         cands = [c for c in dict.fromkeys(palette + ACCENTS) if c.lower() != base.lower()]

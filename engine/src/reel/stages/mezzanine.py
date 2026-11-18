@@ -31,7 +31,7 @@ def _input_hash(ctx: StageContext) -> str:
         "clips": [(c["id"], c["fingerprint"]) for c in m["clips"]],
         "fps": m["project_fps"],
         "encoder": ctx.options.get("encoder", "prores_ks"),
-        "filter_version": 1,
+        "filter_version": 2,  # 2: streams that start apart are aligned (tpad / adelay)
     })
 
 

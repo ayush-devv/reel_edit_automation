@@ -29,6 +29,9 @@ bakeoff = [
     "torch>=2.8",
     "huggingface-hub>=0.35",
 ]
+goldset = [
+    "yt-dlp>=2026.10.26",
+]
 
 [project.scripts]
 reel = "reel.cli:main"

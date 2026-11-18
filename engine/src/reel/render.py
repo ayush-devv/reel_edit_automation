@@ -199,17 +199,40 @@ def lut_chain(lut: Path | None) -> str:
             f"scale=in_range=pc:out_color_matrix=bt709:out_range=tv,")
 
 
-def _geometry(c: VideoClip, src_w: int, src_h: int, out_w: int, out_h: int, fps: Fraction, centre: tuple[float, float],
+def clip_shots(c: VideoClip, fps: Fraction, faces: dict | None, scenes: dict | None) -> list:
+    """Per-shot centres for a base clip (camera cuts inside it get their own framing)."""
+    from reel import framing
+
+    fallback = _face_centre(faces, c.asset)
+    samples = ((faces or {}).get(c.asset) or {}).get("samples", [])
+    cuts = ((scenes or {}).get(c.asset) or {}).get("cuts_us", [])
+    if not samples:
+        return [framing.Shot(0, fallback, None)]
+    return framing.shots(c, fps, cuts, samples, fallback)
+
+
+def _geometry(c: VideoClip, src_w: int, src_h: int, out_w: int, out_h: int, fps: Fraction, centre,
               lut: Path | None = None) -> str:
-    sw, sh, x, y = cover_crop(src_w, src_h, out_w, out_h, centre)
-    cx, cy = centre
-    chain = f"scale={sw}:{sh}:flags=lanczos,crop={out_w}:{out_h}:{x}:{y},{lut_chain(lut)}format=yuv420p"
+    """`centre` is one (cx, cy) or a list of framing.Shot (step-wise crop that follows each shot's face)."""
+    from reel import framing
+
+    shots = centre if isinstance(centre, list) else [framing.Shot(0, centre, None)]
+    crops = [cover_crop(src_w, src_h, out_w, out_h, s.centre) for s in shots]
+    sw, sh = crops[0][0], crops[0][1]
+    starts = [s.start_f for s in shots]
+    xs, ys = [cr[2] for cr in crops], [cr[3] for cr in crops]
+    x = framing.piecewise(xs, starts) if len(set(xs)) > 1 else str(xs[0])
+    y = framing.piecewise(ys, starts) if len(set(ys)) > 1 else str(ys[0])
+    chain = f"scale={sw}:{sh}:flags=lanczos,crop={out_w}:{out_h}:x='{x}':y='{y}',{lut_chain(lut)}format=yuv420p"
     if c.scale and any(k.v != 1.0 for k in c.scale):
-        # face position inside the cropped frame, so the punch-in keeps the face centred
-        fx, fy = (cx * sw - x) / out_w, (cy * sh - y) / out_h
+        # zoom on the face of the shot on screen (face position inside the cropped frame)
+        fxs = [(s.centre[0] * sw - cr[2]) / out_w for s, cr in zip(shots, crops)]
+        fys = [(s.centre[1] * sh - cr[3]) / out_h for s, cr in zip(shots, crops)]
+        fx = framing.piecewise(fxs, starts, var="on", fmt="{:.4f}")
+        fy = framing.piecewise(fys, starts, var="on", fmt="{:.4f}")
         z = scale_expr(c.scale)
         chain += (f",zoompan=z='{z}':d=1:s={out_w}x{out_h}:fps={fps.numerator}/{fps.denominator}"
-                  f":x='clip({fx:.4f}*iw-iw/zoom/2,0,iw-iw/zoom)':y='clip({fy:.4f}*ih-ih/zoom/2,0,ih-ih/zoom)'")
+                  f":x='clip(({fx})*iw-iw/zoom/2,0,iw-iw/zoom)':y='clip(({fy})*ih-ih/zoom/2,0,ih-ih/zoom)'")
     return chain
 
 
@@ -260,7 +283,7 @@ def duck_expr(regions_f: list[list[int]], fps: Fraction, depth_db: float, attack
 
 def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = None, crf: int = CRF,
                   room_tone: dict[str, tuple[int, int, float]] | None = None, finish_audio: bool = True,
-                  luts: dict[str, Path] | None = None, stems_dir: Path | None = None) -> list[str]:
+                  luts: dict[str, Path] | None = None, stems_dir: Path | None = None, scenes: dict | None = None) -> list[str]:
     """`room_tone`: per mezzanine asset, the (start_us, end_us, dBFS) stretch to loop under its segments.
     `finish_audio=False` renders the raw cut voice only (used by sync tests)."""
     problems = unsupported(tl)
@@ -341,7 +364,7 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
             timing = (f"trim=end_frame={src_frames},setpts=(PTS-STARTPTS)/{c.speed},"
                       f"fps={fps.numerator}/{fps.denominator},trim=end_frame={c.dur_f},setpts=PTS-STARTPTS")
         graph.append(f"[{k}:v]{timing},"
-                     f"{_geometry(cz, w, h, tl.width, tl.height, fps, _face_centre(faces, c.asset), (luts or {}).get(c.asset))},setsar=1[g{k}]")
+                     f"{_geometry(cz, w, h, tl.width, tl.height, fps, clip_shots(c, fps, faces, scenes), (luts or {}).get(c.asset))},setsar=1[g{k}]")
         graph += transition_graph(k, f"g{k}", f"v{k}", c, head, tail, tl.width, tl.height, fps)
         a = voice.get(c.src.item)
         if a is None:
@@ -434,10 +457,11 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
 
 def render_base(tl: Timeline, root: Path, out: Path, *, faces: dict | None = None,
                 room_tone: dict[str, tuple[int, int, float]] | None = None, finish_audio: bool = True,
-                luts: dict[str, Path] | None = None, stems_dir: Path | None = None) -> dict:
+                luts: dict[str, Path] | None = None, stems_dir: Path | None = None, scenes: dict | None = None) -> dict:
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = tmp_path_for(out)
-    cmd = build_command(tl, root, tmp, faces=faces, room_tone=room_tone, finish_audio=finish_audio, luts=luts, stems_dir=stems_dir)
+    cmd = build_command(tl, root, tmp, faces=faces, room_tone=room_tone, finish_audio=finish_audio, luts=luts, stems_dir=stems_dir,
+                        scenes=scenes)
     t0 = time.time()
     tools.run(cmd)
     tmp.replace(out)

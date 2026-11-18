@@ -128,7 +128,9 @@ def check_mezzanine(src: SourceProbe, out: Path, fps: Fraction, *, expect_probe:
     if a is None or (a.codec, a.sample_rate, a.channels) != ("pcm_s16le", config.AUDIO_RATE, config.AUDIO_CHANNELS):
         failures.append(f"audio {c['audio']} != pcm_s16le/48000/2")
 
-    off = av_offset_ms(out)
+    # flash+beep sync probe only exists in the synthetic corpus; on real footage it would pair a scene
+    # change with the first loud sound (unrelated events). Real clips are aligned by stream start times.
+    off = av_offset_ms(out) if expect_probe else None
     c["av_offset_ms"] = None if off is None else round(off, 2)
     if off is not None and abs(off) > MAX_AV_OFFSET_MS:
         failures.append(f"A/V offset {off:.1f} ms > {MAX_AV_OFFSET_MS} ms")

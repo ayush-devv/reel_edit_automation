@@ -44,14 +44,15 @@ const CHAR_EM = (upperHeavy: boolean) => (upperHeavy ? 0.68 : 0.54);
 /** Largest font size (≤ base, ≥ 62 % of base) that keeps `chars` on one line of `maxW` px. */
 export function fitSize(base: number, chars: number, maxW: number, upperHeavy: boolean): number {
   const fit = maxW / Math.max(1, chars * CHAR_EM(upperHeavy));
-  return Math.round(Math.max(base * 0.62, Math.min(base, fit)));
+  return Math.round(Math.max(base * 0.85, Math.min(base, fit))); // near-constant size: long lines are re-paged upstream, not shrunk
 }
 
-/** Move a horizontal band [top, top+h] (px) off any text box; prefer moving `dir` (-1 up, +1 down). */
-export function clearOf(top: number, h: number, boxes: Box[], H: number, dir: number, minTop: number, maxBottom: number): number {
+/** Move a block [top, top+h] × [x0, x1] (px) off any text box it actually overlaps; prefer moving `dir` (-1 up, +1 down). */
+export function clearOf(top: number, h: number, boxes: Box[], H: number, dir: number, minTop: number, maxBottom: number,
+                        x0 = -Infinity, x1 = Infinity, W = 1): number {
   let t = top;
   for (let pass = 0; pass < 4; pass++) {
-    const hit = boxes.find((b) => t < (b.y + b.h) * H && b.y * H < t + h);
+    const hit = boxes.find((b) => t < (b.y + b.h) * H && b.y * H < t + h && x0 < (b.x + b.w) * W && b.x * W < x1);
     if (!hit) break;
     t = dir > 0 ? (hit.y + hit.h) * H + 24 : hit.y * H - h - 24;
   }
@@ -87,19 +88,32 @@ const Captions: React.FC<{ track: CaptionTrack; p: OverlayProps }> = ({ track, p
   const boxed0 = truthy(t.box);
   const maxW = p.width - p.safe.left - p.safe.right - (boxed0 ? 52 : 0) - 20;
   const chars = words.reduce((n, w) => n + w.text.length + 1, -1);
-  const size = fitSize(upperHeavy ? 88 : 66, chars, maxW, upperHeavy);
+  // mirrors compile.page_char_budget: pages longer than one line's budget are laid out on two lines
+  const lineBudget = t.case === "upper" ? 14 : heavy ? 16 : 20;
+  const lines = chars > lineBudget ? 2 : 1;
+  const size = fitSize(upperHeavy ? 88 : 66, Math.ceil(chars / lines), maxW, upperHeavy);
   const animF = Math.max(1, Math.round((num(t.anim_ms, 150) / 1000) * p.fps));
   const local = frame - page.start_f;
   const pageIn = interpolate(local, [0, animF], [0, 1], { extrapolateRight: "clamp" });
-  const pageOut = interpolate(frame, [page.end_f - 3, page.end_f], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  // fade out only at a real gap or the end — back-to-back pages must not dim into a grey "ghost"
+  const next = track.pages.find((pg) => pg.start_f >= page.end_f);
+  const backToBack = !!next && next.start_f - page.end_f <= 1;
+  const pageOut = backToBack ? 1 : interpolate(frame, [page.end_f - 3, page.end_f], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const base = t.base_color || t.speaker_a || "#FFFFFF";
   const emph = t.emph_color || base;
   const stroke = truthy(t.stroke);
   const boxed = truthy(t.box);
-  const blockH = size * 1.15 + (boxed ? 28 : 0) + 16;
-  const y0 = zoneCentreY(t.zone, face, p.height, p.safe.bottom) - blockH / 2;
-  const top = clearOf(y0, blockH, span?.text ?? [], p.height, -1, 0.45 * p.height, p.height - p.safe.bottom);
-
+  const blockH = size * 1.15 * lines + (boxed ? 28 : 0) + 16;
+  // one caption line for the whole reel, below the speakers' chins (robust: 75th percentile, so one odd detection can't move it)
+  const chins = p.faces.filter((f) => f.box).map((f) => (f.box!.y + f.box!.h) * p.height).sort((a, b) => a - b);
+  const chin = chins.length ? chins[Math.min(chins.length - 1, Math.floor(chins.length * 0.75))] : 0;
+  // pro reference (official DOAC Short of the same footage): ONE fixed line at ~66 % for the whole reel,
+  // never moved per shot; pushed lower only for low chins, and never below 70 % (platform UI zone)
+  const lineCentre = Math.min(Math.max(zoneCentreY(t.zone, null, p.height, p.safe.bottom), chin + blockH / 2 + 30), 0.70 * p.height);
+  const y0 = Math.min(lineCentre, p.height - p.safe.bottom - blockH / 2) - blockH / 2;
+  const textW = Math.min(p.width - p.safe.left - p.safe.right, chars * size * CHAR_EM(upperHeavy) + size * 0.6);
+  const top = clearOf(y0, blockH, span?.text ?? [], p.height, +1, 0.45 * p.height, p.height - p.safe.bottom,
+                    (p.width - textW) / 2, (p.width + textW) / 2, p.width);
   const wordEls = words.map((w) => {
     const active = frame >= w.start_f && frame < w.end_f;
     const since = frame - w.start_f;
@@ -133,7 +147,7 @@ const Captions: React.FC<{ track: CaptionTrack; p: OverlayProps }> = ({ track, p
           transform: `translateY(${dy}px) scale(${scale})`,
           WebkitTextStroke: stroke ? `${Math.round(size * 0.11)}px ${colourOf(t.stroke, "#000000")}` : undefined,
           paintOrder: "stroke fill",
-          textShadow: stroke || boxed ? undefined : "0 4px 16px rgba(0,0,0,0.55)",
+          textShadow: stroke || boxed ? undefined : "0 0 3px rgba(0,0,0,0.95), 0 2px 4px rgba(0,0,0,0.9), 0 6px 18px rgba(0,0,0,0.6)",
         }}
       >
         {w.text}
@@ -164,7 +178,9 @@ const Captions: React.FC<{ track: CaptionTrack; p: OverlayProps }> = ({ track, p
             lineHeight: 1.15,
             textTransform: textTransform(t.case),
             textAlign: "center",
-            whiteSpace: "nowrap",
+            whiteSpace: lines > 1 ? "normal" : "nowrap",
+            textWrap: "balance",
+            maxWidth: maxW,
             padding: boxed ? "14px 26px" : 0,
             borderRadius: boxed ? 18 : 0,
             background: boxed ? t.box_color || colourOf(t.box, "#000000B3") : "transparent",

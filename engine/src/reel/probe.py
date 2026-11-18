@@ -34,12 +34,21 @@ class VideoInfo(BaseModel):
     color_range: str | None
     hdr: str | None  # "pq" | "hlg" | None
     sar: str | None
+    start_s: float = 0.0  # stream start time (sections / phone files can start video and audio at different times)
 
 
 class AudioInfo(BaseModel):
     codec: str
     sample_rate: int
     channels: int
+    start_s: float = 0.0
+
+
+def _start(stream: dict) -> float:
+    try:
+        return float(stream.get("start_time") or 0.0)
+    except ValueError:
+        return 0.0
 
 
 class SourceProbe(BaseModel):
@@ -138,6 +147,7 @@ def probe(path: Path) -> SourceProbe:
             color_range=v.get("color_range"),
             hdr=HDR_TRANSFERS.get(transfer or ""),
             sar=v.get("sample_aspect_ratio"),
+            start_s=_start(v),
         )
     audio = None
     if a:
@@ -145,6 +155,7 @@ def probe(path: Path) -> SourceProbe:
             codec=a.get("codec_name", "?"),
             sample_rate=int(a.get("sample_rate", 0) or 0),
             channels=int(a.get("channels", 0) or 0),
+            start_s=_start(a),
         )
     return SourceProbe(
         path=str(path),

@@ -218,13 +218,16 @@ def _render_code_fp() -> str:
     """The base render's own code: a change to the renderer, mix or colour re-renders."""
     from reel import color
 
-    return hash_inputs([file_fingerprint(Path(m.__file__)) for m in (render, mix, color)])
+    from reel import framing
+
+    return hash_inputs([file_fingerprint(Path(m.__file__)) for m in (render, mix, color, framing)])
 
 
 def _render_hash(ctx: StageContext) -> str:
     # only the ffmpeg-owned slice: a caption-only change never re-renders the base
     return hash_inputs({"timeline": part(_timeline(ctx), FFMPEG_FIELDS), "faces": _fp(ctx, "perception/faces.json"),
-                        "vad": _fp(ctx, "perception/vad.json"), "assets": _assets_fp(), "code": _render_code_fp(),
+                        "vad": _fp(ctx, "perception/vad.json"), "scenes": _fp(ctx, "perception/scenes.json"), "assets": _assets_fp(),
+                        "code": _render_code_fp(),
                         "broll": _fp(ctx, "broll/index.json"),
                         "mezz": _mezz_fps(ctx), "v": VERSION, "crf": render.CRF})
 
@@ -263,7 +266,7 @@ def _render(ctx: StageContext) -> dict:
     tl = _timeline(ctx)
     luts, measured = clip_luts(ctx, tl)
     meta = render.render_base(tl, ctx.ws.root, ctx.ws.path("render", "base.mov"), faces=_faces(ctx), room_tone=rt, luts=luts,
-                              stems_dir=ctx.ws.path("render", "stems"))
+                              stems_dir=ctx.ws.path("render", "stems"), scenes=_read_json(ctx, "perception", "scenes.json"))
     return meta | {"grade": {"look": tl.grade.look, "strength": tl.grade.strength, "clips": measured}, "room_tone": {k: {"s": round(v[0] / 1e6, 2), "e": round(v[1] / 1e6, 2), "dbfs": v[2]} for k, v in rt.items()}}
 
 
@@ -273,7 +276,8 @@ RENDER = Stage(name="render", input_hash=_render_hash,
 
 
 def _overlay_hash(ctx: StageContext) -> str:
-    return hash_inputs({"timeline": part(_timeline(ctx), REMOTION_FIELDS), "base": _fp(ctx, "render/base.mov") if _behind(_timeline(ctx)) else None, "faces": _fp(ctx, "perception/faces.json"),
+    return hash_inputs({"timeline": part(_timeline(ctx), REMOTION_FIELDS), "base": _fp(ctx, "render/base.mov") if _behind(_timeline(ctx)) else None,
+                        "scenes": _fp(ctx, "perception/scenes.json"), "code": _code_fp("overlay", "framing", "render"), "faces": _fp(ctx, "perception/faces.json"),
                         "ocr": _fp(ctx, "perception/ocr.json"),
                         "renderer": overlay.renderer_fingerprint(), "v": VERSION})
 
@@ -289,11 +293,11 @@ def _overlay(ctx: StageContext) -> dict:
     if t:  # text behind the subject: its own layer for the title window + a person matte from the base render
         from reel import matte
 
-        props = overlay.build_props(tl, ctx.ws.root, _faces(ctx), _read_json(ctx, "perception", "ocr.json")) | {"layer": "behind"}
+        props = overlay.build_props(tl, ctx.ws.root, _faces(ctx), _read_json(ctx, "perception", "ocr.json"), _read_json(ctx, "perception", "scenes.json")) | {"layer": "behind"}
         overlay.render_overlay(props, ctx.ws.path("render", "behind.mov"), public_dir=ctx.ws.root, frames=(t.start_f, t.end_f - 1))
         behind_meta = matte.make_matte(ctx.ws.path("render", "base.mov"), t.start_f, t.end_f, ctx.ws.path("render", "matte.mkv"),
                                        (tl.width, tl.height), tl.fps)
-    meta = overlay.render_overlay(overlay.build_props(tl, ctx.ws.root, _faces(ctx), _read_json(ctx, "perception", "ocr.json")),
+    meta = overlay.render_overlay(overlay.build_props(tl, ctx.ws.root, _faces(ctx), _read_json(ctx, "perception", "ocr.json"), _read_json(ctx, "perception", "scenes.json")),
                                   ctx.ws.path("render", "overlay.mov"), public_dir=ctx.ws.root)
     return meta | {"caption_family": tl.captions.family if tl.captions else None, "titles": len(tl.titles), "flashes": len(tl.flashes),
                    "behind": behind_meta}

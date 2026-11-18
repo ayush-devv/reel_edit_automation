@@ -39,12 +39,16 @@ def _abs(s: str) -> Path:
     return Path(s) if Path(s).is_absolute() else config.REPO_ROOT / s
 
 
-def init_manifest(holdout: int = 6) -> dict:
+def init_manifest(holdout: int = 6, *, auto_holdout: bool = False, seed: int = 7) -> dict:
     """Create/refresh the manifest from samples/gold/<name>/ folders.
 
-    Existing split assignments are kept; new reels default to 'tuning'. The owner marks
-    the holdout explicitly (at least 2 Hinglish) — the harness never picks it silently.
+    Existing split assignments are kept; new reels default to 'tuning'. Language/genre come from
+    the pair's brief.json. `auto_holdout` (owner is not an editor, so the tool picks): a seeded,
+    stratified holdout of `holdout` reels with ≥ 2 Hinglish and as many channels as possible —
+    picked once and then frozen (existing assignments are never changed).
     """
+    import random
+
     existing = {}
     if MANIFEST.exists():
         existing = {r["id"]: r for r in (yaml.safe_load(MANIFEST.read_text()) or {}).get("reels", [])}
@@ -52,17 +56,40 @@ def init_manifest(holdout: int = 6) -> dict:
     if GOLD_DIR.exists():
         for d in sorted(p for p in GOLD_DIR.iterdir() if p.is_dir()):
             prev = existing.get(d.name, {})
+            brief = json.loads((d / "brief.json").read_text()) if (d / "brief.json").exists() else {}
+            src = json.loads((d / "source.json").read_text()) if (d / "source.json").exists() else {}
             reels.append({
                 "id": d.name,
                 "raw": _rel(d / "raw"),
                 "final": _rel(d / "final.mp4") if (d / "final.mp4").exists() else None,
                 "split": prev.get("split", "tuning"),
-                "genre": prev.get("genre"),
-                "language": prev.get("language"),
+                "genre": prev.get("genre") or brief.get("genre_hint"),
+                "language": prev.get("language") or brief.get("language"),
+                "channel": prev.get("channel") or src.get("channel"),
             })
+    if auto_holdout and not any(r["split"] == "holdout" for r in reels):
+        rng = random.Random(seed)
+        pool = [r for r in reels if r["final"]]
+        rng.shuffle(pool)
+        hing = [r for r in pool if r["language"] in ("hi", "hinglish")]
+        pick = hing[:2]
+        seen = {r["channel"] for r in pick}
+        for r in pool:  # then spread across channels
+            if len(pick) >= holdout:
+                break
+            if r not in pick and r["channel"] not in seen:
+                pick.append(r)
+                seen.add(r["channel"])
+        for r in pool:
+            if len(pick) >= holdout:
+                break
+            if r not in pick:
+                pick.append(r)
+        for r in pick:
+            r["split"] = "holdout"
     manifest = {"holdout_target": holdout, "reels": reels}
     config.EVAL_DIR.mkdir(parents=True, exist_ok=True)
-    MANIFEST.write_text(yaml.safe_dump(manifest, sort_keys=False))
+    MANIFEST.write_text(yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True))
     return manifest
 
 
@@ -98,7 +125,7 @@ def tool_versions() -> dict:
     return out
 
 
-def score_reel(r: dict, ws: Workspace, *, asr_backend, kappa: float | None) -> dict:
+def score_reel(r: dict, ws: Workspace, *, asr_backend, kappa: float | None, style_lib: dict | None = None) -> dict:
     """Score one finished gold-set reel against the owner's final (ADR-0030 §2)."""
     from reel import project
     from reel.evalh import gold
@@ -110,6 +137,15 @@ def score_reel(r: dict, ws: Workspace, *, asr_backend, kappa: float | None) -> d
     raw = project.word_table(ws)
     g = gold.load_gold(_abs(r["final"]), raw, asr_backend, config.EVAL_DIR / "cache" / f"{r['id']}.gold.json")
     score, detail = gold.score_workspace(ws, g, heard_ours=heard, ours_cuts=len(visual.scene_cuts(final_ours)), kappa=kappa)
+    if style_lib:
+        from reel.evalh import style
+
+        ours = style.cached_vector(final_ours, ws.path("eval", "style.json"))
+        lib = style_lib.get(r.get("genre") or "any") or style_lib.get("any", {})
+        st, parts = style.style_score(ours, lib)
+        if st is not None:
+            score.families["style"] = st
+            detail["style"] = parts
     verdict = json.loads(ws.path("qa", "verdict.json").read_text()).get("status") if ws.path("qa", "verdict.json").exists() else None
     review = json.loads(ws.path("qa", "review.json").read_text()) if ws.path("qa", "review.json").exists() else {}
     used = []
@@ -137,6 +173,9 @@ def run_eval(split: str = "tuning", *, allow_holdout: bool = False, work_root: P
     run_id = time.strftime("%Y%m%d-%H%M%S") + (f"-{label}" if label else "")
     work_root = work_root or (config.REPO_ROOT / "projects" / "_eval" / run_id)
     kappa = calibrate.report(calibrate.collect(config.REPO_ROOT / "projects"))["reviewer"]["kappa"]
+    from reel.evalh import style
+
+    style_lib = style.library(manifest.get("reels", []), _abs)
     asr = None
     results = []
     for r in reels:
@@ -152,7 +191,7 @@ def run_eval(split: str = "tuning", *, allow_holdout: bool = False, work_root: P
             if asr is None:
                 eng = config.ASR_ENGINES.get(r.get("language") or "en", config.ASR_ENGINES["en"])
                 asr = bakeoff.engines([eng])[eng]
-            results.append({"id": r["id"], "language": r.get("language"), **score_reel(r, ws, asr_backend=asr, kappa=kappa)})
+            results.append({"id": r["id"], "language": r.get("language"), **score_reel(r, ws, asr_backend=asr, kappa=kappa, style_lib=style_lib)})
         except Exception as exc:  # crash = veto (ADR-0030)
             results.append({"id": r["id"], "language": r.get("language"), "families": {}, "primary": None,
                             "vetoes": [f"crash: {type(exc).__name__}: {exc}"]})

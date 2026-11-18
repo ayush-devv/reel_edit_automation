@@ -205,3 +205,39 @@ def test_caption_token_values_are_validated_and_pages_balanced():
     # a pause is a better break than mid-phrase; Hindi postpositions stay with the word before
     assert texts(balanced_pages(words("save money every single month", pause_after=(1,)), 3)) == ["save money", "every single month"]
     assert all(p[0].text not in ("ka", "ko", "mein") for p in balanced_pages(words("apni salary ka das pratishat har mahine account mein daalo"), 3))
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not READY, reason="needs pinned ffmpeg")
+def test_frames_at_handles_hundreds_of_frames(tmp_path):
+    clip = tmp_path / "long.mp4"
+    tools.ffmpeg(["-y", "-f", "lavfi", "-i", "testsrc2=s=160x284:r=25:d=12", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(clip)])
+    wanted = list(range(0, 300, 2))  # 150 frames: one select expression this long makes ffmpeg fail
+    got = qa.frames_at(clip, wanted, width=80)
+    assert sorted(got) == wanted
+
+
+def test_per_shot_framing_follows_faces_across_camera_cuts():
+    from fractions import Fraction
+
+    from reel import framing
+
+    prov = Provenance(item="k0", words=[0, 0])
+    c = VideoClip(id="v_k0", asset="c01", at_f=0, dur_f=100, src_in_us=1_000_000, src_out_us=5_000_000, src=prov)
+    samples = [{"t_us": t, "faces": [{"x": 0.70, "y": 0.3, "w": 0.1, "h": 0.1}]} for t in range(1_000_000, 3_000_000, 250_000)]  # host right
+    samples += [{"t_us": t, "faces": [{"x": 0.10, "y": 0.3, "w": 0.2, "h": 0.2}, {"x": 0.8, "y": 0.3, "w": 0.05, "h": 0.05}]}
+                for t in range(3_000_000, 4_000_000, 250_000)]  # guest left (largest face wins)
+    shots = framing.shots(c, Fraction(25), cuts_us=[3_000_000, 4_000_000], samples=samples)
+    assert [s.start_f for s in shots] == [0, 50, 75]
+    assert shots[0].centre[0] == pytest.approx(0.75) and shots[1].centre[0] == pytest.approx(0.20)
+    assert shots[2].centre == shots[1].centre and shots[2].box is None  # no face → keep the previous framing
+    assert framing.piecewise([10, 20, 30], [0, 50, 75]) == "if(lt(n,50),10,if(lt(n,75),20,30))"
+
+
+def test_caption_words_are_tidied_not_the_audio():
+    from reel.compile import clean_caption_words
+    from reel.schemas.perception import Word
+
+    ws = [Word(i=k, clip="c", text=t, start_us=k, end_us=k + 1) for k, t in enumerate("back in the sunny d days i i thought ORANGE. CEO".split())]
+    out = clean_caption_words(ws)
+    assert [w.text for w in out] == ["Back", "in", "the", "sunny", "d", "days", "I", "thought", "orange.", "CEO"]

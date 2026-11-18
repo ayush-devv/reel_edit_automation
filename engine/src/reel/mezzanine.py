@@ -22,10 +22,24 @@ TO_BT709 = "zscale=m=bt709:p=bt709:t=bt709:r=tv"
 SDR_709 = {"bt709", None, "unknown", ""}
 
 
+SYNC_TOLERANCE_S = 0.002
+
+
+def stream_offset_s(p: SourceProbe) -> float:
+    """Video start minus audio start in the source (> 0: the picture starts later than the sound)."""
+    if p.video is None or p.audio is None:
+        return 0.0
+    return p.video.start_s - p.audio.start_s
+
+
 def video_filter(p: SourceProbe, fps: Fraction) -> str:
     assert p.video is not None
     v = p.video
     chain: list[str] = []
+    off = stream_offset_s(p)
+    chain.append("setpts=PTS-STARTPTS")  # picture's own zero first …
+    if off > SYNC_TOLERANCE_S:  # … then, if it starts late, hold its first frame so both streams share time zero
+        chain.append(f"tpad=start_duration={off:.6f}:start_mode=clone")
     # Colour: HDR → tonemap to bt709 SDR; other non-709 SDR → convert; unknown → assume 709 (tag only).
     if v.hdr:
         chain.append(TONEMAP_CHAIN)
@@ -54,6 +68,10 @@ def build_command(p: SourceProbe, out: Path, fps: Fraction, *, encoder: str = "p
         args += ["-f", "lavfi", "-i", f"anullsrc=r={config.AUDIO_RATE}:cl=stereo"]
     args += ["-map", "0:v:0", "-map", "0:a:0" if has_audio else "1:a:0"]
     args += ["-vf", video_filter(p, fps), "-fps_mode", "cfr"]
+    off = stream_offset_s(p)
+    # sound starts late: delay it so both streams share time zero (the shift is preserved, not lost)
+    adelay = f"adelay={-off * 1000:.3f}:all=1," if off < -SYNC_TOLERANCE_S else ""
+    args += ["-af", f"{adelay}asetpts=PTS-STARTPTS" if has_audio else "anull"]
     if encoder == "prores_videotoolbox":
         args += ["-c:v", "prores_videotoolbox", "-profile:v", "2"]
     else:

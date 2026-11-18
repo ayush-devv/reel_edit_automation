@@ -38,6 +38,8 @@ from reel.schemas.timeline import (
 BREATH_PAD_US = 80_000  # breath around a kept range when only ASR edges are known
 HEARD_PAD_US = 100_000  # breath around heard (snapped) edges (ADR-0002)
 MIN_CAPTION_US = 350_000  # a caption page stays at least this long
+PAGE_HOLD_US = 600_000  # bridge pauses up to this between pages (no blinking)
+PAGE_MIN_US = 600_000  # a page stays readable at least this long (unless the next page starts sooner)
 TITLE_MIN_US = 1_500_000  # hook title on screen at least this long …
 TITLE_MAX_US = 3_000_000  # … and at most this long (or to the end of the first item, if sooner past the minimum)
 
@@ -90,6 +92,26 @@ def _source_range(item_words: list[Word], clip_words: list[Word], clip: ClipInfo
 UNRELIABLE_SHARE = 0.15  # above this share of suspect/zero-length kept words, captions fall back to phrases
 
 
+def clean_caption_words(ws: list) -> list:
+    """Captions read like writing, not raw ASR: stutters ("i i thought") drop the repeat, "i" → "I",
+    and a line starts with a capital. The audio is unchanged; only the on-screen text is tidied."""
+    out = []
+    for w in ws:
+        key = w.text.strip(".,!?;:").casefold()
+        if out and key and key == out[-1].text.strip(".,!?;:").casefold():
+            continue
+        t = w.text
+        core = t.strip(".,!?;:")
+        if len(core) > 4 and core.isupper():  # ASR writes shouted words in caps ("ORANGE."); acronyms (≤ 4) stay
+            t = t.replace(core, core.lower())
+        if key in ("i", "i'm", "i've", "i'll", "i'd"):
+            t = "I" + t[1:]
+        if (not out or out[-1].text.rstrip()[-1:] in ".?!") and t[:1].islower():
+            t = t[:1].upper() + t[1:]
+        out.append(w.model_copy(update={"text": t}) if t != w.text else w)
+    return out
+
+
 def caption_text(text: str, script: str) -> str:
     """Caption script (brief): latin → Devanagari words romanised; devanagari/mixed → as transcribed."""
     from reel import script as sc
@@ -127,7 +149,17 @@ def _break_cost(w, nxt) -> float:
     return max(cost, 0.25)
 
 
-def balanced_pages(ws: list, max_words: int) -> list[list]:
+def page_char_budget(tokens: dict) -> int:
+    """Characters that fit one caption line at the family's size (mirrors the overlay's estimate)."""
+    if tokens.get("case") == "upper":
+        return 14
+    return 16 if int(tokens.get("weight", "700") or 700) >= 800 else 20
+
+
+PAGE_SHORT_US = 600_000  # pages shorter than this flash by: the paging pays a penalty for them
+
+
+def balanced_pages(ws: list, max_words: int, max_chars: int = 999) -> list[list]:
     """Caption pages of ≤ max_words that break at phrase boundaries (punctuation, pauses), with
     as few pages as possible and no one-word orphan page (dynamic programming over break points)."""
     n = len(ws)
@@ -138,7 +170,12 @@ def balanced_pages(ws: list, max_words: int) -> list[list]:
     for k in range(1, n + 1):
         for size in range(1, min(max_words, k) + 1):
             j = k - size
+            if size > 1 and sum(len(w.text) + 1 for w in ws[j:k]) - 1 > max_chars:
+                continue  # would need a smaller font: re-page instead of shrinking
             cost = best[j] + _break_cost(ws[k - 1], ws[k] if k < n else None) + 1.0  # +1 per page: prefer fewer pages
+            dur = ws[k - 1].end_us - ws[j].start_us
+            if dur < PAGE_SHORT_US:
+                cost += 3.0 * (PAGE_SHORT_US - dur) / PAGE_SHORT_US  # fast talkers: fuller pages instead of flicker
             if size == 1 and n > 1:
                 cost += 3.0  # orphan word
             if cost < best[k]:
@@ -307,17 +344,27 @@ def compile_timeline(
     timing = "phrase" if unreliable_timing(kept) else "word"
     pages: list[CaptionPage] = []
     for it in story.items:
-        ws = [by[i] for i in range(it.word_start, it.word_end + 1) if not by[i].filler]
-        for group in balanced_pages(ws, max_words):
+        ws = clean_caption_words([by[i] for i in range(it.word_start, it.word_end + 1) if not by[i].filler])
+        # one line per page (pro reference: 1–3 word pages on a fixed line); fuller pages only when speech is fast
+        for group in balanced_pages(ws, max_words, page_char_budget(tokens)):
             cw = [CaptionWord(i=w.i, text=caption_text((word_fixes or {}).get(w.i, w.text), cap_script), start_f=word_out_frame(w, it.id),
                               end_f=word_out_frame(w, it.id, end=True), emph=w.i in emph)
                   for w in group]
             start_f = cw[0].start_f
             end_f = max(cw[-1].end_f, start_f + tb.us_to_frame(MIN_CAPTION_US, fps, mode="ceil"))
             pages.append(CaptionPage(start_f=start_f, end_f=end_f, words=cw))
-    for a, b in zip(pages, pages[1:]):  # no overlapping pages
-        if a.end_f > b.start_f:
+    # captions must not blink: a page holds through short pauses until the next page starts, and
+    # stays at least PAGE_MIN_US (found on a real podcast: 0.2 s pages and gaps read as flicker)
+    hold = tb.us_to_frame(PAGE_HOLD_US, fps)
+    min_f = tb.us_to_frame(PAGE_MIN_US, fps, mode="ceil")
+    for a, b in zip(pages, pages[1:]):
+        if 0 < b.start_f - a.end_f <= hold:
             a.end_f = b.start_f
+        a.end_f = max(a.end_f, min(a.start_f + min_f, b.start_f))
+        if a.end_f > b.start_f:  # no overlapping pages
+            a.end_f = b.start_f
+    if pages:
+        pages[-1].end_f = min(max(pages[-1].end_f, pages[-1].start_f + min_f), total)
     captions = CaptionTrack(family=family, tokens=tokens, script=cap_script, timing=timing, pages=pages)
 
     # ---- SFX, peak-aligned

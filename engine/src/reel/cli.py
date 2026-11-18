@@ -225,7 +225,10 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     from reel.evalh import harness
 
     if args.init:
-        m = harness.init_manifest()
+        m = harness.init_manifest(auto_holdout=args.auto_holdout)
+        from collections import Counter
+
+        print(Counter((r["split"], r.get("language")) for r in m["reels"]))
         print(f"manifest: {harness.MANIFEST} ({len(m['reels'])} reels)")
         return 0
     row = harness.run_eval(args.set, allow_holdout=args.holdout)
@@ -429,6 +432,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--init", action="store_true", help="create/refresh eval/manifest.yaml from samples/gold/")
     p.add_argument("--set", default="tuning", choices=["tuning", "holdout"])
     p.add_argument("--holdout", action="store_true", help="confirm running the holdout set (release candidates only)")
+    p.add_argument("--auto-holdout", action="store_true", help="with --init: pick a seeded, stratified holdout (≥ 2 Hinglish) once")
     p.set_defaults(func=_cmd_eval)
 
     p = sub.add_parser("conformance", help="build the synthetic corpus and check S0 on it")

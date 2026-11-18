@@ -69,18 +69,34 @@ def caption_stats(items: list[dict], samples: int, frame_hw: tuple[int, int], fr
             "light_text": bool(np.mean(light) > 0.5) if light else None, "boxed": bool(np.mean(boxed) > 0.5) if boxed else None}
 
 
-def analyse(ws: Workspace, ref: Path, *, asr_backend=None) -> dict:
-    p = probe(ref)
+def measure_style(video: Path) -> dict:
+    """Pacing, caption and colour measurements of a finished reel (no files written)."""
+    p = probe(video)
     dur = p.duration_s
-    cuts = visual.scene_cuts(ref)
+    cuts = visual.scene_cuts(video)
     shots = len(cuts) + 1
-    frames, h, w = read_frames(ref, OCR_FPS, 360)
-    ocr = visual.ocr(ref, fps=OCR_FPS, width=360)
+    frames, h, w = read_frames(video, OCR_FPS, 360)
+    ocr = visual.ocr(video, fps=OCR_FPS, width=360)
     prof = {"duration_s": round(dur, 1), "shots": shots, "avg_shot_s": round(dur / shots, 2), "cuts_per_min": round(len(cuts) / dur * 60, 1),
-            "motion": round(float(np.mean(visual.motion_energy(ref).get("values") or [0.0])), 2), "colour": colour_stats(frames[:: max(1, len(frames) // 24)]),
+            "motion": round(float(np.mean(visual.motion_energy(video).get("values") or [0.0])), 2),
+            "colour": colour_stats(frames[:: max(1, len(frames) // 24)]),
             "captions": caption_stats(ocr.get("items", []), len(frames), (h, w), frames)}
     prof["look"], prof["look_strength"] = suggest_look(prof["colour"])
-    if asr_backend is not None and p.audio is not None:
+    return prof
+
+
+def style_vector(prof: dict) -> dict[str, float]:
+    """The numbers the style family compares (ADR-0030: robust z vs the genre's reference library)."""
+    cap, col = prof.get("captions", {}), prof.get("colour", {})
+    return {"cuts_per_min": prof.get("cuts_per_min", 0.0), "motion": prof.get("motion", 0.0),
+            "caption_share": cap.get("on_screen_share", 0.0), "words_per_block": cap.get("words_per_block", 0.0) or 0.0,
+            "upper_share": cap.get("upper_share", 0.0) or 0.0, "contrast": col.get("contrast", 0.0), "saturation": col.get("saturation", 0.0)}
+
+
+def analyse(ws: Workspace, ref: Path, *, asr_backend=None) -> dict:
+    prof = measure_style(ref)
+    dur = prof["duration_s"]
+    if asr_backend is not None and probe(ref).audio is not None:
         from reel.perception.audio import extract_wav
 
         words, _lang = asr_backend.transcribe(extract_wav(ref, ws.path("reference", "ref.wav")), None, None)

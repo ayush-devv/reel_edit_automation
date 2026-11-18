@@ -70,15 +70,27 @@ def text_zones(ocr: dict | None, asset: str, src_w: int, src_h: int, out_w: int,
     return out
 
 
-def build_props(tl: Timeline, root: Path, faces: dict | None, ocr: dict | None = None) -> dict:
+def build_props(tl: Timeline, root: Path, faces: dict | None, ocr: dict | None = None, scenes: dict | None = None) -> dict:
+    """Overlay props. Face spans are per shot (camera cuts inside a clip get their own framing)."""
     fps = tb.parse_rate(tl.fps)
     spans, sizes = [], {}
     for c in sorted((c for c in tl.video if c.id.startswith("v_")), key=lambda c: c.at_f):
         if c.asset not in sizes:
             sizes[c.asset] = render.source_size(root / tl.assets[c.asset].uri)
-        box = render.face_box_out(faces, c.asset, *sizes[c.asset], tl.width, tl.height)
-        spans.append({"start_f": c.at_f, "end_f": c.at_f + c.dur_f, "box": box,
-                      "text": text_zones(ocr, c.asset, *sizes[c.asset], tl.width, tl.height, faces)})
+        sw_, sh_ = sizes[c.asset]
+        zones = text_zones(ocr, c.asset, sw_, sh_, tl.width, tl.height, faces)
+        shots = render.clip_shots(c, fps, faces, scenes)
+        for k, shot in enumerate(shots):
+            start = c.at_f + shot.start_f
+            end = c.at_f + (shots[k + 1].start_f if k + 1 < len(shots) else c.dur_f)
+            box = None
+            if shot.box:
+                sw, sh, x, y = render.cover_crop(sw_, sh_, tl.width, tl.height, shot.centre)
+                b = shot.box
+                box = {"x": round((b["x"] * sw - x) / tl.width, 4), "y": round((b["y"] * sh - y) / tl.height, 4),
+                       "w": round(b["w"] * sw / tl.width, 4), "h": round(b["h"] * sh / tl.height, 4)}
+            if end > start:
+                spans.append({"start_f": start, "end_f": end, "box": box, "text": zones})
     d = tl.model_dump(mode="json")
     return {"fps": float(fps), "width": tl.width, "height": tl.height, "duration_f": tl.duration_f,
             "captions": d["captions"], "titles": d["titles"], "flashes": d["flashes"], "pips": d["pips"], "faces": spans, "safe": SAFE}

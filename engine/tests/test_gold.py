@@ -118,3 +118,37 @@ def test_self_gold_eval_scores_high(tmp_path, monkeypatch):
     assert reel["detail"]["captions"]["wer"] < 0.25
     assert reel["primary"] > 75, reel
     assert json.loads(harness.SCOREBOARD.read_text().splitlines()[-1])["mean_primary"] == reel["primary"]
+
+
+def test_auto_holdout_is_stratified_and_frozen(tmp_path, monkeypatch):
+    import yaml
+
+    from reel.evalh import harness
+
+    gold_root = tmp_path / "gold"
+    for k in range(14):
+        d = gold_root / f"r{k:02d}"
+        (d / "raw").mkdir(parents=True)
+        (d / "final.mp4").write_bytes(b"")
+        lang = "hinglish" if k % 4 == 0 else "en"
+        (d / "brief.json").write_text(json.dumps({"language": lang, "genre_hint": "genre.podcast_clip"}))
+        (d / "source.json").write_text(json.dumps({"channel": f"@c{k % 5}"}))
+    monkeypatch.setattr(harness, "GOLD_DIR", gold_root)
+    monkeypatch.setattr(harness, "MANIFEST", tmp_path / "eval" / "manifest.yaml")
+    monkeypatch.setattr(config, "EVAL_DIR", tmp_path / "eval")
+    m = harness.init_manifest(auto_holdout=True)
+    hold = [r for r in m["reels"] if r["split"] == "holdout"]
+    assert len(hold) == 6 and sum(r["language"] == "hinglish" for r in hold) >= 2
+    assert len({r["channel"] for r in hold}) == 5  # spread over every channel
+    again = harness.init_manifest(auto_holdout=True)  # frozen: re-running never reshuffles
+    assert [r["split"] for r in again["reels"]] == [r["split"] for r in m["reels"]]
+    assert yaml.safe_load(harness.MANIFEST.read_text())["reels"][0]["language"] in ("en", "hinglish")
+
+
+def test_style_score_inside_and_outside_the_library():
+    from reel.evalh import style
+
+    lib = {"cuts_per_min": [20, 24, 28, 30, 26], "caption_share": [0.8, 0.9, 0.85, 0.95, 0.9]}
+    inside, parts = style.style_score({"cuts_per_min": 26, "caption_share": 0.88}, lib)
+    outside, _ = style.style_score({"cuts_per_min": 4, "caption_share": 0.1}, lib)
+    assert inside == 1.0 and outside < 0.3 and set(parts) == {"cuts_per_min", "caption_share"}

@@ -56,22 +56,30 @@ def tc(frame: int, fps: Fraction) -> str:
 # ------------------------------------------------------------------ pixels
 
 
+FRAMES_PER_CALL = 40  # ffmpeg's expression parser fails (ENOMEM) beyond ~100 select terms
+
+
 def frames_at(path: Path, frames: list[int], *, width: int = SAMPLE_W, alpha: bool = False) -> dict[int, np.ndarray]:
-    """Decode exactly these frame numbers (scaled to `width`) → {frame: HxWxC uint8}."""
+    """Decode exactly these frame numbers (scaled to `width`) → {frame: HxWxC uint8}. Chunked: long
+    reels have hundreds of caption pages and one huge select expression breaks ffmpeg."""
     if not frames:
         return {}
     wanted = sorted(set(frames))
-    sel = "+".join(f"eq(n\\,{f})" for f in wanted)
     pix = "rgba" if alpha else "rgb24"
     probe = subprocess.run([str(config.ffprobe_path()), "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
                             "-of", "csv=p=0", str(path)], check=True, capture_output=True, text=True).stdout.strip().split(",")
     w, h = int(probe[0]), int(probe[1])
     height = int(round(h * width / w / 2) * 2)
-    raw = subprocess.run([str(config.ffmpeg_path()), "-v", "error", "-i", str(path), "-vf", f"select='{sel}',scale={width}:{height}:flags=area",
-                          "-fps_mode", "passthrough", "-f", "rawvideo", "-pix_fmt", pix, "-"], check=True, capture_output=True).stdout
     ch = 4 if alpha else 3
-    arr = np.frombuffer(raw, dtype=np.uint8).reshape(-1, height, width, ch)
-    return dict(zip(wanted, arr))
+    out: dict[int, np.ndarray] = {}
+    for k in range(0, len(wanted), FRAMES_PER_CALL):
+        chunk = wanted[k:k + FRAMES_PER_CALL]
+        sel = "+".join(f"eq(n\\,{f})" for f in chunk)
+        raw = subprocess.run([str(config.ffmpeg_path()), "-v", "error", "-i", str(path), "-vf", f"select='{sel}',scale={width}:{height}:flags=area",
+                              "-fps_mode", "passthrough", "-f", "rawvideo", "-pix_fmt", pix, "-"], check=True, capture_output=True).stdout
+        arr = np.frombuffer(raw, dtype=np.uint8).reshape(-1, height, width, ch)
+        out.update(zip(chunk, arr))
+    return out
 
 
 def _lin(c: np.ndarray) -> np.ndarray:
@@ -166,9 +174,10 @@ def face_cut(tl: Timeline, faces_props: list[dict]) -> GateResult:
     """Median face box per clip, grown by the clip's largest punch-in around the face centre."""
     fps = tb.parse_rate(tl.fps)
     bad = []
-    clips = {c.at_f: c for c in tl.video if c.id.startswith("v_")}
+    clips = [c for c in tl.video if c.id.startswith("v_")]
     for span in faces_props:
-        box, c = span.get("box"), clips.get(span["start_f"])
+        box = span.get("box")
+        c = next((c for c in clips if c.at_f <= span["start_f"] < c.at_f + c.dur_f), None)
         if not box or c is None:
             continue
         s = max([k.v for k in c.scale] + [1.0])
