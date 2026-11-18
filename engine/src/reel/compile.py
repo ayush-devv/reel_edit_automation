@@ -26,6 +26,7 @@ from reel.schemas.timeline import (
     Ducking,
     EffectEvent,
     FlashEvent,
+    GraphicEvent,
     Grade,
     PipEvent,
     Keyframe,
@@ -42,7 +43,10 @@ MIN_CAPTION_US = 350_000  # a caption page stays at least this long
 PAGE_HOLD_US = 600_000  # bridge pauses up to this between pages (no blinking)
 PAGE_MIN_US = 600_000  # a page stays readable at least this long (unless the next page starts sooner)
 TITLE_MIN_US = 1_500_000  # hook title on screen at least this long …
-TITLE_MAX_US = 3_000_000  # … and at most this long (or to the end of the first item, if sooner past the minimum)
+TITLE_MAX_US = 3_000_000
+GRAPHIC_MIN_US = 1_200_000  # a graphic stays at least this long (it has to be read)
+TEXT_CARD_MIN_US = 2_000_000  # a full-screen card needs its word entrance plus a beat to read
+WHOLE_REEL_GRAPHICS = {"progress_bar", "logo_watermark"}  # … and at most this long (or to the end of the first item, if sooner past the minimum)
 
 
 @dataclass(frozen=True)
@@ -274,6 +278,8 @@ def compile_timeline(
     brand_tokens: dict[str, str] | None = None,
     brand_look: str | None = None,
     word_fixes: dict[int, str] | None = None,
+    brand_accent: str | None = None,
+    brand_logo: str | None = None,
 ) -> Timeline:
     """Brand kit (family lock + tokens) overrides the Editor's caption choices (ADR-0017)."""
     finish = finish or empty_finish()
@@ -460,10 +466,28 @@ def compile_timeline(
         end = max(start + 2, word_out_frame(by[e.to_word], e.item, end=True))
         effects.append(EffectEvent(id=e.id, type=e.type.value, start_f=start, end_f=min(end, total), intensity=e.intensity))
 
+    # ---- motion graphics (overlay): word windows; progress bar and logo span the whole reel
+    accent = brand_accent or tokens.get("emph_color") or "#FFD400"
+    graphics = []
+    for g in finish.graphics:
+        if g.kind.value in WHOLE_REEL_GRAPHICS:
+            start, end = 0, total
+        else:
+            start = word_out_frame(by[g.from_word], g.item)
+            min_us = TEXT_CARD_MIN_US if g.kind.value == "text_card" else GRAPHIC_MIN_US
+            end = max(start + tb.us_to_frame(min_us, fps, mode="ceil"), word_out_frame(by[g.to_word], g.item, end=True))
+        if g.kind.value == "cta_card":
+            end = total  # an end card stays to the last frame
+        if g.kind.value == "logo_watermark" and not brand_logo:
+            continue  # validated upstream; never draw an empty logo
+        graphics.append(GraphicEvent(id=g.id, kind=g.kind.value, start_f=start, end_f=min(end, total), text=g.text.strip(), emoji=g.emoji.strip(),
+                                     value=g.value, style=g.style, position=g.position, x=g.x, y=g.y, accent=accent,
+                                     uri=brand_logo if g.kind.value == "logo_watermark" else ""))
+
     return Timeline(
         fps=f"{fps.numerator}/{fps.denominator}", width=width, height=height, duration_f=total,
         assets=assets, video=video, audio=audio, transitions=transitions, ducking=ducking, captions=captions,
-        titles=titles, flashes=flashes, pips=pips, effects=effects,
+        titles=titles, flashes=flashes, pips=pips, effects=effects, graphics=graphics,
         grade=Grade(look=brand_look or finish.grade.look, strength=finish.grade.strength if finish.grade.look != "none" or brand_look else 0.0,
                     grain=finish.grade.grain, vignette=finish.grade.vignette),
         plan_ref={"story": _digest(story), "finish": _digest(finish)},

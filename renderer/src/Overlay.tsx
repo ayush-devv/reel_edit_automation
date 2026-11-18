@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { AbsoluteFill, continueRender, delayRender, interpolate, OffthreadVideo, Sequence, spring, staticFile, useCurrentFrame } from "remotion";
+import { Graphics } from "./Graphics";
 import { Box, CaptionPage, CaptionTrack, CaptionWord, FaceSpan, Flash, OverlayProps, Pip, Title } from "./types";
 
 // ------------------------------------------------------------------ tokens
@@ -293,7 +294,7 @@ function useFonts(tokens: Record<string, string>) {
   const [handle] = useState(() => delayRender("fonts"));
   useEffect(() => {
     const fam = fontFamily(tokens.font);
-    const specs = [`${num(tokens.weight, 700)} 80px "${fam}"`, `800 80px "${fam}"`];
+    const specs = [`${num(tokens.weight, 700)} 80px "${fam}"`, `800 80px "${fam}"`, `900 80px "Inter"`, `500 80px "Inter"`];
     Promise.all(specs.map((s) => document.fonts.load(s)))
       .then(() => document.fonts.ready)
       .then(() => continueRender(handle))
@@ -303,6 +304,7 @@ function useFonts(tokens: Record<string, string>) {
 
 export const Overlay: React.FC<OverlayProps> = (p) => {
   const tokens = p.captions?.tokens ?? {};
+  const graphics = p.graphics ?? [];
   useFonts(tokens);
   const behind = p.layer === "behind";
   const titles = p.titles.filter((t) => (t.layer === "behind") === behind);
@@ -315,8 +317,10 @@ export const Overlay: React.FC<OverlayProps> = (p) => {
   }
   return (
     <AbsoluteFill style={{ backgroundColor: "transparent" }}>
+      <Graphics graphics={graphics} p={p} layer="under" />
       {p.captions ? <Captions track={p.captions} p={p} /> : null}
       <Titles titles={titles} tokens={tokens} p={p} />
+      <Graphics graphics={graphics} p={p} layer="over" />
       {(p.pips ?? []).map((pip) => (
         <Sequence key={pip.id} from={pip.start_f} durationInFrames={pip.end_f - pip.start_f}>
           <PipCard pip={pip} p={p} />

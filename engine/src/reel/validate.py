@@ -151,6 +151,21 @@ def validate_story(plan: StoryPlan, words: WordTable, clips: set[str], knowledge
 # ------------------------------------------------------------------ finish
 
 
+GRAPHIC_STYLES = {
+    "emoji_pop": ({""}, {"", "upper_left", "upper_right", "beside_face"}),
+    "keyword_card": ({"", "pill", "under", "marker", "box", "plain"}, {"", "upper", "center"}),
+    "lower_third": ({"", "bar", "tag"}, {""}),
+    "callout": ({"circle", "box", "underline", "arrow"}, {"face", "point"}),
+    "counter": ({""}, {"", "upper", "center"}),
+    "text_card": ({"", "dark", "light", "color"}, {""}),
+    "cta_card": ({"", "bar", "card"}, {""}),
+    "progress_bar": ({""}, {""}),
+    "logo_watermark": ({""}, {"", "top_left", "top_right"}),
+}
+GRAPHIC_MAX_WORDS = {"keyword_card": 4, "lower_third": 6, "callout": 3, "counter": 4, "text_card": 8, "cta_card": 6}
+GRAPHICS_MAX = 12
+
+
 EFFECT_MAX_MS = {"shake": 1500, "rgb_split": 700, "light_leak": 3500, "exposure_pulse": 1500}
 EFFECTS_MAX = 6
 
@@ -282,6 +297,8 @@ def validate_finish(fin: FinishPlan, story: StoryPlan, words: WordTable, idx: In
         issues.append(Issue("too_many_effects", "effects", f"{len(fin.effects)} effects in one reel.",
                             f"Keep at most {EFFECTS_MAX}: effects lose their punch when they are everywhere.", "warning"))
 
+    issues += validate_graphics(fin, items, order, uid, need_item, in_item, idx)
+
     for n, b in enumerate(fin.broll):
         path = f"broll[{n}]"
         uid(f"{path}.id", b.id)
@@ -346,3 +363,56 @@ def apply_story_patch(plan: StoryPlan, patch: StoryPatch) -> tuple[StoryPlan, li
                 else:
                     items.insert(k + 1, op.item)
     return plan.model_copy(update={"items": items}), issues
+
+
+def validate_graphics(fin, items, order, uid, need_item, in_item, idx, has_logo: bool | None = None) -> list[Issue]:
+    issues: list[Issue] = []
+    from reel.compile import WHOLE_REEL_GRAPHICS
+
+    seen_whole: set[str] = set()
+    for n, g in enumerate(fin.graphics):
+        path, kind = f"graphics[{n}]", g.kind.value
+        uid(f"{path}.id", g.id)
+        styles, positions = GRAPHIC_STYLES[kind]
+        if g.style not in styles:
+            issues.append(Issue("bad_style", f"{path}.style", f"Style '{g.style}' is not valid for {kind}.", f"Use one of {sorted(styles)}."))
+        if g.position not in positions:
+            issues.append(Issue("bad_position", f"{path}.position", f"Position '{g.position}' is not valid for {kind}.", f"Use one of {sorted(positions)}."))
+        if kind in WHOLE_REEL_GRAPHICS:
+            if kind in seen_whole:
+                issues.append(Issue("duplicate_graphic", path, f"Only one {kind} per reel.", "Remove the extra one."))
+            seen_whole.add(kind)
+        elif need_item(f"{path}.item", g.item):
+            in_item(f"{path}.from_word", g.item, g.from_word)
+            in_item(f"{path}.to_word", g.item, g.to_word)
+            if g.from_word > g.to_word:
+                issues.append(Issue("reversed_range", path, "from_word is after to_word.", "Swap them."))
+        words = len(g.text.split())
+        if kind in GRAPHIC_MAX_WORDS and words > GRAPHIC_MAX_WORDS[kind]:
+            issues.append(Issue("graphic_text_too_long", f"{path}.text", f"{kind} text has {words} words.",
+                                f"Cut it to ≤ {GRAPHIC_MAX_WORDS[kind]} words — on-screen text is read in a glance."))
+        needs_text = {"keyword_card", "lower_third", "text_card", "cta_card", "counter"}
+        if kind in needs_text and not g.text.strip():
+            issues.append(Issue("graphic_needs_text", f"{path}.text", f"{kind} needs text.", "Write the on-screen text."))
+        if kind == "emoji_pop":
+            from reel import emoji as emoji_mod
+
+            if not g.emoji.strip():
+                issues.append(Issue("graphic_needs_emoji", f"{path}.emoji", "emoji_pop needs one emoji.", "Put a single emoji in `emoji`."))
+            elif emoji_mod.ICON_SET.exists() and emoji_mod.name(g.emoji) is None:
+                issues.append(Issue("unknown_emoji", f"{path}.emoji", f"'{g.emoji}' is not a single standard emoji.",
+                                    "Use one standard emoji character (no text, no custom sequences)."))
+        if kind == "counter":
+            if "{n}" not in g.text:
+                issues.append(Issue("counter_format", f"{path}.text", "Counter text must contain {n} where the number goes.", 'E.g. "{n}%" or "₹{n} crore".'))
+            if g.value <= 0:
+                issues.append(Issue("counter_value", f"{path}.value", "Counter value must be positive.", "Set the number it counts up to."))
+        if kind == "callout" and g.position == "point" and not (0 <= g.x <= 1 and 0 <= g.y <= 1):
+            issues.append(Issue("callout_point", path, "A point callout needs x and y between 0 and 1 (output frame).",
+                                "Read the point off the contact sheet, or use position face."))
+        if kind == "cta_card" and g.item != order[-1]:
+            issues.append(Issue("cta_not_last", f"{path}.item", "The CTA card belongs on the last item.", f"Use item {order[-1]}."))
+    if len(fin.graphics) > GRAPHICS_MAX:
+        issues.append(Issue("too_many_graphics", "graphics", f"{len(fin.graphics)} graphics in one reel.",
+                            f"Keep at most {GRAPHICS_MAX}: graphics compete with the speaker.", "warning"))
+    return issues

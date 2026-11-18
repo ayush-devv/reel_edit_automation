@@ -164,14 +164,32 @@ def _compile_hash(ctx: StageContext) -> str:
                           "code": _code_fp("compile", "adapt", "script"), "v": VERSION})
 
 
+def _brand_logo(ctx: StageContext, brand) -> str | None:
+    """Copy the brand logo into the workspace (the overlay's public dir); returns its workspace path."""
+    if not brand or not brand.logo:
+        return None
+    src = Path(brand.logo)
+    if not src.is_absolute() and ctx.options.get("brand"):
+        src = Path(ctx.options["brand"]).parent / src
+    if not src.is_file():
+        raise FileNotFoundError(f"brand logo not found: {src}")
+    rel = f"brand/logo{src.suffix.lower()}"
+    dst = ctx.ws.path(*rel.split("/"))
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_bytes(src.read_bytes())
+    return rel
+
+
 def _compile(ctx: StageContext) -> dict:
     inp = _inputs(ctx)
     story = project.load_json_model(StoryPlan, ctx.ws.path("plan", "story.json"))
     fin = project.load_json_model(FinishPlan, ctx.ws.path("plan", "finish.json"))
     family, tokens = brief_mod.brand_caption_overrides(inp.brand)
     fixes = {int(k): v["text"] for k, v in (_read_json(ctx, "qa", "proof_confirmed.json") or {}).items() if v.get("text")}
+    logo = _brand_logo(ctx, inp.brand)
+    accent = (inp.brand.colors.accent or inp.brand.colors.primary) if inp.brand else None
     tl = compile_timeline(story, fin, inp.words, inp.clips, inp.fps, inp.idx, edges=inp.edges, brand_family=family, brand_tokens=tokens,
-                          brand_look=inp.brand.look if inp.brand else None, word_fixes=fixes)
+                          brand_look=inp.brand.look if inp.brand else None, word_fixes=fixes, brand_accent=accent, brand_logo=logo)
     from reel import adapt
 
     pal = _read_json(ctx, "perception", "palette.json") or {}

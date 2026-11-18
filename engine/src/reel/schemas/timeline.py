@@ -154,6 +154,22 @@ class PipEvent(_Strict):
     corner: str = owned("remotion", default="top_right")
 
 
+class GraphicEvent(_Strict):
+    id: str
+    kind: str = owned("remotion")
+    start_f: int = owned("remotion")
+    end_f: int = owned("remotion")
+    text: str = owned("remotion", default="")
+    emoji: str = owned("remotion", default="")
+    value: float = owned("remotion", default=0.0)
+    style: str = owned("remotion", default="")
+    position: str = owned("remotion", default="")
+    x: float = owned("remotion", default=-1.0)
+    y: float = owned("remotion", default=-1.0)
+    accent: str = owned("remotion", default="#FFD400")  # brand accent, else the caption emphasis colour
+    uri: str = owned("remotion", default="")  # logo file, relative to the workspace
+
+
 class Timeline(_Strict):
     schema_version: int = 1
     fps: str  # "num/den"
@@ -171,6 +187,7 @@ class Timeline(_Strict):
     flashes: list[FlashEvent] = Field(default_factory=list)
     pips: list[PipEvent] = Field(default_factory=list)
     effects: list[EffectEvent] = Field(default_factory=list)
+    graphics: list[GraphicEvent] = Field(default_factory=list)
     plan_ref: dict[str, str] = Field(default_factory=dict)  # file hashes of the plans compiled
 
 
@@ -182,13 +199,13 @@ def field_owners(model: type[BaseModel] = Timeline, prefix: str = "") -> dict[st
         if "owner" in extra:
             out[f"{prefix}{name}"] = extra["owner"]
         ann = f.annotation
-        for sub in (VideoClip, AudioClip, Ducking, Grade, TransitionEvent, CaptionTrack, CaptionPage, CaptionWord, TitleEvent, FlashEvent, PipEvent, EffectEvent):
+        for sub in (VideoClip, AudioClip, Ducking, Grade, TransitionEvent, CaptionTrack, CaptionPage, CaptionWord, TitleEvent, FlashEvent, PipEvent, EffectEvent, GraphicEvent):
             if ann is sub or (getattr(ann, "__args__", None) and sub in ann.__args__):
                 out.update(field_owners(sub, f"{prefix}{name}[]."))
     return out
 
 
-REMOTION_FIELDS = ("captions", "titles", "flashes", "pips")
+REMOTION_FIELDS = ("captions", "titles", "flashes", "pips", "graphics")
 FFMPEG_FIELDS = ("assets", "video", "audio", "transitions", "ducking", "grade", "effects")
 
 

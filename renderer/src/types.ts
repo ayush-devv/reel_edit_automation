@@ -8,6 +8,9 @@ export type Title = { id: string; text: string; start_f: number; end_f: number; 
 export type Flash = { id: string; at_f: number; frames: number };
 // picture-in-picture b-roll card; uri is relative to the workspace, which is the render's public dir
 export type Pip = { id: string; uri: string; start_f: number; end_f: number; src_in_us: number; corner: string };
+// Motion graphic (finish.graphics): kind-specific fields, see engine schemas/plan.py GraphicKind.
+export type Graphic = { id: string; kind: string; start_f: number; end_f: number; text: string; emoji: string; value: number;
+  style: string; position: string; x: number; y: number; accent: string; uri: string };
 export type Box = { x: number; y: number; w: number; h: number }; // normalised to the output frame
 // Per base clip: median face + burned-in text already in the footage (both to be kept clear).
 export type FaceSpan = { start_f: number; end_f: number; box: Box | null; text: Box[] };
@@ -21,6 +24,7 @@ export type OverlayProps = {
   titles: Title[];
   flashes: Flash[];
   pips?: Pip[];
+  graphics?: Graphic[];
   faces: FaceSpan[];
   safe: { top: number; bottom: number; right: number; left: number }; // px
   layer?: string; // "front" (default): everything over the picture · "behind": only titles that go behind the person

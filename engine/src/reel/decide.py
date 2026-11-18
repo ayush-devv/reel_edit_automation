@@ -115,6 +115,17 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
              "`rgb_split` (≤ 0.7 s — glitchy/tech energy), `exposure_pulse` (bright hit peaking on the first word — a beat or reveal), "
              "`light_leak` (warm wash, ≤ 3.5 s — nostalgic, dreamy, a soft reveal). Accents only: 0–3 per reel is typical, ≤ 6.",
              "- Pauses inside lines were already tightened in the story pass (jump cuts); a punch-in on the shot after a jump cut hides the jump.",
+             "- Motion graphics (`graphics`, on a word window; text is read in a glance — keep it short):",
+             "  - `emoji_pop` (one emoji; upper_left | upper_right | beside_face) — a reaction on a punchline, 0–3 per reel;",
+             "  - `keyword_card` (1–4 words; style pill | under | marker | box | plain; upper | center) — the one idea of a beat, not a caption copy;",
+             "  - `lower_third` (\"Name · Role\"; bar | tag) — first time a person is introduced;",
+             "  - `callout` (circle | box | underline | arrow; position face, or point with x,y 0–1 read off the contact sheet; optional ≤ 3-word label);",
+             "  - `counter` (value + text with {n}, e.g. \"₹{n} crore\", \"{n}%\") — when a number is the story;",
+             "  - `text_card` (full screen, ≤ 8 words; dark | light | color) — a chapter or list beat; it hides the speaker, so use 0–2;",
+             "  - `cta_card` (last item only; bar | card) — the brief's call to action;",
+             "  - `progress_bar` and `logo_watermark` (whole reel; the logo needs a brand logo).",
+             "  Rules (pro motion design): sentence case, short claims without a full stop; two cards in a row never share size, entry and position; "
+             "one style direction per creator — keep the same graphic styles across a reel; graphics never sit on the face or the captions.",
              "- Captions: kinetic captions in the family you choose, with your emphasis words; a brand kit overrides family/tokens.", ""]
     if inp.brand:
         lines += ["# Brand kit (overrides your token choices)", "", json.dumps(inp.brand.model_dump(exclude_none=True), indent=1, ensure_ascii=False), ""]
@@ -236,6 +247,9 @@ def _check_finish(inp: Inputs, story: StoryPlan):
             if presence < 0.5:
                 issues.append(Issue("no_person_for_behind", "hook_title.style", f"A person is visible in only {presence:.0%} of the opening clip.",
                                     "Use style card — text behind the subject needs a clearly visible person."))
+        for n, g in enumerate(fin.graphics):
+            if g.kind.value == "logo_watermark" and not (inp.brand and inp.brand.logo):
+                issues.append(Issue("no_brand_logo", f"graphics[{n}]", "There is no brand logo for this client.", "Remove the logo_watermark."))
         for n, t in enumerate(fin.transitions):
             if t.type.value not in RENDERABLE_TRANSITIONS:
                 issues.append(Issue("not_renderable", f"transitions[{n}].type", f"'{t.type.value}' transitions are not available in this build.",

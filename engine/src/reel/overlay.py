@@ -97,8 +97,14 @@ def build_props(tl: Timeline, root: Path, faces: dict | None, ocr: dict | None =
             if end > start:
                 spans.append({"start_f": start, "end_f": end, "box": box, "text": zones})
     d = tl.model_dump(mode="json")
+    from reel import emoji
+
+    for g in d["graphics"]:
+        if g["kind"] == "emoji_pop":
+            g["uri"] = emoji.svg_uri(g["emoji"]) or ""
+    d["graphics"] = [g for g in d["graphics"] if g["kind"] != "emoji_pop" or g["uri"]]
     return {"fps": float(fps), "width": tl.width, "height": tl.height, "duration_f": tl.duration_f,
-            "captions": d["captions"], "titles": d["titles"], "flashes": d["flashes"], "pips": d["pips"], "faces": spans, "safe": SAFE}
+            "captions": d["captions"], "titles": d["titles"], "flashes": d["flashes"], "pips": d["pips"], "graphics": d["graphics"], "faces": spans, "safe": SAFE}
 
 
 def render_overlay(props: dict, out: Path, *, timeout_s: int = 1800, public_dir: Path | None = None,

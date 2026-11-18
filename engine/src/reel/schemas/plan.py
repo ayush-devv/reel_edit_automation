@@ -174,6 +174,34 @@ class Effect(_Strict):
     reason: str
 
 
+class GraphicKind(str, Enum):
+    emoji_pop = "emoji_pop"  # an emoji pops in on a word (emoji); position upper_left | upper_right | beside_face
+    keyword_card = "keyword_card"  # 1–4 big words animate in (text); style pill | under | marker | box | plain; position upper | center
+    lower_third = "lower_third"  # name tag (text "Name · Role"); style bar | tag
+    callout = "callout"  # hand-drawn mark: style circle | box | underline | arrow; position face (around the speaker) or point (x, y); text = optional label
+    counter = "counter"  # a number counts up to `value`; text holds the format with {n}, e.g. "₹{n} crore", "{n}%"
+    text_card = "text_card"  # full-screen card with kinetic text (≤ 8 words): a chapter / list beat; style dark | light | color
+    cta_card = "cta_card"  # end card over the last line (text, e.g. "Follow for part 2"); style bar | card
+    progress_bar = "progress_bar"  # thin bar filling across the top for the whole reel (words ignored)
+    logo_watermark = "logo_watermark"  # the brand logo in a corner for the whole reel (needs a brand logo; words ignored)
+
+
+class Graphic(_Strict):
+    id: str
+    kind: GraphicKind
+    item: str  # story item (for whole-reel kinds: the first item)
+    from_word: int  # appears on this word …
+    to_word: int  # … and leaves after this word (same item)
+    text: str  # "" when the kind has no text
+    emoji: str  # one emoji for emoji_pop, else ""
+    value: float  # counter target, else 0
+    style: str  # per kind (see GraphicKind); "" = the kind's default
+    position: str  # per kind (see GraphicKind); "" = the kind's default
+    x: float  # callout point target, normalised output frame 0–1; -1 = not used
+    y: float
+    reason: str
+
+
 class FinishPlan(_Strict):
     hook_title: HookTitle
     grade: GradePlan
@@ -186,6 +214,7 @@ class FinishPlan(_Strict):
     broll: list[Broll]
     knowledge_used: list[str]
     effects: list[Effect] = []  # footage effects on a word window (validated: limits per type)
+    graphics: list[Graphic] = []  # motion graphics in the overlay (validated per kind)
 
 
 # ------------------------------------------------------------------ revisions

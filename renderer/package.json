@@ -6,6 +6,7 @@
   "dependencies": {
     "@fontsource/inter": "5.2.8",
     "@fontsource/plus-jakarta-sans": "5.2.8",
+    "@iconify-json/noto": "1.2.10",
     "@remotion/cli": "4.0.538",
     "@types/react": "19.1.8",
     "react": "19.1.0",

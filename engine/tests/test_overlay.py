@@ -147,3 +147,89 @@ def test_adaptive_tokens_fix_illegible_captions_but_respect_brand(tmp_path):
     assert t["stroke"] == "#000000" and t["emph_color"] != "#FFD400" and len(changes) == 2  # white/yellow on yellow
     kept, _ = adapt.adapt(tl, tmp_path, palette=[], locked={"emph_color", "stroke"})
     assert kept.captions.tokens == tl.captions.tokens  # brand-locked: untouched
+
+
+# ------------------------------------------------------------------ motion graphics
+
+
+def _g(id_, kind, frm, to, **kw):
+    from reel.schemas.plan import Graphic, GraphicKind
+
+    base = dict(id=id_, kind=GraphicKind(kind), item="k01", from_word=frm, to_word=to, text="", emoji="", value=0.0, style="", position="",
+                x=-1.0, y=-1.0, reason="r")
+    base.update(kw)
+    return Graphic(**base)
+
+
+GRAPHICS = [
+    _g("g1", "emoji_pop", 7, 8, emoji="🔥", position="upper_right"),
+    _g("g2", "keyword_card", 9, 10, text="one trick", style="pill"),
+    _g("g3", "counter", 11, 13, text="₹{n} saved", value=12500),
+    _g("g4", "callout", 7, 9, style="circle", position="face", text="me"),
+    _g("g5", "progress_bar", 7, 7),
+    _g("g6", "cta_card", 0, 4, item="k03", text="Follow for more", style="card"),
+]
+
+
+def test_graphics_compile_to_word_windows_and_validate():
+    fin = _finish(graphics=GRAPHICS)
+    assert not errors(validate_finish(fin, _story(), WORDS, IDX)), validate_finish(fin, _story(), WORDS, IDX)
+    tl = compile_timeline(_story(), fin, WORDS, CLIPS, FPS, IDX)
+    ev = {g.id: g for g in tl.graphics}
+    assert ev["g5"].start_f == 0 and ev["g5"].end_f == tl.duration_f  # whole reel
+    assert ev["g6"].end_f == tl.duration_f  # end card holds to the last frame
+    assert ev["g2"].end_f - ev["g2"].start_f >= 36  # ≥ 1.2 s at 30 fps, even for two short words
+    assert ev["g1"].accent == "#00FF00"  # caption emphasis colour when no brand accent
+    assert compile_timeline(_story(), fin, WORDS, CLIPS, FPS, IDX, brand_accent="#FF0066").graphics[0].accent == "#FF0066"
+    assert part(tl, FFMPEG_FIELDS) == part(_tl(), FFMPEG_FIELDS)  # graphics never re-render the base
+
+
+def test_graphics_rules():
+    from reel import emoji
+
+    bad = _finish(graphics=[
+        _g("b1", "counter", 7, 8, text="12500 saved", value=12500),        # no {n}
+        _g("b2", "keyword_card", 7, 8, text="this is far too many words", style="pill"),
+        _g("b3", "callout", 7, 8, style="circle", position="point"),     # point without x/y
+        _g("b4", "cta_card", 7, 8, text="Follow"),                       # not on the last item
+        _g("b5", "emoji_pop", 7, 8, emoji="ok"),                         # not an emoji
+        _g("b6", "lower_third", 7, 8, text="Name", style="neon"),         # unknown style
+    ])
+    codes = {i.code for i in validate_finish(bad, _story(), WORDS, IDX)}
+    assert {"counter_format", "graphic_text_too_long", "callout_point", "cta_not_last", "bad_style"} <= codes
+    if emoji.ICON_SET.exists():
+        assert "unknown_emoji" in codes
+        assert emoji.name("🔥") == "fire" and emoji.name("❤️") == "red-heart" and emoji.svg_uri("🔥").startswith("data:image/svg+xml;base64,")
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not READY, reason="needs pinned ffmpeg + renderer")
+def test_every_graphic_kind_renders_in_its_window(tmp_path):
+    from reel import tools
+    from reel.schemas.timeline import GraphicEvent
+
+    kinds = [("emoji_pop", dict(emoji="🔥", position="upper_right")), ("keyword_card", dict(text="3 money rules", style="pill")),
+             ("lower_third", dict(text="Asha Rao · Founder", style="bar")), ("callout", dict(style="arrow", position="point", x=0.5, y=0.5)),
+             ("counter", dict(text="₹{n}", value=12500)), ("text_card", dict(text="Rule one: pay yourself first", style="dark")),
+             ("cta_card", dict(text="Follow for part 2", style="card"))]
+    span = 20
+    events = [GraphicEvent(id=f"g{k}", kind=kind, start_f=k * span, end_f=(k + 1) * span, accent="#FFD400", **kw) for k, (kind, kw) in enumerate(kinds)]
+    events.append(GraphicEvent(id="pb", kind="progress_bar", start_f=0, end_f=span * len(kinds), accent="#FFD400"))
+    tl = Timeline(fps="25/1", width=1080, height=1920, duration_f=span * len(kinds), assets={}, video=[], audio=[], graphics=events)
+    props = overlay.build_props(tl, tmp_path, None)
+    assert props["graphics"][0]["uri"].startswith("data:image/svg+xml")  # emoji resolved to a Noto SVG
+    ov = tmp_path / "overlay.mov"
+    overlay.render_overlay(props, ov)
+    sheet = tmp_path / "sheet.png"
+    # one frame from the settled middle of each window; alpha shows where something was drawn
+    sel = "+".join(f"eq(n\\,{k * span + 14})" for k in range(len(kinds)))
+    tools.ffmpeg(["-y", "-i", str(ov), "-vf", f"select='{sel}',alphaextract,scale=108:192,tile={len(kinds)}x1", "-frames:v", "1", "-update", "1", str(sheet)])
+    raw = tools.run([str(config.ffmpeg_path()), "-v", "error", "-i", str(sheet), "-f", "rawvideo", "-pix_fmt", "gray", "-"]).stdout
+    a = np.frombuffer(raw, dtype=np.uint8).reshape(192, 108 * len(kinds)).astype(float)
+    for k, (kind, _kw) in enumerate(kinds):
+        drawn = (a[12:, k * 108:(k + 1) * 108] > 128).mean()  # skip the progress bar rows at the top
+        assert drawn > 0.001, (kind, drawn)
+    assert (a[0:2, :] > 128).mean() > 0.3  # the progress bar fills across the top
+    # colour contact sheet over a test picture (for a human look: tmp_path/look.png)
+    tools.ffmpeg(["-y", "-f", "lavfi", "-i", "testsrc2=s=1080x1920:r=25:d=6", "-i", str(ov), "-filter_complex",
+                  f"[0][1]overlay=format=auto,select='{sel}',scale=270:480,tile={len(kinds)}x1", "-frames:v", "1", "-update", "1", str(tmp_path / "look.png")])
