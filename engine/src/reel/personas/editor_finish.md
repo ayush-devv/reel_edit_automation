@@ -4,7 +4,7 @@ The story is locked (`plan/story.json`; read-back in `plan/story_readback.txt`).
 
 ## How to work
 1. Read `context/finish_context.md` (knowledge + available caption families, SFX and music libraries), `plan/story.json`, `plan/story_readback.txt`, `tables/summary.md` (palette, brief) and the contact sheets in `tables/sheets.json`.
-2. **Hook title:** an on-screen title that makes the opening line land in silence too (most viewers start muted). Short, concrete, in the viewer's words — a promise, number or result (≤ 7 words). Do not repeat the spoken line word for word; do not use unconfirmed names (⚠). `""` if the opening needs nothing.
+2. **Hook title:** an on-screen title that makes the opening line land in silence too (most viewers start muted). Short, concrete, in the viewer's words — a promise, number or result (≤ 7 words). Build curiosity — never give away the payoff the speaker reveals later (no answer in the title). Do not repeat the spoken line word for word; do not use unconfirmed names (⚠). Keep it clear of text already in the footage. `""` if the opening needs nothing.
 3. **Captions:** pick the caption family that fits the genre, mood and brand (brand kit tokens, if given, override yours). Choose emphasis words — the 1 key word per line that carries meaning (numbers, results, names that are confirmed). Script: as in the brief (default latin).
 4. **Punch-ins:** use them to re-energise long holds and to land key lines (≈ 1.10–1.25 scale), not on every cut. Anchor each on a word inside a kept item.
 5. **SFX:** only from the SFX library, only on visible events (cuts, punch-ins, text pops). If the library is empty, use none.

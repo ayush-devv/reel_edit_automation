@@ -108,7 +108,7 @@ FINISH = Stage(name="finish", input_hash=_finish_hash, outputs=lambda ctx: [ctx.
 def _compile_hash(ctx: StageContext) -> str:
     return hash_inputs({f: _fp(ctx, f) for f in ("plan/story.json", "plan/finish.json", "perception/words.json",
                                                  "perception/edges.json", "source/manifest.json")}
-                       | {"assets": _assets_fp(), "brand": _opt_file(ctx.options.get("brand")), "v": VERSION})
+                       | {"assets": _assets_fp(), "brand": _opt_file(ctx.options.get("brand")), "proof": _fp(ctx, "qa/proof_confirmed.json"), "v": VERSION})
 
 
 def _compile(ctx: StageContext) -> dict:
@@ -116,8 +116,9 @@ def _compile(ctx: StageContext) -> dict:
     story = project.load_json_model(StoryPlan, ctx.ws.path("plan", "story.json"))
     fin = project.load_json_model(FinishPlan, ctx.ws.path("plan", "finish.json"))
     family, tokens = brief_mod.brand_caption_overrides(inp.brand)
+    fixes = {int(k): v["text"] for k, v in (_read_json(ctx, "qa", "proof_confirmed.json") or {}).items() if v.get("text")}
     tl = compile_timeline(story, fin, inp.words, inp.clips, inp.fps, inp.idx, edges=inp.edges, brand_family=family, brand_tokens=tokens,
-                          brand_look=inp.brand.look if inp.brand else None)
+                          brand_look=inp.brand.look if inp.brand else None, word_fixes=fixes)
     atomic_write_json(ctx.ws.path("timeline", "timeline.json"), tl.model_dump(mode="json"))
     proof = proof_list(tl, story, inp.words)
     atomic_write_json(ctx.ws.path("qa", "proof_list.json"), proof)
@@ -234,4 +235,27 @@ def _composite(ctx: StageContext) -> dict:
 COMPOSITE = Stage(name="composite", input_hash=_composite_hash,
                   outputs=lambda ctx: [ctx.ws.path("render", "final.mp4"), ctx.ws.path("export", "reel.mp4")], run=_composite)
 
-STAGES = [STORY, FINISH, COMPILE, RENDER, OVERLAY, COMPOSITE]
+# ------------------------------------------------------------------ QA + verdict
+
+
+def _qa_hash(ctx: StageContext) -> str:
+    from reel import config, verdict
+    from reel import qa as qa_mod
+    from reel.schemas.review import Review
+
+    return hash_inputs({"final": _fp(ctx, "render/final.mp4"), "proof": _fp(ctx, "qa/proof_confirmed.json"),
+                        "brief": _opt_file(ctx.options.get("brief")), "persona": file_fingerprint(verdict.REVIEWER_PERSONA),
+                        "schema": decide.schema(Review), "gates": config.QA_GATES, "trusted": config.REVIEWER_TRUSTED,
+                        "code": hash_inputs([file_fingerprint(Path(m.__file__)) for m in (verdict, qa_mod)]),
+                        "skip_review": bool(ctx.options.get("skip_review")), **_model_key(ctx)})
+
+
+def _qa(ctx: StageContext) -> dict:
+    from reel import verdict
+
+    return verdict.run(ctx.ws, ctx.options, _caller(ctx))
+
+
+QA = Stage(name="qa", input_hash=_qa_hash, outputs=lambda ctx: [ctx.ws.path("qa", "verdict.json"), ctx.ws.path("qa", "verdict.md")], run=_qa)
+
+STAGES = [STORY, FINISH, COMPILE, RENDER, OVERLAY, COMPOSITE, QA]

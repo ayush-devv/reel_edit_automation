@@ -42,6 +42,27 @@ def norm(text: str) -> str:
     return re.sub(r"[^\wऀ-ॿ]+", "", text)
 
 
+HEX = r"#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?"
+TOKEN_RULES = {
+    "stroke": (rf"true|false|{HEX}", '"true", "false" or a hex colour like #000000'),
+    "box": (rf"true|false|{HEX}", '"true", "false" or a hex colour like #000000B3'),
+    "case": ("upper|lower|sentence|title", "upper | lower | sentence | title"),
+    "highlight": ("word|scale|none", "word | scale | none"),
+    "anim": ("pop|fade|slide_fade", "pop | fade | slide_fade"),
+    "zone": ("lower_middle|lower_third|beside_face", "lower_middle | lower_third | beside_face"),
+    "weight": (r"[1-9]00", "a font weight 100–900"),
+    "anim_ms": (r"\d{2,4}", "milliseconds, e.g. 150"),
+    "emph_scale": (r"\d(\.\d+)?", "a number like 1.4"),
+}
+
+
+def token_rule(key: str) -> tuple[str, str] | None:
+    """Value contract for caption tokens (the overlay renderer only understands these values)."""
+    if key.endswith("_color") or key in ("speaker_a", "speaker_b"):
+        return HEX, "a hex colour like #FFD400"
+    return TOKEN_RULES.get(key)
+
+
 def _range_check(issues: list[Issue], path: str, value: float, lo: float, hi: float, what: str) -> None:
     if not (lo <= value <= hi):
         issues.append(Issue("out_of_range", path, f"{what} {value} is outside {lo}–{hi}.", f"Set {path} between {lo} and {hi}."))
@@ -200,6 +221,10 @@ def validate_finish(fin: FinishPlan, story: StoryPlan, words: WordTable, idx: In
         for n, tok in enumerate(cap.tokens):
             if tok.key not in allowed:
                 issues.append(Issue("unknown_token", f"captions.tokens[{n}].key", f"Token '{tok.key}' is not part of family {cap.family}.", f"Use one of {sorted(allowed)}."))
+                continue
+            rule = token_rule(tok.key)
+            if rule and not re.fullmatch(rule[0], tok.value):
+                issues.append(Issue("bad_token_value", f"captions.tokens[{n}].value", f"Token '{tok.key}' = '{tok.value}' is not valid.", f"Use {rule[1]}."))
     if cap.script not in SCRIPTS:
         issues.append(Issue("bad_script", "captions.script", f"Script '{cap.script}' is not supported.", f"Use one of {sorted(SCRIPTS)}."))
     kept = {i for it in story.items for i in range(it.word_start, it.word_end + 1)}

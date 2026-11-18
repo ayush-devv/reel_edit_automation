@@ -96,6 +96,59 @@ def caption_text(text: str, script: str) -> str:
     return sc.deva_to_roman(text) if script == "latin" and sc.script_of(text) == "devanagari" else text
 
 
+# English words that should not end a caption page (they lean on the next word) and Hindi
+# postpositions/auxiliaries that should not start one (they lean on the previous word).
+LEANS_FORWARD = {"a", "an", "the", "to", "of", "into", "in", "on", "at", "for", "with", "from", "by", "and", "or", "but",
+                 "your", "my", "our", "their", "his", "her", "its", "this", "that", "these", "those", "will", "can", "is",
+                 "are", "was", "were", "be", "i", "you", "we", "they", "not", "very", "so", "just", "more", "most",
+                 "one", "two", "three", "some", "any", "every", "each", "no", "all", "few", "many"}
+LEANS_BACK = {"ka", "ki", "ke", "ko", "se", "me", "mein", "par", "ne", "tak", "hai", "hain", "tha", "thi", "the", "hi", "bhi",
+              "का", "की", "के", "को", "से", "में", "पर", "ने", "तक", "है", "हैं", "था", "थी", "थे", "ही", "भी"}
+
+
+def _bare(text: str) -> str:
+    return text.strip(".,!?;:—\"'“”").casefold()
+
+
+def _break_cost(w, nxt) -> float:
+    """Cost of ending a caption page after word `w`: free after punctuation, cheap at a pause,
+    expensive inside a phrase (after a word that leans forward, or before one that leans back)."""
+    if nxt is None or w.text.rstrip()[-1:] in ".,!?;:—":
+        return 0.0
+    gap_ms = (nxt.start_us - w.end_us) / 1000
+    cost = 0.5 if gap_ms >= 250 else 2.0 if gap_ms >= 120 else 3.0
+    if _bare(w.text) in LEANS_FORWARD:
+        cost += 3.0
+    if _bare(nxt.text) in LEANS_BACK:
+        cost += 3.0
+    if _bare(nxt.text) in LEANS_FORWARD:
+        cost -= 1.0  # breaking before "to save…", "and never…" keeps the phrase together
+    return max(cost, 0.25)
+
+
+def balanced_pages(ws: list, max_words: int) -> list[list]:
+    """Caption pages of ≤ max_words that break at phrase boundaries (punctuation, pauses), with
+    as few pages as possible and no one-word orphan page (dynamic programming over break points)."""
+    n = len(ws)
+    if n == 0:
+        return []
+    best = [0.0] + [float("inf")] * n  # best[k] = cost of paging ws[:k]
+    prev = [0] * (n + 1)
+    for k in range(1, n + 1):
+        for size in range(1, min(max_words, k) + 1):
+            j = k - size
+            cost = best[j] + _break_cost(ws[k - 1], ws[k] if k < n else None) + 1.0  # +1 per page: prefer fewer pages
+            if size == 1 and n > 1:
+                cost += 3.0  # orphan word
+            if cost < best[k]:
+                best[k], prev[k] = cost, j
+    pages, k = [], n
+    while k > 0:
+        pages.append(ws[prev[k]:k])
+        k = prev[k]
+    return pages[::-1]
+
+
 def unreliable_timing(words: list[Word]) -> bool:
     """Word-by-word highlighting needs trustworthy word times; Hinglish ASR sometimes smears them."""
     if not words:
@@ -165,6 +218,7 @@ def compile_timeline(
     brand_family: str | None = None,
     brand_tokens: dict[str, str] | None = None,
     brand_look: str | None = None,
+    word_fixes: dict[int, str] | None = None,
 ) -> Timeline:
     """Brand kit (family lock + tokens) overrides the Editor's caption choices (ADR-0017)."""
     finish = finish or empty_finish()
@@ -252,9 +306,8 @@ def compile_timeline(
     pages: list[CaptionPage] = []
     for it in story.items:
         ws = [by[i] for i in range(it.word_start, it.word_end + 1) if not by[i].filler]
-        for k in range(0, len(ws), max_words):
-            group = ws[k:k + max_words]
-            cw = [CaptionWord(i=w.i, text=caption_text(w.text, cap_script), start_f=word_out_frame(w, it.id),
+        for group in balanced_pages(ws, max_words):
+            cw = [CaptionWord(i=w.i, text=caption_text((word_fixes or {}).get(w.i, w.text), cap_script), start_f=word_out_frame(w, it.id),
                               end_f=word_out_frame(w, it.id, end=True), emph=w.i in emph)
                   for w in group]
             start_f = cw[0].start_f

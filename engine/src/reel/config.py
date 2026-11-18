@@ -82,3 +82,15 @@ def ffprobe_path() -> Path:
 # ASR engine per language (ADR-0007). Hindi/Hinglish = bake-off winner; until the owner's clips
 # have been scored this stays on Whisper large-v3 (`reel bakeoff`, docs/plan/step8-hinglish.md).
 ASR_ENGINES = {"en": "whisper-turbo", "hi": "whisper-large-v3", "hinglish": "whisper-large-v3"}
+
+
+# QA gate modes (ADR-0017): measured gates warn until `reel calibrate` shows an acceptable
+# false-positive rate on owner-sendable renders; the owner then promotes them here.
+QA_GATES = {
+    "frame_count": "block", "loudness": "block", "proof_words": "block", "brief": "block",
+    "dead_air": "warn", "frozen": "warn", "black": "warn", "caption_contrast": "warn", "caption_over_face": "warn",
+    "safe_zone": "warn", "reading_speed": "warn", "face_cut": "warn",
+}
+# The Reviewer can always force `hold`; it drives automatic fixes only once calibrated (ADR-0021 §5).
+REVIEWER_TRUSTED = False
+MAX_FIX_LOOPS = 3

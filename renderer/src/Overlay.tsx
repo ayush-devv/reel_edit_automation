@@ -11,7 +11,10 @@ export function fontFamily(token: string | undefined): string {
   return BUNDLED.includes(name) ? name : "Inter";
 }
 
-const truthy = (v: string | undefined) => v === "true" || v === "1";
+const truthy = (v: string | undefined) => v === "true" || v === "1" || isColour(v);
+const isColour = (v: string | undefined) => !!v && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(v);
+// stroke / box tokens: "true" (default colour) or a hex colour
+const colourOf = (v: string | undefined, d: string) => (isColour(v) ? (v as string) : d);
 const num = (v: string | undefined, d: number) => (v !== undefined && !isNaN(Number(v)) ? Number(v) : d);
 
 function textTransform(c: string | undefined): React.CSSProperties["textTransform"] {
@@ -128,7 +131,7 @@ const Captions: React.FC<{ track: CaptionTrack; p: OverlayProps }> = ({ track, p
           color,
           opacity,
           transform: `translateY(${dy}px) scale(${scale})`,
-          WebkitTextStroke: stroke ? `${Math.round(size * 0.11)}px #000` : undefined,
+          WebkitTextStroke: stroke ? `${Math.round(size * 0.11)}px ${colourOf(t.stroke, "#000000")}` : undefined,
           paintOrder: "stroke fill",
           textShadow: stroke || boxed ? undefined : "0 4px 16px rgba(0,0,0,0.55)",
         }}
@@ -164,7 +167,7 @@ const Captions: React.FC<{ track: CaptionTrack; p: OverlayProps }> = ({ track, p
             whiteSpace: "nowrap",
             padding: boxed ? "14px 26px" : 0,
             borderRadius: boxed ? 18 : 0,
-            background: boxed ? t.box_color || "#000000B3" : "transparent",
+            background: boxed ? t.box_color || colourOf(t.box, "#000000B3") : "transparent",
           }}
         >
           {wordEls}

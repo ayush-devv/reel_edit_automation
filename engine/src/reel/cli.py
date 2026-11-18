@@ -46,10 +46,27 @@ def _cmd_run(args: argparse.Namespace) -> int:
     absolute = lambda p: str(Path(p).resolve()) if p else None  # noqa: E731
     options = {"input": str(src), "fps": args.fps, "encoder": args.encoder, "language": args.language,
                "brief": absolute(args.brief), "brand": absolute(args.brand), "asr_repo": args.asr_repo, "skip_visual": args.skip_visual}
-    atomic_write_json(ws.path("run_options.json"), options)  # `reel revise` reuses them
-    state = run_pipeline(ws, PIPELINE if args.analyse_only else EDIT_PIPELINE, options=options, force=set(args.force or []))
-    _print_state(state, ws)
+    options["skip_review"] = args.skip_review
+    atomic_write_json(ws.path("run_options.json"), options)  # `reel revise` / `reel proof` reuse them
+    if args.analyse_only:
+        state = run_pipeline(ws, PIPELINE, options=options, force=set(args.force or []))
+        _print_state(state, ws)
+        return 0
+    from reel import autofix
+
+    res = autofix.run(ws, EDIT_PIPELINE, options, force=set(args.force or []))
+    _print_state(res["state"], ws)
+    _print_verdict(ws, res["loops"])
     return 0
+
+
+def _print_verdict(ws, loops: list | None = None) -> None:
+    v = ws.path("qa", "verdict.md")
+    if loops and len(loops) > 1:
+        print("\nfix loops: " + " → ".join(f"{h['status']}" + (f" (revised: {h['revision']})" if h.get("revision") else "") for h in loops))
+    if v.exists():
+        print("\n" + v.read_text().split("## Gates")[0].strip())
+        print(f"\nfull report: {v}")
 
 
 def _cmd_library(args: argparse.Namespace) -> int:
@@ -87,27 +104,65 @@ def _cmd_bakeoff(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_revise(args: argparse.Namespace) -> int:
-    """Chat revision: resume the Editor's finish session, apply story ops + new finish plan, re-render."""
-    from reel import decide
-    from reel.runner import StageContext, load_state, run_pipeline, save_state
-    from reel.stages import edit
+def _load_ws(project: str):
     from reel.workspace import Workspace
 
-    ws = Workspace(Path(args.project).resolve())
+    ws = Workspace(Path(project).resolve())
     opts_file = ws.path("run_options.json")
-    options = json.loads(opts_file.read_text()) if opts_file.exists() else {}
-    with ws.lock():
-        res = decide.revise(decide.load_inputs(ws, options.get("brief"), options.get("brand")), args.request)
-        # the revised plans are the finish stage's output now: mark it done for its current inputs
-        state = load_state(ws)
-        ctx = StageContext(ws=ws, options=options)
-        state["stages"]["finish"] = {**state["stages"].get("finish", {}), "status": "done", "input_hash": edit.FINISH.input_hash(ctx),
-                                     "meta": {"revision": res}}
-        save_state(ws, state)
-    state = run_pipeline(ws, [edit.COMPILE, edit.RENDER, edit.OVERLAY, edit.COMPOSITE], options=options)
-    print(f"Editor: {res['reply']}  ({res['calls']} call(s), ~${res['cost_usd']})")
+    return ws, (json.loads(opts_file.read_text()) if opts_file.exists() else {})
+
+
+def _rerun_after_plan_change(ws, options) -> None:
+    from reel.runner import run_pipeline
+    from reel.stages import edit
+
+    state = run_pipeline(ws, [edit.COMPILE, edit.RENDER, edit.OVERLAY, edit.COMPOSITE, edit.QA], options=options)
     _print_state(state, ws)
+    _print_verdict(ws)
+
+
+def _cmd_revise(args: argparse.Namespace) -> int:
+    """Chat revision: resume the Editor's finish session, apply story ops + new finish plan, re-render, re-check."""
+    from reel import autofix
+
+    ws, options = _load_ws(args.project)
+    res = autofix.apply_revision(ws, options, args.request)
+    print(f"Editor: {res['reply']}  ({res['calls']} call(s), ~${res['cost_usd']})")
+    _rerun_after_plan_change(ws, options)
+    return 0
+
+
+def _cmd_proof(args: argparse.Namespace) -> int:
+    """Owner confirms or corrects unsure caption words (ADR-0021); captions re-render, the base does not."""
+    from reel.workspace import atomic_write_json
+
+    ws, options = _load_ws(args.project)
+    path = ws.path("qa", "proof_confirmed.json")
+    conf = json.loads(path.read_text()) if path.exists() else {}
+    for i in args.ok or []:
+        conf[str(i)] = {"ok": True}
+    for item in args.fix or []:
+        i, _, text = item.partition("=")
+        conf[str(int(i))] = {"ok": True, "text": text}
+    atomic_write_json(path, conf)
+    print(f"confirmed {len(conf)} word(s)")
+    _rerun_after_plan_change(ws, options)
+    return 0
+
+
+def _cmd_label(args: argparse.Namespace) -> int:
+    from reel.workspace import atomic_write_json
+
+    ws, _ = _load_ws(args.project)
+    atomic_write_json(ws.path("qa", "owner_label.json"), {"sendable": args.sendable == "yes", "note": args.note or ""})
+    print(f"labelled {ws.root.name}: sendable={args.sendable}")
+    return 0
+
+
+def _cmd_calibrate(args: argparse.Namespace) -> int:
+    from reel import calibrate
+
+    print(json.dumps(calibrate.report(calibrate.collect(Path(args.projects).resolve())), indent=2))
     return 0
 
 
@@ -254,7 +309,24 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--asr-repo", help="override the ASR model repo (default mlx-community/whisper-large-v3-turbo)")
     p.add_argument("--skip-visual", action="store_true", help="skip OCR, scenes, faces, palette, motion (faster)")
     p.add_argument("--analyse-only", action="store_true", help="stop after the footage tables (no Claude calls)")
+    p.add_argument("--skip-review", action="store_true", help="QA gates only, no Reviewer call")
     p.set_defaults(func=_cmd_run)
+
+    p = sub.add_parser("proof", help="confirm/correct unsure caption words, then re-render captions")
+    p.add_argument("--project", required=True)
+    p.add_argument("--ok", nargs="*", type=int, help="word indices that are correct as transcribed")
+    p.add_argument("--fix", nargs="*", help="corrections as <index>=<text>, e.g. 7=DearMa")
+    p.set_defaults(func=_cmd_proof)
+
+    p = sub.add_parser("label", help="owner judgement of a rendered reel (for calibration)")
+    p.add_argument("--project", required=True)
+    p.add_argument("--sendable", required=True, choices=["yes", "no"])
+    p.add_argument("--note")
+    p.set_defaults(func=_cmd_label)
+
+    p = sub.add_parser("calibrate", help="Reviewer agreement + gate false-positive rates vs owner labels")
+    p.add_argument("--projects", default="projects")
+    p.set_defaults(func=_cmd_calibrate)
 
     p = sub.add_parser("library", help="index a local SFX or music folder into assets/")
     p.add_argument("kind", choices=["sfx", "music"])
