@@ -248,7 +248,14 @@ def _render_hash(ctx: StageContext) -> str:
                         "vad": _fp(ctx, "perception/vad.json"), "scenes": _fp(ctx, "perception/scenes.json"), "assets": _assets_fp(),
                         "code": _render_code_fp(),
                         "broll": _fp(ctx, "broll/index.json"),
+                        "voice": [_fp(ctx, "perception/voice_enhance.json"), *(_fp(ctx, str(p.relative_to(ctx.ws.root))) for p, _g in enhanced_voice(ctx).values())],
                         "mezz": _mezz_fps(ctx), "v": VERSION, "crf": render.CRF})
+
+
+def enhanced_voice(ctx: StageContext) -> dict[str, tuple[Path, float]]:
+    """Per clip: (enhanced voice wav, room-tone gain dB) from the voice stage, for clips it enhanced."""
+    clips = (_read_json(ctx, "perception", "voice_enhance.json") or {}).get("clips", {})
+    return {cid: (ctx.ws.root / c["voice"], float(c.get("room_tone_gain_db", 0.0))) for cid, c in clips.items() if c.get("applied")}
 
 
 def room_tones(ctx: StageContext) -> dict[str, tuple[int, int, float]]:
@@ -281,12 +288,15 @@ def clip_luts(ctx: StageContext, tl: Timeline) -> tuple[dict, dict]:
 
 
 def _render(ctx: StageContext) -> dict:
-    rt = room_tones(ctx)
+    ev = enhanced_voice(ctx)
+    # an enhanced clip's floor is its enhanced floor (room tone is lowered to it; the voice chain denoises against it)
+    rt = {k: (s, e, round(db + ev[k][1], 1) if k in ev else db) for k, (s, e, db) in room_tones(ctx).items()}
     tl = _timeline(ctx)
     luts, measured = clip_luts(ctx, tl)
     meta = render.render_base(tl, ctx.ws.root, ctx.ws.path("render", "base.mov"), faces=_faces(ctx), room_tone=rt, luts=luts,
-                              stems_dir=ctx.ws.path("render", "stems"), scenes=_read_json(ctx, "perception", "scenes.json"))
-    return meta | {"grade": {"look": tl.grade.look, "strength": tl.grade.strength, "clips": measured}, "room_tone": {k: {"s": round(v[0] / 1e6, 2), "e": round(v[1] / 1e6, 2), "dbfs": v[2]} for k, v in rt.items()}}
+                              stems_dir=ctx.ws.path("render", "stems"), scenes=_read_json(ctx, "perception", "scenes.json"),
+                              enhanced_voice=ev)
+    return meta | {"voice_enhanced": sorted(ev), "grade": {"look": tl.grade.look, "strength": tl.grade.strength, "clips": measured}, "room_tone": {k: {"s": round(v[0] / 1e6, 2), "e": round(v[1] / 1e6, 2), "dbfs": v[2]} for k, v in rt.items()}}
 
 
 RENDER = Stage(name="render", input_hash=_render_hash,

@@ -394,8 +394,11 @@ def duck_expr(regions_f: list[list[int]], fps: Fraction, depth_db: float, attack
 
 def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = None, crf: int = CRF,
                   room_tone: dict[str, tuple[int, int, float]] | None = None, finish_audio: bool = True,
-                  luts: dict[str, Path] | None = None, stems_dir: Path | None = None, scenes: dict | None = None) -> list[str]:
+                  luts: dict[str, Path] | None = None, stems_dir: Path | None = None, scenes: dict | None = None,
+                  enhanced_voice: dict[str, tuple[Path, float]] | None = None) -> list[str]:
     """`room_tone`: per mezzanine asset, the (start_us, end_us, dBFS) stretch to loop under its segments.
+    `enhanced_voice`: per mezzanine asset, (sample-aligned 48 kHz voice file, room-tone gain dB) — the
+    voice role reads that file; room tone still loops the mezzanine's own audio, at that gain.
     `finish_audio=False` renders the raw cut voice only (used by sync tests)."""
     problems = unsupported(tl)
     if problems:
@@ -434,6 +437,13 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
             audio_input[asset] = len(base) + len(audio_input)
             uri = Path(tl.assets[asset].uri)
             args += ["-i", str(uri if uri.is_absolute() else root / uri)]
+    # enhanced voice: its own unseeked input per asset (same samples as the mezzanine audio)
+    enhanced_voice = enhanced_voice or {}
+    voice_input: dict[str, int] = {}
+    for asset in dict.fromkeys(c.asset for c in base if c.asset in enhanced_voice):
+        voice_input[asset] = len(base) + len(audio_input) + len(voice_input)
+        args += ["-i", str(enhanced_voice[asset][0])]
+    voice_src = {c.asset: voice_input.get(c.asset, audio_input[c.asset]) for c in base}
 
     brolls = sorted((c for c in tl.video if c.id.startswith("br_")), key=lambda c: c.at_f)
     broll_input: dict[str, int] = {}
@@ -443,24 +453,25 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
         if c.asset not in sizes:
             sizes[c.asset] = source_size(uri)
         in_f = tb.us_to_frame(c.src_in_us, fps)
-        broll_input[c.id] = len(base) + len(audio_input) + len(broll_input)
+        broll_input[c.id] = len(base) + len(audio_input) + len(voice_input) + len(broll_input)
         if in_f > 0:
             args += ["-ss", f"{float((Fraction(in_f) - Fraction(1, 2)) / fps):.6f}"]
         args += ["-i", str(uri)]
 
-    uses: dict[str, int] = {}
+    uses: dict[int, int] = {}  # audio input index → branches read from it
     for c in base:
-        uses[c.asset] = uses.get(c.asset, 0) + 1 + (1 if c.asset in room_tone else 0)
+        uses[voice_src[c.asset]] = uses.get(voice_src[c.asset], 0) + 1
+        if c.asset in room_tone:
+            uses[audio_input[c.asset]] = uses.get(audio_input[c.asset], 0) + 1
     for a in extras:
-        uses[a.asset] = uses.get(a.asset, 0) + 1
+        uses[audio_input[a.asset]] = uses.get(audio_input[a.asset], 0) + 1
     graph: list[str] = []
-    a_label: dict[str, list[str]] = {}
-    for asset, n in uses.items():
-        k = audio_input[asset]
+    a_label: dict[int, list[str]] = {}
+    for k, n in uses.items():
         labels = [f"src_{k}_{j}" for j in range(n)]
         graph.append(f"[{k}:a]aresample={AUDIO_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo,"
                      + (f"asplit={n}" + "".join(f"[{l}]" for l in labels) if n > 1 else f"anull[{labels[0]}]"))
-        a_label[asset] = labels
+        a_label[k] = labels
 
     bounds = tb.audio_bounds(tb.layout_segments([c.dur_f for c in base]), fps)
     concat_in, rt_in = [], []
@@ -486,16 +497,18 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
         gain = f",volume={a.gain_db}dB" if a.gain_db else ""
         src_n = round(n * a.speed)
         tempo = "".join(f",atempo={f:.6f}" for f in atempo_chain(a.speed)) + f",atrim=end_sample={n}" if a.speed != 1.0 else ""
-        graph.append(f"[{a_label[c.asset].pop(0)}]atrim=start_sample={start}:end_sample={start + src_n},asetpts=PTS-STARTPTS{tempo},"
+        graph.append(f"[{a_label[voice_src[c.asset]].pop(0)}]atrim=start_sample={start}:end_sample={start + src_n},asetpts=PTS-STARTPTS{tempo},"
                      f"afade=t=in:d={EDGE_FADE_S},afade=t=out:st={fade_out:.6f}:d={EDGE_FADE_S}{gain},apad=whole_len={n}[a{k}]")
         concat_in.append(f"[v{k}][a{k}]")
         if room_tone:
             if c.asset in room_tone:
                 r0, r1, _db = room_tone[c.asset]
                 rs, re_ = tb.us_to_sample(r0), tb.us_to_sample(r1)
+                # the enhanced voice carries less noise: its room tone sits that much lower
+                rt_gain = f",volume={enhanced_voice[c.asset][1]:.1f}dB" if c.asset in enhanced_voice and enhanced_voice[c.asset][1] else ""
                 # loop the raw stretch (fading it would dip the room every loop); noise has no pitch to click
-                graph.append(f"[{a_label[c.asset].pop(0)}]atrim=start_sample={rs}:end_sample={re_},asetpts=PTS-STARTPTS,"
-                             f"aloop=loop=-1:size={re_ - rs},atrim=end_sample={n},asetpts=PTS-STARTPTS[rt{k}]")
+                graph.append(f"[{a_label[audio_input[c.asset]].pop(0)}]atrim=start_sample={rs}:end_sample={re_},asetpts=PTS-STARTPTS,"
+                             f"aloop=loop=-1:size={re_ - rs},atrim=end_sample={n},asetpts=PTS-STARTPTS{rt_gain}[rt{k}]")
             else:
                 graph.append(f"anullsrc=r={AUDIO_RATE}:cl=stereo,atrim=end_sample={n},aformat=sample_fmts=fltp[rt{k}]")
             rt_in.append(f"[rt{k}]")
@@ -536,7 +549,7 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
                     expr = duck_expr(duck.regions_f, fps, duck.depth_db, duck.attack_ms, duck.release_ms)
                     chain += f",asetpts=PTS+{at}/SR/TB,volume='{expr}':eval=frame,asetpts=PTS-STARTPTS"
             chain += f",adelay=delays={at}S:all=1,apad=whole_len={total_samples},atrim=end_sample={total_samples}"
-            graph.append(f"[{a_label[a.asset].pop(0)}]{chain}[x{j}]")
+            graph.append(f"[{a_label[audio_input[a.asset]].pop(0)}]{chain}[x{j}]")
             buses[a.role].append(f"[x{j}]")
         mix_in = []
         for bus, ins in buses.items():
@@ -569,11 +582,12 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
 
 def render_base(tl: Timeline, root: Path, out: Path, *, faces: dict | None = None,
                 room_tone: dict[str, tuple[int, int, float]] | None = None, finish_audio: bool = True,
-                luts: dict[str, Path] | None = None, stems_dir: Path | None = None, scenes: dict | None = None) -> dict:
+                luts: dict[str, Path] | None = None, stems_dir: Path | None = None, scenes: dict | None = None,
+                enhanced_voice: dict[str, tuple[Path, float]] | None = None) -> dict:
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = tmp_path_for(out)
     cmd = build_command(tl, root, tmp, faces=faces, room_tone=room_tone, finish_audio=finish_audio, luts=luts, stems_dir=stems_dir,
-                        scenes=scenes)
+                        scenes=scenes, enhanced_voice=enhanced_voice)
     t0 = time.time()
     tools.run(cmd)
     tmp.replace(out)
