@@ -45,7 +45,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
     ws = Workspace.create(project)
     absolute = lambda p: str(Path(p).resolve()) if p else None  # noqa: E731
     options = {"input": str(src), "fps": args.fps, "encoder": args.encoder, "language": args.language,
-               "brief": absolute(args.brief), "brand": absolute(args.brand), "asr_repo": args.asr_repo, "skip_visual": args.skip_visual}
+               "brief": absolute(args.brief), "brand": absolute(args.brand), "asr_repo": args.asr_repo, "skip_visual": args.skip_visual,
+               "broll": absolute(args.broll), "reference": absolute(args.reference)}
     options["skip_review"] = args.skip_review
     atomic_write_json(ws.path("run_options.json"), options)  # `reel revise` / `reel proof` reuse them
     if args.analyse_only:
@@ -152,6 +153,19 @@ def _cmd_notes(args: argparse.Namespace) -> int:
     res = autofix.apply_revision(ws, options, request)
     print(f"Editor: {res['reply']}  ({res['calls']} call(s), ~${res['cost_usd']})")
     _rerun_after_plan_change(ws, options)
+    return 0
+
+
+def _cmd_stock(args: argparse.Namespace) -> int:
+    """Search Pexels and download clips into a folder to pass as `reel run … --broll <folder>`."""
+    from reel import stock
+
+    folder = Path(args.out).resolve()
+    results = stock.search(args.query, n=args.n)
+    paths = stock.download(results, folder, args.query)
+    for r, pth in zip(results, paths):
+        print(f"{pth.name}: {r['w']}x{r['h']} {r['duration']} s — {r['author']} {r['page']}")
+    print(f"\n{len(paths)} clip(s) in {folder}. Add them to the edit with: reel run <clip> --broll {folder}")
     return 0
 
 
@@ -333,6 +347,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--skip-visual", action="store_true", help="skip OCR, scenes, faces, palette, motion (faster)")
     p.add_argument("--analyse-only", action="store_true", help="stop after the footage tables (no Claude calls)")
     p.add_argument("--skip-review", action="store_true", help="QA gates only, no Reviewer call")
+    p.add_argument("--reference", help="a finished reel the client likes: its pacing, captions and colour become the style to match")
+    p.add_argument("--broll", help="folder of client b-roll clips (conformed, described by Claude, offered to the Editor)")
     p.set_defaults(func=_cmd_run)
 
     p = sub.add_parser("notes", help="apply a client's timestamped notes (e.g. '0:12 make this faster') as one revision")
@@ -340,6 +356,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("file", help="text file with one note per line")
     p.add_argument("--dry-run", action="store_true", help="show the anchored request without calling the Editor")
     p.set_defaults(func=_cmd_notes)
+
+    p = sub.add_parser("stock", help="search Pexels stock b-roll (needs PEXELS_API_KEY) into a b-roll folder")
+    p.add_argument("query")
+    p.add_argument("--out", required=True, help="b-roll folder (e.g. projects/<p>/broll_src)")
+    p.add_argument("--n", type=int, default=3)
+    p.set_defaults(func=_cmd_stock)
 
     p = sub.add_parser("proof", help="confirm/correct unsure caption words, then re-render captions")
     p.add_argument("--project", required=True)

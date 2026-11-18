@@ -49,7 +49,7 @@ def _story(items=None, hook_item="k01"):
 
 def _finish(**kw):
     base = dict(
-        hook_title=HookTitle(text="", reason="r"),
+        hook_title=HookTitle(text="", style="card", reason="r"),
         grade=GradePlan(look="clean", strength=0.4, reason="r"),
         punch_ins=[PunchIn(id="p01", item="k01", at_word=10, scale=1.2, ramp_frames=0, ease=Ease.hold, reason="r")],
         speeds=[], transitions=[],

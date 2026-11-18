@@ -45,3 +45,14 @@ def edges(ws: Workspace) -> dict[int, tuple[int, int]] | None:
 
 def load_json_model(model, path: Path):
     return model.model_validate_json(Path(path).read_text())
+
+
+def indexes(ws: Workspace):
+    """Global asset libraries + this project's client b-roll pool (broll/index.json)."""
+    from reel import assets
+
+    idx = assets.load()
+    pool = ws.path("broll", "index.json")
+    if pool.exists():
+        idx.broll.update({c["id"]: c for c in json.loads(pool.read_text()).get("clips", [])})
+    return idx

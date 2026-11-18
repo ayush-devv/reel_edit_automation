@@ -26,6 +26,7 @@ from reel.schemas.timeline import (
     Ducking,
     FlashEvent,
     Grade,
+    PipEvent,
     Keyframe,
     Provenance,
     Timeline,
@@ -54,7 +55,7 @@ class CompileError(ValueError):
 
 def empty_finish(family: str = "bold_pop") -> FinishPlan:
     return FinishPlan(
-        hook_title=HookTitle(text="", reason="default"), grade=GradePlan(look="none", strength=0.0, reason="default"), punch_ins=[], speeds=[], transitions=[],
+        hook_title=HookTitle(text="", style="card", reason="default"), grade=GradePlan(look="none", strength=0.0, reason="default"), punch_ins=[], speeds=[], transitions=[],
         captions=CaptionPlan(family=family, tokens=[], emphasis_words=[], script="latin", reason="default"),
         sfx=[], music=MusicPlan(track="none", gain_db=-18, duck_db=12, reason="default"),
         broll=[], knowledge_used=[],
@@ -291,7 +292,8 @@ def compile_timeline(
     if finish.hook_title.text.strip() and story.items:
         first_end = item_seg[story.items[0].id][1]
         lo, hi = tb.us_to_frame(TITLE_MIN_US, fps, mode="ceil"), tb.us_to_frame(TITLE_MAX_US, fps)
-        titles.append(TitleEvent(id="hook_title", text=finish.hook_title.text.strip(), start_f=0, end_f=min(max(first_end, lo), hi, total)))
+        titles.append(TitleEvent(id="hook_title", text=finish.hook_title.text.strip(), start_f=0, end_f=min(max(first_end, lo), hi, total),
+                                 layer="behind" if finish.hook_title.style == "behind" else "front"))
 
     # ---- captions on output frames
     family = brand_family if brand_family in idx.caption_families else finish.captions.family
@@ -347,19 +349,26 @@ def compile_timeline(
         audio.append(AudioClip(id="music", asset=finish.music.track, at_f=0, dur_f=total, src_in_us=offset_us, gain_db=finish.music.gain_db, role="music"))
         ducking.append(Ducking(depth_db=finish.music.duck_db, regions_f=speech_regions(story, by, word_out_frame, fps)))
 
-    # ---- b-roll over the base picture
+    # ---- b-roll: `full` replaces the base picture (ffmpeg), `pip` is a card in the overlay (Remotion)
+    pips = []
     for b in finish.broll:
+        from reel.broll import best_src_in_us
+
         meta = idx.broll[b.asset]
         start = word_out_frame(by[b.from_word], b.item)
-        end = word_out_frame(by[b.to_word], b.item, end=True)
+        end = max(start + 1, word_out_frame(by[b.to_word], b.item, end=True))
+        src_in = best_src_in_us(meta, tb.frame_to_us(end - start, fps))
+        if b.mode == "pip":
+            pips.append(PipEvent(id=b.id, uri=meta.get("file", ""), start_f=start, end_f=end, src_in_us=src_in))
+            continue
         assets.setdefault(b.asset, Asset(id=b.asset, kind=AssetKind.video, uri=meta.get("file", ""), duration_us=int(meta.get("duration_ms", 0)) * 1000))
-        video.append(VideoClip(id=b.id, asset=b.asset, at_f=start, dur_f=max(1, end - start), src_in_us=0,
-                               src_out_us=tb.frame_to_us(max(1, end - start), fps), src=Provenance(item=b.item, words=[b.from_word, b.to_word])))
+        video.append(VideoClip(id=f"br_{b.id}", asset=b.asset, at_f=start, dur_f=end - start, src_in_us=src_in,
+                               src_out_us=src_in + tb.frame_to_us(end - start, fps), src=Provenance(item=b.item, words=[b.from_word, b.to_word])))
 
     return Timeline(
         fps=f"{fps.numerator}/{fps.denominator}", width=width, height=height, duration_f=total,
         assets=assets, video=video, audio=audio, transitions=transitions, ducking=ducking, captions=captions,
-        titles=titles, flashes=flashes,
+        titles=titles, flashes=flashes, pips=pips,
         grade=Grade(look=brand_look or finish.grade.look, strength=finish.grade.strength if finish.grade.look != "none" or brand_look else 0.0),
         plan_ref={"story": _digest(story), "finish": _digest(finish)},
     )

@@ -60,7 +60,7 @@ class Inputs:
 
 def load_inputs(ws: Workspace, brief_path: str | None = None, brand_path: str | None = None) -> Inputs:
     return Inputs(ws=ws, words=project.word_table(ws), clips=project.clip_infos(ws), fps=project.project_fps(ws),
-                  idx=assets.load(), kids=knowledge.node_ids(), edges=project.edges(ws),
+                  idx=project.indexes(ws), kids=knowledge.node_ids(), edges=project.edges(ws),
                   brief=brief_mod.load_brief(brief_path), brand=brief_mod.load_brand(brand_path))
 
 
@@ -88,6 +88,9 @@ def story_pack(inp: Inputs) -> str:
     lines += ["", "# Length", "",
               f"Source footage: {inp.source_s:.1f} s in {len(inp.clips)} clip(s). Target for this reel: {lo:.0f}–{hi:.0f} s "
               f"(brief target capped to the footage). Length is a goal, not a rule: a tight reel beats a padded one.", ""]
+    ref = inp.ws.path("context", "reference_style.md")
+    if ref.exists():
+        lines += [ref.read_text(), ""]
     lines.append(knowledge.story_context(b.genre_hint if b else None))
     return "\n".join(lines)
 
@@ -104,7 +107,7 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
              "- Speed: constant 0.25–4× on items with no speech only (validator rejects speech).",
              "- Music: bed from the library (starts on a beat at the first cut, ducked under speech), or none.",
              "- Transitions: hard cut (default, nothing to add); `flash`, `zoom`, `whip`, `blur`, `dip_to_black` (2–15 frames, centred on the cut). Use rarely, on a real beat change.",
-             "- Hook title: a short on-screen title over the opening line (≤ 7 words, ≤ 42 chars), or \"\" for none.",
+             "- Hook title: a short on-screen title over the opening line (≤ 7 words, ≤ 42 chars), or \"\" for none; style `card` or `behind` (behind the speaker's head — needs a clearly visible person).",
              "- Punch-ins: yes (scale 1.0–2.0, instant or ramped).",
              "- Captions: kinetic captions in the family you choose, with your emphasis words; a brand kit overrides family/tokens.", ""]
     if inp.brand:
@@ -126,7 +129,16 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
         lines.append(f"- **{cat}**: " + ", ".join(f"`{e['id']}` ({e['duration_ms']} ms, peak at {e['peak_ms']} ms)" for e in items))
     lines.append("")
     lines += _library("Music library (bed starts so a beat lands on the first cut; ducked under speech)", inp.idx.music, ("title", "mood", "bpm", "energy", "duration_ms"))
-    lines += _library("B-roll library", inp.idx.broll, ("description", "duration_ms"))
+    lines += ["## B-roll (cutaways over the voice; `full` replaces the picture, `pip` = picture-in-picture card)", ""]
+    if not inp.idx.broll:
+        lines += ["Empty — use none.", ""]
+    for bid, b in inp.idx.broll.items():
+        lines.append(f"- `{bid}` {b.get('duration_ms', 0) / 1000:.1f} s · {b.get('shot', '?')}, {b.get('motion', '?')}, {b.get('mood', '')} — "
+                     f"{b.get('description', b.get('name', ''))} ({b.get('source', 'library')})")
+    lines.append("")
+    ref = inp.ws.path("context", "reference_style.md")
+    if ref.exists():
+        lines += [ref.read_text(), ""]
     lines.append(knowledge.finish_context(story.genre))
     return "\n".join(lines)
 
@@ -210,6 +222,13 @@ def _check_story(inp: Inputs):
 def _check_finish(inp: Inputs, story: StoryPlan):
     def check(fin: FinishPlan) -> list[Issue]:
         issues = validate_finish(fin, story, inp.words, inp.idx, inp.kids)
+        if fin.hook_title.style == "behind" and fin.hook_title.text.strip() and story.items:
+            faces_p = inp.ws.path("perception", "faces.json")
+            faces = json.loads(faces_p.read_text()) if faces_p.exists() else {}
+            presence = (faces.get(story.items[0].clip) or {}).get("presence", 0.0)
+            if presence < 0.5:
+                issues.append(Issue("no_person_for_behind", "hook_title.style", f"A person is visible in only {presence:.0%} of the opening clip.",
+                                    "Use style card — text behind the subject needs a clearly visible person."))
         for n, t in enumerate(fin.transitions):
             if t.type.value not in RENDERABLE_TRANSITIONS:
                 issues.append(Issue("not_renderable", f"transitions[{n}].type", f"'{t.type.value}' transitions are not available in this build.",

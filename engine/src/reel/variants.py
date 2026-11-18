@@ -69,7 +69,7 @@ def make_variant(ws, tl: Timeline, name: str) -> dict:
                 span[key] = {**b, "y": (b["y"] * tl.height - y) / h, "h": b["h"] * tl.height / h}
         span["text"] = [{**z, "y": (z["y"] * tl.height - y) / h, "h": z["h"] * tl.height / h} for z in span.get("text", [])]
     ov = out_dir / "overlay.mov"
-    overlay.render_overlay(props, ov)
+    overlay.render_overlay(props, ov, public_dir=ws.root)
     final = ws.path("export", "variants", f"reel_{name}.mp4")
     meta = overlay.composite(vtl, base, ov, final)
     return meta | {"variant": name, "crop_y": y, "variant_s": round(time.time() - t0, 1)}

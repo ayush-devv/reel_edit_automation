@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { AbsoluteFill, continueRender, delayRender, interpolate, spring, useCurrentFrame } from "remotion";
-import { Box, CaptionPage, CaptionTrack, CaptionWord, FaceSpan, Flash, OverlayProps, Title } from "./types";
+import { AbsoluteFill, continueRender, delayRender, interpolate, OffthreadVideo, Sequence, spring, staticFile, useCurrentFrame } from "remotion";
+import { Box, CaptionPage, CaptionTrack, CaptionWord, FaceSpan, Flash, OverlayProps, Pip, Title } from "./types";
 
 // ------------------------------------------------------------------ tokens
 
@@ -179,10 +179,33 @@ const Captions: React.FC<{ track: CaptionTrack; p: OverlayProps }> = ({ track, p
 
 // ------------------------------------------------------------------ hook title
 
+const BehindTitle: React.FC<{ title: Title; tokens: Record<string, string>; p: OverlayProps }> = ({ title, tokens, p }) => {
+  const frame = useCurrentFrame();
+  const k = spring({ frame: frame - title.start_f, fps: p.fps, config: { damping: 18, stiffness: 120 } });
+  const out = interpolate(frame, [title.end_f - 8, title.end_f], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const face = spanAt(p.faces, title.start_f)?.box;
+  const maxW = p.width - p.safe.left - p.safe.right;
+  const size = fitSize(220, title.text.length, maxW, true);
+  // the head should overlap the lower part of the text: centre the text a little above the face top
+  const centre = face ? Math.max(p.safe.top + size, (face.y + face.h * 0.15) * p.height) : p.height * 0.32;
+  return (
+    <AbsoluteFill>
+      <div style={{ position: "absolute", left: p.safe.left, right: p.safe.right, top: centre - size * 0.6, display: "flex", justifyContent: "center",
+                    opacity: k * out, transform: `translateY(${(1 - k) * 40}px)` }}>
+        <div style={{ fontFamily: fontFamily(tokens.font), fontWeight: 900, fontSize: size, lineHeight: 0.95, textTransform: "uppercase",
+                      textAlign: "center", color: tokens.emph_color || tokens.base_color || "#FFFFFF", letterSpacing: -2, whiteSpace: "nowrap" }}>
+          {title.text}
+        </div>
+      </div>
+    </AbsoluteFill>
+  );
+};
+
 const Titles: React.FC<{ titles: Title[]; tokens: Record<string, string>; p: OverlayProps }> = ({ titles, tokens, p }) => {
   const frame = useCurrentFrame();
   const title = titles.find((x) => frame >= x.start_f && frame < x.end_f);
   if (!title) return null;
+  if (title.layer === "behind") return <BehindTitle title={title} tokens={tokens} p={p} />;
   const k = spring({ frame: frame - title.start_f, fps: p.fps, config: { damping: 14, stiffness: 200 } });
   const size = 70;
   const maxW = p.width - p.safe.left - p.safe.right;
@@ -227,6 +250,27 @@ const Flashes: React.FC<{ flashes: Flash[] }> = ({ flashes }) => {
   return <AbsoluteFill style={{ backgroundColor: "#FFFFFF", opacity }} />;
 };
 
+// ------------------------------------------------------------------ picture-in-picture b-roll
+
+const PipCard: React.FC<{ pip: Pip; p: OverlayProps }> = ({ pip, p }) => {
+  const frame = useCurrentFrame(); // local to the Sequence
+  const dur = pip.end_f - pip.start_f;
+  const k = spring({ frame, fps: p.fps, config: { damping: 15, stiffness: 180 } });
+  const out = interpolate(frame, [dur - 6, dur], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const w = Math.round(p.width * 0.42);
+  const h = Math.round(w * 4 / 3);
+  const left = pip.corner.endsWith("left") ? p.safe.left + 20 : p.width - p.safe.right - w - 20;
+  const top = pip.corner.startsWith("bottom") ? p.height - p.safe.bottom - h - 20 : p.safe.top + 40;
+  return (
+    <div style={{ position: "absolute", left, top, width: w, height: h, borderRadius: 28, overflow: "hidden",
+                  boxShadow: "0 18px 50px rgba(0,0,0,0.45)", border: "5px solid rgba(255,255,255,0.92)",
+                  opacity: k * out, transform: `scale(${0.85 + 0.15 * k})` }}>
+      <OffthreadVideo src={staticFile(pip.uri)} startFrom={Math.round((pip.src_in_us / 1e6) * p.fps)} muted
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+    </div>
+  );
+};
+
 // ------------------------------------------------------------------ root
 
 function useFonts(tokens: Record<string, string>) {
@@ -244,10 +288,24 @@ function useFonts(tokens: Record<string, string>) {
 export const Overlay: React.FC<OverlayProps> = (p) => {
   const tokens = p.captions?.tokens ?? {};
   useFonts(tokens);
+  const behind = p.layer === "behind";
+  const titles = p.titles.filter((t) => (t.layer === "behind") === behind);
+  if (behind) {
+    return (
+      <AbsoluteFill style={{ backgroundColor: "transparent" }}>
+        <Titles titles={titles} tokens={tokens} p={p} />
+      </AbsoluteFill>
+    );
+  }
   return (
     <AbsoluteFill style={{ backgroundColor: "transparent" }}>
       {p.captions ? <Captions track={p.captions} p={p} /> : null}
-      <Titles titles={p.titles} tokens={tokens} p={p} />
+      <Titles titles={titles} tokens={tokens} p={p} />
+      {(p.pips ?? []).map((pip) => (
+        <Sequence key={pip.id} from={pip.start_f} durationInFrames={pip.end_f - pip.start_f}>
+          <PipCard pip={pip} p={p} />
+        </Sequence>
+      ))}
       <Flashes flashes={p.flashes} />
     </AbsoluteFill>
   );

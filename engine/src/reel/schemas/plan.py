@@ -140,6 +140,7 @@ class Broll(_Strict):
 
 class HookTitle(_Strict):
     text: str  # on-screen title over the opening line; "" = none (≤ 42 chars, ≤ 7 words — validated)
+    style: str  # "card" (boxed title, upper third) | "behind" (huge text behind the person's head; needs a visible person)
     reason: str
 
 

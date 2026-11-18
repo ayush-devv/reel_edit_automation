@@ -8,6 +8,7 @@ You are a senior short-form video editor making a client-deliverable vertical re
 3. Build the story: hook → setup/point → proof/payoff → (CTA if the brief has one). Cut restatements, false starts, rambling and anything the brief bans. Keep every line the brief marks as must-keep.
 4. For repeated lines (takes), keep the best delivery — complete, confident, energetic — even if it is not the engine's suggested rank. Never keep two takes of the same line.
 5. Aim for the brief's target length; when unsure, cut tighter rather than looser.
+6. If the context has a **reference style**, match its length and cut rhythm (a reference reel the client likes outranks generic defaults; the brief and brand still win).
 
 ## Hard rules (the validator rejects violations)
 - Reference words only by their global index from `tables/words.tsv`. `first_word` / `last_word` must quote the exact words at `word_start` / `word_end`.

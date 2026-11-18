@@ -126,12 +126,22 @@ class TitleEvent(_Strict):
     start_f: int = owned("remotion")
     end_f: int = owned("remotion")
     role: str = owned("remotion", default="hook")
+    layer: str = owned("remotion", default="front")  # front = over everything; behind = under the person (matte)
 
 
 class FlashEvent(_Strict):
     id: str
     at_f: int = owned("remotion")  # output frame of the cut; the flash peaks here
     frames: int = owned("remotion")
+
+
+class PipEvent(_Strict):
+    id: str
+    uri: str = owned("remotion")  # b-roll mezzanine, relative to the workspace (served as the public dir)
+    start_f: int = owned("remotion")
+    end_f: int = owned("remotion")
+    src_in_us: int = owned("remotion", default=0)
+    corner: str = owned("remotion", default="top_right")
 
 
 class Timeline(_Strict):
@@ -149,6 +159,7 @@ class Timeline(_Strict):
     captions: CaptionTrack | None = None
     titles: list[TitleEvent] = Field(default_factory=list)
     flashes: list[FlashEvent] = Field(default_factory=list)
+    pips: list[PipEvent] = Field(default_factory=list)
     plan_ref: dict[str, str] = Field(default_factory=dict)  # file hashes of the plans compiled
 
 
@@ -160,13 +171,13 @@ def field_owners(model: type[BaseModel] = Timeline, prefix: str = "") -> dict[st
         if "owner" in extra:
             out[f"{prefix}{name}"] = extra["owner"]
         ann = f.annotation
-        for sub in (VideoClip, AudioClip, Ducking, Grade, TransitionEvent, CaptionTrack, CaptionPage, CaptionWord, TitleEvent, FlashEvent):
+        for sub in (VideoClip, AudioClip, Ducking, Grade, TransitionEvent, CaptionTrack, CaptionPage, CaptionWord, TitleEvent, FlashEvent, PipEvent):
             if ann is sub or (getattr(ann, "__args__", None) and sub in ann.__args__):
                 out.update(field_owners(sub, f"{prefix}{name}[]."))
     return out
 
 
-REMOTION_FIELDS = ("captions", "titles", "flashes")
+REMOTION_FIELDS = ("captions", "titles", "flashes", "pips")
 FFMPEG_FIELDS = ("assets", "video", "audio", "transitions", "ducking", "grade")
 
 

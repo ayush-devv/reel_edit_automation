@@ -34,7 +34,7 @@ def test_flash_is_an_overlay_event_other_transitions_stay_ffmpeg():
 
 
 def test_hook_title_spans_the_opening_line_within_limits():
-    tl = _tl(hook_title=HookTitle(text="  One trick, every month ", reason="r"))
+    tl = _tl(hook_title=HookTitle(text="  One trick, every month ", style="card", reason="r"))
     (t,) = tl.titles
     assert t.text == "One trick, every month" and t.start_f == 0
     assert tb.us_to_frame(1_500_000, FPS, mode="ceil") <= t.end_f <= tb.us_to_frame(3_000_000, FPS)
@@ -56,18 +56,18 @@ def test_brand_kit_beats_editor_tokens_and_locks_family():
 
 
 def test_hook_title_rules():
-    long = _finish(hook_title=HookTitle(text="this title is far too long for anyone to read quickly", reason="r"))
+    long = _finish(hook_title=HookTitle(text="this title is far too long for anyone to read quickly", style="card", reason="r"))
     assert any(i.code == "title_too_long" for i in validate_finish(long, _story(), WORDS, IDX))
     words = WORDS.model_copy(deep=True)
     words.words[3] = words.words[3].model_copy(update={"text": "Dioma", "original_text": "Dioma", "vocab_suspect": True})
-    bad = _finish(hook_title=HookTitle(text="Dioma money tip", reason="r"))
+    bad = _finish(hook_title=HookTitle(text="Dioma money tip", style="card", reason="r"))
     assert any(i.code == "title_unconfirmed_name" for i in validate_finish(bad, _story(), words, IDX))
-    assert not errors(validate_finish(_finish(hook_title=HookTitle(text="One money trick", reason="r")), _story(), WORDS, IDX))
+    assert not errors(validate_finish(_finish(hook_title=HookTitle(text="One money trick", style="card", reason="r")), _story(), WORDS, IDX))
 
 
 def test_caption_only_change_leaves_the_base_slice_unchanged():
     a = _tl()
-    b = _tl(hook_title=HookTitle(text="New title", reason="r"))
+    b = _tl(hook_title=HookTitle(text="New title", style="card", reason="r"))
     assert part(a, FFMPEG_FIELDS) == part(b, FFMPEG_FIELDS)
     assert part(a, REMOTION_FIELDS) != part(b, REMOTION_FIELDS)
 

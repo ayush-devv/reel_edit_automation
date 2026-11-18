@@ -40,8 +40,8 @@ def unsupported(tl: Timeline) -> list[str]:
     """Timeline features this renderer cannot draw yet (each names the step that adds it)."""
     out = []
     for c in tl.video:
-        if not c.id.startswith("v_"):
-            out.append(f"video clip {c.id}: b-roll renders in build step 7")
+        if not c.id.startswith(("v_", "br_")):
+            out.append(f"video clip {c.id}: unknown clip kind")
         elif not (0.25 <= c.speed <= 4.0):
             out.append(f"video clip {c.id}: speed {c.speed} outside 0.25–4×")
         elif c.x or c.y:
@@ -301,6 +301,19 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
             uri = Path(tl.assets[asset].uri)
             args += ["-i", str(uri if uri.is_absolute() else root / uri)]
 
+    brolls = sorted((c for c in tl.video if c.id.startswith("br_")), key=lambda c: c.at_f)
+    broll_input: dict[str, int] = {}
+    for c in brolls:
+        uri = Path(tl.assets[c.asset].uri)
+        uri = uri if uri.is_absolute() else root / uri
+        if c.asset not in sizes:
+            sizes[c.asset] = source_size(uri)
+        in_f = tb.us_to_frame(c.src_in_us, fps)
+        broll_input[c.id] = len(base) + len(audio_input) + len(broll_input)
+        if in_f > 0:
+            args += ["-ss", f"{float((Fraction(in_f) - Fraction(1, 2)) / fps):.6f}"]
+        args += ["-i", str(uri)]
+
     uses: dict[str, int] = {}
     for c in base:
         uses[c.asset] = uses.get(c.asset, 0) + 1 + (1 if c.asset in room_tone else 0)
@@ -352,7 +365,16 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
             else:
                 graph.append(f"anullsrc=r={AUDIO_RATE}:cl=stereo,atrim=end_sample={n},aformat=sample_fmts=fltp[rt{k}]")
             rt_in.append(f"[rt{k}]")
-    graph.append("".join(concat_in) + f"concat=n={len(base)}:v=1:a=1[vout][vraw]")
+    graph.append("".join(concat_in) + f"concat=n={len(base)}:v=1:a=1[{'vcut' if brolls else 'vout'}][vraw]")
+    # full-frame b-roll: time-shifted to its slot and laid over the cut (the voice underneath is untouched)
+    cur = "vcut"
+    for j, c in enumerate(brolls):
+        w, h = sizes[c.asset]
+        nxt = "vout" if j == len(brolls) - 1 else f"vb{j}"
+        graph.append(f"[{broll_input[c.id]}:v]trim=end_frame={c.dur_f},setpts=PTS-STARTPTS+{c.at_f}*{fps.denominator}/{fps.numerator}/TB,"
+                     f"{_geometry(c, w, h, tl.width, tl.height, fps, (0.5, 0.5), (luts or {}).get(c.asset))},setsar=1[brv{j}]")
+        graph.append(f"[{cur}][brv{j}]overlay=0:0:eof_action=pass:repeatlast=0[{nxt}]")
+        cur = nxt
 
     if not finish_audio:
         graph.append("[vraw]anull[aout]")

@@ -81,10 +81,12 @@ def build_props(tl: Timeline, root: Path, faces: dict | None, ocr: dict | None =
                       "text": text_zones(ocr, c.asset, *sizes[c.asset], tl.width, tl.height, faces)})
     d = tl.model_dump(mode="json")
     return {"fps": float(fps), "width": tl.width, "height": tl.height, "duration_f": tl.duration_f,
-            "captions": d["captions"], "titles": d["titles"], "flashes": d["flashes"], "faces": spans, "safe": SAFE}
+            "captions": d["captions"], "titles": d["titles"], "flashes": d["flashes"], "pips": d["pips"], "faces": spans, "safe": SAFE}
 
 
-def render_overlay(props: dict, out: Path, *, timeout_s: int = 1800) -> dict:
+def render_overlay(props: dict, out: Path, *, timeout_s: int = 1800, public_dir: Path | None = None,
+                   frames: tuple[int, int] | None = None) -> dict:
+    """`frames` = (first, last) inclusive renders only that window (behind-the-subject titles)."""
     if not available():
         raise OverlayError(f"Remotion renderer not installed: run `npm ci` in {RENDERER_DIR}")
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -93,7 +95,8 @@ def render_overlay(props: dict, out: Path, *, timeout_s: int = 1800) -> dict:
     tmp = tmp_path_for(out)
     cmd = [str(REMOTION_BIN), "render", "src/index.ts", "Overlay", str(tmp), f"--props={props_file}",
            "--codec=prores", "--prores-profile=4444", "--pixel-format=yuva444p10le", "--image-format=png",
-           "--log=error", "--overwrite"]
+           "--log=error", "--overwrite"] + ([f"--public-dir={public_dir}"] if public_dir else []) \
+        + ([f"--frames={frames[0]}-{frames[1]}"] if frames else [])
     env = {**os.environ, "REMOTION_DISABLE_TELEMETRY": "1"}
     t0 = time.time()
     import subprocess
@@ -105,17 +108,33 @@ def render_overlay(props: dict, out: Path, *, timeout_s: int = 1800) -> dict:
     return {"overlay_s": round(time.time() - t0, 1)}
 
 
-def composite(tl: Timeline, base: Path, overlay: Path, out: Path) -> dict:
-    """Base (ProRes 422 + PCM) + overlay (ProRes 4444 straight alpha) → delivery MP4."""
+def composite(tl: Timeline, base: Path, overlay: Path, out: Path, *, behind: dict | None = None) -> dict:
+    """Base (ProRes 422 + PCM) + overlay (ProRes 4444 straight alpha) → delivery MP4.
+
+    `behind` = {"layer": mov, "matte": grey video, "start_f", "end_f"}: a title rendered for that
+    window sits on the base, and the person (base pixels where the matte is white) goes back over it.
+    """
     out.parent.mkdir(parents=True, exist_ok=True)
     fps = tb.parse_rate(tl.fps)
     tmp = tmp_path_for(out)
     t0 = time.time()
     before = mix.measure(base)  # loudnorm pass 1 on the finished mix
     n = tb.frame_to_sample(tl.duration_f, fps)  # loudnorm pads its output: keep the exact sample count
-    tools.ffmpeg(["-y", "-i", str(base), "-i", str(overlay),
-                  "-filter_complex", "[1:v]format=yuva444p10le[ov];[0:v][ov]overlay=0:0:format=auto:alpha=straight:eof_action=pass,format=yuv420p[v];"
-                                     f"[0:a]{mix.loudnorm_filter(before)},apad=whole_len={n},atrim=end_sample={n},asetpts=N/SR/TB[a]",
+    inputs = ["-i", str(base), "-i", str(overlay)]
+    if behind:
+        s0, s1 = behind["start_f"], behind["end_f"]
+        off = f"{s0}*{fps.denominator}/{fps.numerator}/TB"
+        inputs += ["-i", str(behind["layer"]), "-i", str(behind["matte"])]
+        video = (f"[0:v]split[b0][b1];[2:v]format=yuva444p10le,setpts=PTS-STARTPTS+{off}[bh];"
+                 f"[b0][bh]overlay=0:0:format=auto:alpha=straight:eof_action=pass:repeatlast=0[t1];"
+                 f"[b1]trim=start_frame={s0}:end_frame={s1},setpts=PTS-STARTPTS,format=yuva444p10le[bw];[3:v]format=gray[m];"
+                 f"[bw][m]alphamerge,setpts=PTS-STARTPTS+{off}[person];"
+                 f"[t1][person]overlay=0:0:format=auto:eof_action=pass:repeatlast=0[t2];"
+                 f"[1:v]format=yuva444p10le[ov];[t2][ov]overlay=0:0:format=auto:alpha=straight:eof_action=pass,format=yuv420p[v];")
+    else:
+        video = "[1:v]format=yuva444p10le[ov];[0:v][ov]overlay=0:0:format=auto:alpha=straight:eof_action=pass,format=yuv420p[v];"
+    tools.ffmpeg(["-y", *inputs,
+                  "-filter_complex", video + f"[0:a]{mix.loudnorm_filter(before)},apad=whole_len={n},atrim=end_sample={n},asetpts=N/SR/TB[a]",
                   "-map", "[v]", "-map", "[a]", "-r", f"{fps.numerator}/{fps.denominator}", "-fps_mode", "cfr",
                   *render.encode_args(tmp)])
     after = mix.measure(tmp)
@@ -124,4 +143,4 @@ def composite(tl: Timeline, base: Path, overlay: Path, out: Path) -> dict:
         raise OverlayError("delivery loudness out of spec: " + "; ".join(problems))
     tmp.replace(out)
     return render.verify(tl, out) | {"composite_s": round(time.time() - t0, 1), "lufs_in": before["input_i"],
-                                     "lufs": after["input_i"], "true_peak_dbtp": after["input_tp"]}
+                                     "lufs": after["input_i"], "true_peak_dbtp": after["input_tp"], "behind_title": bool(behind)}

@@ -175,6 +175,8 @@ def validate_finish(fin: FinishPlan, story: StoryPlan, words: WordTable, idx: In
     if len(title) > TITLE_MAX_CHARS or len(title.split()) > TITLE_MAX_WORDS:
         issues.append(Issue("title_too_long", "hook_title.text", f"Hook title '{title}' has {len(title)} chars / {len(title.split())} words.",
                             f"Cut it to ≤ {TITLE_MAX_WORDS} words and ≤ {TITLE_MAX_CHARS} characters — a viewer reads it in under 2 s."))
+    if fin.hook_title.style not in ("card", "behind"):
+        issues.append(Issue("bad_title_style", "hook_title.style", f"Style '{fin.hook_title.style}' is not supported.", "Use card or behind."))
     unconfirmed = {norm(w.original_text or w.text) for w in words.words if w.vocab_suspect}
     if title and any(norm(tok) in unconfirmed for tok in title.split()):
         issues.append(Issue("title_unconfirmed_name", "hook_title.text", "The hook title uses a name the ASR could not confirm.",
@@ -259,6 +261,14 @@ def validate_finish(fin: FinishPlan, story: StoryPlan, words: WordTable, idx: In
         if need_item(f"{path}.item", b.item):
             in_item(f"{path}.from_word", b.item, b.from_word)
             in_item(f"{path}.to_word", b.item, b.to_word)
+        if b.from_word > b.to_word:
+            issues.append(Issue("reversed_range", f"{path}", "from_word is after to_word.", "Swap them."))
+        elif b.asset in idx.broll and need_item(f"{path}.item", b.item) and by.get(b.from_word) and by.get(b.to_word):
+            need_us = by[b.to_word].end_us - by[b.from_word].start_us
+            have_us = int(idx.broll[b.asset].get("duration_ms", 0)) * 1000
+            if have_us and need_us > have_us:
+                issues.append(Issue("broll_too_short", f"{path}", f"B-roll {b.asset} is {have_us / 1e6:.1f} s but the words span {need_us / 1e6:.1f} s.",
+                                    "Cover fewer words, or pick a longer clip."))
         if b.mode not in BROLL_MODES:
             issues.append(Issue("bad_mode", f"{path}.mode", f"Mode '{b.mode}' is not supported.", f"Use one of {sorted(BROLL_MODES)}."))
 

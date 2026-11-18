@@ -195,11 +195,14 @@ def edit_list(tl: Timeline, story: StoryPlan, finish: FinishPlan, words) -> str:
 
 
 def readme(tl: Timeline, idx, lufs_offset_db: float | None, verdict: str | None) -> str:
-    used = {a.asset for a in tl.audio if a.role in ("sfx", "music")}
+    used = {a.asset for a in tl.audio if a.role in ("sfx", "music")} | {c.asset for c in tl.video if c.id.startswith("br_")}
+    by_file = {m.get("file"): k for k, m in idx.broll.items()}
+    used |= {by_file[p.uri] for p in tl.pips if p.uri in by_file}
     lic = []
     for aid in sorted(used):
-        meta = idx.sfx.get(aid) or idx.music.get(aid) or {}
-        lic.append(f"- `{aid}` ({meta.get('name') or meta.get('title') or ''}): {meta.get('source', '?')} — {meta.get('license', '?')}")
+        meta = idx.sfx.get(aid) or idx.music.get(aid) or idx.broll.get(aid) or {}
+        credit = f" — credit {meta['credit']}" if meta.get("credit") else ""
+        lic.append(f"- `{aid}` ({meta.get('name') or meta.get('title') or ''}): {meta.get('source', '?')} — {meta.get('license', '?')}{credit}")
     gain = f"{lufs_offset_db:+.1f} dB" if lufs_offset_db is not None else "see qa/verdict.md"
     return f"""# Reel package
 
