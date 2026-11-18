@@ -237,16 +237,77 @@ def proof_list(tl: Timeline, story: StoryPlan, words: WordTable) -> list[dict]:
     return out
 
 
-def music_offset_us(meta: dict, cut_us: int, total_us: int) -> int:
-    """Where to start the track so a beat (a downbeat if known) lands on the first cut, keeping
-    enough track left to cover the reel when possible."""
+BEAT_TOL_US = 45_000  # a cut within this of a beat reads as "on the beat"
+
+
+def ramp_factor(r0: float, r1: float) -> float:
+    """Output length / source length for a speed easing linearly (in source time) from r0 to r1."""
+    import math
+
+    if not r1 or abs(r1 - r0) < 1e-6:
+        return 1.0 / r0
+    return math.log(r1 / r0) / (r1 - r0)
+
+
+def music_offset_us(meta: dict, cut_us: int, total_us: int, cuts_us: list[int] | None = None) -> int:
+    """Where to start the track: a downbeat (a beat if none known) lands on the first cut, keeping
+    enough track to cover the reel when possible. With all the cut times given, among the offsets
+    that do that, pick the one that puts the most other cuts on a beat (cut-to-beat without ever
+    moving a speech cut)."""
     beats = [int(b) * 1000 for b in (meta.get("downbeats_ms") or meta.get("beats_ms") or [])]
+    every = sorted(int(b) * 1000 for b in (meta.get("beats_ms") or meta.get("downbeats_ms") or []))
     dur = int(meta.get("duration_ms", 0)) * 1000
     fits = [b - cut_us for b in beats if b >= cut_us and (not dur or dur - (b - cut_us) >= total_us)]
-    if fits:
+    if not fits:
+        later = [b - cut_us for b in beats if b >= cut_us]
+        return later[0] if later else 0
+    if not cuts_us or len(cuts_us) < 2:
         return fits[0]
-    later = [b - cut_us for b in beats if b >= cut_us]
-    return later[0] if later else 0
+    import bisect
+
+    def on_beat(off: int) -> int:
+        n = 0
+        for c in cuts_us:
+            t = c + off
+            k = bisect.bisect_left(every, t)
+            n += any(0 <= j < len(every) and abs(every[j] - t) <= BEAT_TOL_US for j in (k - 1, k))
+        return n
+
+    return max(fits[:64], key=lambda off: (on_beat(off), -off))
+
+
+PULSE_UP_F, PULSE_DOWN_F = 2, 7  # a pulse snaps in on the beat and settles over a quarter second
+
+
+def add_beat_pulses(video: list[VideoClip], meta: dict, offset_us: int, total_f: int, fps: Fraction, strength: float) -> int:
+    """A short zoom pulse on every downbeat of the bed, on top of whatever scale the shot has.
+    Skipped where a punch-in is animating or a shot is too short to hold it. Returns pulses added."""
+    downs = [int(b) * 1000 - offset_us for b in (meta.get("downbeats_ms") or [])]
+    base = sorted((c for c in video if c.id.startswith("v_")), key=lambda c: c.at_f)
+    added = 0
+    for t in downs:
+        f = tb.us_to_frame(t, fps)
+        if not 0 < f < total_f:
+            continue
+        clip = next((c for c in base if c.at_f <= f < c.at_f + c.dur_f), None)
+        if clip is None:
+            continue
+        k = f - clip.at_f
+        if k + PULSE_UP_F + PULSE_DOWN_F >= clip.dur_f - clip.hold_f:
+            continue
+        if any(k - 2 <= kf.f <= k + PULSE_UP_F + PULSE_DOWN_F + 2 for kf in clip.scale):
+            continue
+        v = 1.0
+        for kf in sorted(clip.scale, key=lambda kf: kf.f):
+            if kf.f <= k:
+                v = kf.v
+        if not clip.scale:
+            clip.scale.append(Keyframe(f=0, v=1.0, ease=Ease.hold))
+        clip.scale += [Keyframe(f=k, v=v, ease=Ease.hold), Keyframe(f=k + PULSE_UP_F, v=round(v * (1 + strength), 4), ease=Ease.ease_out),
+                       Keyframe(f=k + PULSE_UP_F + PULSE_DOWN_F, v=v, ease=Ease.ease_in_out)]
+        clip.scale.sort(key=lambda kf: kf.f)
+        added += 1
+    return added
 
 
 def speech_regions(story: StoryPlan, by: dict[int, Word], word_out_frame, fps: Fraction, merge_us: int = 300_000) -> list[list[int]]:
@@ -307,8 +368,13 @@ def compile_timeline(
             else:
                 shots.append([in_f, out_f, group[0].i, group[-1].i])
         spans += [(it, n, a, b, w0, w1) for n, (a, b, w0, w1) in enumerate(shots)]
-    rate = {sp.item: sp.rate for sp in finish.speeds}  # validator: non-speech items only, 0.25–4×
-    segments = tb.layout_segments([max(1, round((out - inn) / rate.get(it.id, 1.0))) for it, _n, inn, out, _a, _b in spans])
+    # validator: non-speech items only, 0.25–4×; a ramp uses its average rate for the length and word mapping
+    rate = {sp.item: 1.0 / ramp_factor(sp.rate, sp.ramp_to) for sp in finish.speeds}
+    ramp = {sp.item: (sp.rate, sp.ramp_to) for sp in finish.speeds if sp.ramp_to}
+    hold = {h.item: h.frames for h in finish.holds}
+    last_shot = {it.id: max(n for (i2, n, *_r) in spans if i2.id == it.id) for it in story.items}
+    segments = tb.layout_segments([max(1, round((out - inn) / rate.get(it.id, 1.0))) + (hold.get(it.id, 0) if n == last_shot[it.id] else 0)
+                                   for it, n, inn, out, _a, _b in spans])
 
     video: list[VideoClip] = []
     audio: list[AudioClip] = []
@@ -317,8 +383,10 @@ def compile_timeline(
     for (it, n, in_f, out_f, w0, w1), seg in zip(spans, segments):
         prov = Provenance(item=it.id, words=[w0, w1])
         sid = it.id if n == 0 else f"{it.id}.{n + 1}"
+        r0, r1 = ramp.get(it.id, (rate.get(it.id, 1.0), 0.0))
         v = VideoClip(id=f"v_{sid}", asset=it.clip, at_f=seg.out_start, dur_f=seg.out_frames,
-                      src_in_us=tb.frame_to_us(in_f, fps), src_out_us=tb.frame_to_us(out_f, fps), speed=rate.get(it.id, 1.0), src=prov)
+                      src_in_us=tb.frame_to_us(in_f, fps), src_out_us=tb.frame_to_us(out_f, fps), speed=r0, speed_to=r1,
+                      hold_f=hold.get(it.id, 0) if n == last_shot[it.id] else 0, src=prov)
         video.append(v)
         audio.append(AudioClip(
             id=f"a_{sid}", asset=it.clip, at_f=seg.out_start, dur_f=seg.out_frames,
@@ -439,9 +507,12 @@ def compile_timeline(
         meta = idx.music[finish.music.track]
         assets.setdefault(finish.music.track, Asset(id=finish.music.track, kind=AssetKind.music, uri=meta.get("file", ""), duration_us=int(meta.get("duration_ms", 0)) * 1000))
         first_cut_us = tb.frame_to_us(segments[0].out_end, fps) if len(segments) > 1 else 0
-        offset_us = music_offset_us(meta, first_cut_us, tb.frame_to_us(total, fps))
+        cuts_us = [tb.frame_to_us(sg.out_end, fps) for sg in segments[:-1]]
+        offset_us = music_offset_us(meta, first_cut_us, tb.frame_to_us(total, fps), cuts_us)
         audio.append(AudioClip(id="music", asset=finish.music.track, at_f=0, dur_f=total, src_in_us=offset_us, gain_db=finish.music.gain_db, role="music"))
         ducking.append(Ducking(depth_db=finish.music.duck_db, regions_f=speech_regions(story, by, word_out_frame, fps)))
+        if finish.beat_pulse > 0:
+            add_beat_pulses(video, meta, offset_us, total, fps, finish.beat_pulse)
 
     # ---- b-roll: `full` replaces the base picture (ffmpeg), `pip` is a card in the overlay (Remotion)
     pips = []

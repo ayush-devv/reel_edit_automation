@@ -468,12 +468,24 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
         w, h = sizes[c.asset]
         head, tail = _windows(c, tl)
         cz = with_transition_zoom(c, head, tail)
-        if c.speed == 1.0:
-            timing = f"trim=end_frame={c.dur_f},setpts=PTS-STARTPTS"
+        content_f = c.dur_f - c.hold_f
+        if c.speed_to and abs(c.speed_to - c.speed) > 1e-6:
+            # speed ramp: output time = ∫ dt / speed(t) with speed linear in source time (exact, no drift)
+            from reel.compile import ramp_factor
+
+            r0, r1 = c.speed, c.speed_to
+            d = (c.src_out_us - c.src_in_us) / 1e6
+            src_frames = int(content_f / ramp_factor(r0, r1)) + 3
+            timing = (f"trim=end_frame={src_frames},setpts=PTS-STARTPTS,setpts='({d:.6f}/({r1 - r0:.6f}))*log(({r0:.6f}+({r1 - r0:.6f})*T/{d:.6f})/{r0:.6f})/TB',"
+                      f"fps={fps.numerator}/{fps.denominator},trim=end_frame={content_f},setpts=PTS-STARTPTS")
+        elif c.speed == 1.0:
+            timing = f"trim=end_frame={content_f},setpts=PTS-STARTPTS"
         else:  # retime, then resample to the project grid and cut to the exact output length
-            src_frames = int(c.dur_f * c.speed) + 2
+            src_frames = int(content_f * c.speed) + 2
             timing = (f"trim=end_frame={src_frames},setpts=(PTS-STARTPTS)/{c.speed},"
-                      f"fps={fps.numerator}/{fps.denominator},trim=end_frame={c.dur_f},setpts=PTS-STARTPTS")
+                      f"fps={fps.numerator}/{fps.denominator},trim=end_frame={content_f},setpts=PTS-STARTPTS")
+        if c.hold_f:  # freeze the last frame
+            timing += f",tpad=stop_mode=clone:stop={c.hold_f}"
         graph.append(f"[{k}:v]{timing},"
                      f"{_geometry(cz, w, h, tl.width, tl.height, fps, clip_shots(c, fps, faces, scenes, (w, h), (tl.width, tl.height)), (luts or {}).get(c.asset), tag=str(k))},setsar=1[g{k}]")
         graph += transition_graph(k, f"g{k}", f"v{k}", c, head, tail, tl.width, tl.height, fps)
@@ -482,10 +494,12 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
             raise RenderError(f"no voice audio for {c.id}")
         start = tb.frame_to_sample(tb.us_to_frame(a.src_in_us, fps), fps)
         n = s1 - s0
-        fade_out = max(0.0, n / AUDIO_RATE - EDGE_FADE_S)
+        held = min(n, tb.frame_to_sample(c.hold_f, fps)) if c.hold_f else 0
+        content = n - held  # the sound stops under a freeze frame (room tone and music carry on)
+        fade_out = max(0.0, content / AUDIO_RATE - EDGE_FADE_S)
         gain = f",volume={a.gain_db}dB" if a.gain_db else ""
-        src_n = round(n * a.speed)
-        tempo = "".join(f",atempo={f:.6f}" for f in atempo_chain(a.speed)) + f",atrim=end_sample={n}" if a.speed != 1.0 else ""
+        src_n = round(content * a.speed)
+        tempo = "".join(f",atempo={f:.6f}" for f in atempo_chain(a.speed)) + f",atrim=end_sample={content}" if a.speed != 1.0 else ""
         graph.append(f"[{a_label[c.asset].pop(0)}]atrim=start_sample={start}:end_sample={start + src_n},asetpts=PTS-STARTPTS{tempo},"
                      f"afade=t=in:d={EDGE_FADE_S},afade=t=out:st={fade_out:.6f}:d={EDGE_FADE_S}{gain},apad=whole_len={n}[a{k}]")
         concat_in.append(f"[v{k}][a{k}]")

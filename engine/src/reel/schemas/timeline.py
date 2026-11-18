@@ -58,6 +58,8 @@ class VideoClip(_Strict):
     src_in_us: int = owned("ffmpeg")
     src_out_us: int = owned("ffmpeg")
     speed: float = owned("ffmpeg", default=1.0)
+    speed_to: float = owned("ffmpeg", default=0.0)  # ramp: speed eases linearly (in source time) from `speed` to this; 0 = constant
+    hold_f: int = owned("ffmpeg", default=0)  # last frame frozen for this many frames (included in dur_f)
     scale: list[Keyframe] = owned("ffmpeg", default_factory=list)  # punch-ins / push-ins
     x: list[Keyframe] = owned("ffmpeg", default_factory=list)  # pan (normalised offset)
     y: list[Keyframe] = owned("ffmpeg", default_factory=list)

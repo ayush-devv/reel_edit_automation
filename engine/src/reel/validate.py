@@ -223,6 +223,8 @@ def validate_finish(fin: FinishPlan, story: StoryPlan, words: WordTable, idx: In
         path = f"speeds[{n}]"
         uid(f"{path}.id", s.id)
         _range_check(issues, f"{path}.rate", s.rate, 0.25, 4.0, "Speed")
+        if s.ramp_to:
+            _range_check(issues, f"{path}.ramp_to", s.ramp_to, 0.25, 4.0, "Ramp target speed")
         if need_item(f"{path}.item", s.item):
             it = items[s.item]
             spoken = [w for i in range(it.word_start, it.word_end + 1) if (w := by.get(i)) and not w.filler]
@@ -276,6 +278,18 @@ def validate_finish(fin: FinishPlan, story: StoryPlan, words: WordTable, idx: In
         _range_check(issues, "music.gain_db", m.gain_db, -30, -6, "Music gain")
         _range_check(issues, "music.duck_db", m.duck_db, 6, 24, "Ducking depth")
 
+    held = set()
+    for n, h in enumerate(fin.holds):
+        path = f"holds[{n}]"
+        uid(f"{path}.id", h.id)
+        need_item(f"{path}.item", h.item)
+        _range_check(issues, f"{path}.frames", h.frames, 6, 45, "Hold")
+        if h.item in held:
+            issues.append(Issue("duplicate_hold", path, f"Item {h.item} already has a hold.", "Keep one hold per item."))
+        held.add(h.item)
+    _range_check(issues, "beat_pulse", fin.beat_pulse, 0.0, 0.08, "Beat pulse")
+    if fin.beat_pulse > 0 and fin.music.track == "none":
+        issues.append(Issue("pulse_without_music", "beat_pulse", "Beat pulses need a music bed.", "Set beat_pulse to 0 or pick a track."))
     _range_check(issues, "grade.grain", fin.grade.grain, 0.0, 0.6, "Grain")
     _range_check(issues, "grade.vignette", fin.grade.vignette, 0.0, 0.7, "Vignette")
     for n, e in enumerate(fin.effects):

@@ -39,6 +39,11 @@ STATUS: dict[str, tuple[str, str]] = {
     "cap.transform.keyframe_easing": ("yes", "punch-in ease"),
     # speed
     "cap.speed.constant": ("yes", "finish.speeds on non-speech items"),
+    "cap.speed.ramp": ("yes", "finish.speeds ramp_to (non-speech items; exact setpts integral)"),
+    "cap.speed.freeze_frame": ("yes", "finish.holds (last frame of an item)"),
+    "cap.trim.hold_extend": ("yes", "finish.holds"),
+    "cap.cut.cut_to_beat": ("auto", "music offset chosen so the most cuts land on beats (speech cuts never move)"),
+    "cap.transform.beat_zoom_pulse": ("yes", "finish.beat_pulse on music downbeats"),
     # colour
     "cap.color.auto_balance": ("auto", "per-clip gray-world white balance"),
     "cap.color.white_balance": ("auto", "per clip"),

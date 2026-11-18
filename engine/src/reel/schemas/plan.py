@@ -75,6 +75,14 @@ class Speed(_Strict):
     item: str
     rate: float  # 0.25–4.0 (validated); never on speech (validated)
     reason: str
+    ramp_to: float = 0.0  # speed ramp: the speed eases from `rate` to this by the item's end (0 = constant)
+
+
+class Hold(_Strict):
+    id: str
+    item: str  # freeze this item's last frame …
+    frames: int  # … for this many frames (6–45, validated); the sound carries on (music, room tone)
+    reason: str
 
 
 class TransitionType(str, Enum):
@@ -215,6 +223,8 @@ class FinishPlan(_Strict):
     knowledge_used: list[str]
     effects: list[Effect] = []  # footage effects on a word window (validated: limits per type)
     graphics: list[Graphic] = []  # motion graphics in the overlay (validated per kind)
+    holds: list[Hold] = []  # freeze frames at the end of an item (a beat to land a punchline, or the final frame)
+    beat_pulse: float = 0.0  # 0 = off; 0.02–0.06 = a short zoom pulse on every downbeat of the music bed
 
 
 # ------------------------------------------------------------------ revisions

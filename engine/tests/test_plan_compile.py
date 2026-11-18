@@ -225,3 +225,20 @@ def test_max_pause_range_is_validated():
     bad = _story().model_copy(update={"max_pause_ms": 100})
     assert any(i.code == "out_of_range" for i in validate_story(bad, WORDS, set(CLIPS)))
     assert not errors(validate_story(_story().model_copy(update={"max_pause_ms": 0}), WORDS, set(CLIPS)))
+
+
+def test_holds_and_pulses_compile_and_validate():
+    from reel.schemas.plan import Hold
+
+    fin = _finish(holds=[Hold(id="h1", item="k01", frames=12, reason="r")], beat_pulse=0.04)
+    assert not errors(validate_finish(fin, _story(), WORDS, IDX))
+    base = compile_timeline(_story(), _finish(), WORDS, CLIPS, FPS, IDX)
+    tl = compile_timeline(_story(), fin, WORDS, CLIPS, FPS, IDX)
+    assert tl.duration_f == base.duration_f + 12
+    k01 = next(c for c in tl.video if c.id == "v_k01")
+    assert k01.hold_f == 12
+    later = [c for c in tl.video if c.src.item == "k02"][0]
+    assert later.at_f == next(c for c in base.video if c.src.item == "k02").at_f + 12  # everything after shifts
+    bad = _finish(holds=[Hold(id="h1", item="k01", frames=90, reason="r")], beat_pulse=0.04, music=_finish().music.model_copy(update={"track": "none"}))
+    codes = {i.code for i in validate_finish(bad, _story(), WORDS, IDX)}
+    assert {"out_of_range", "pulse_without_music"} <= codes

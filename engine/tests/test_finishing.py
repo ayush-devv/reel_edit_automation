@@ -377,3 +377,76 @@ def test_grain_and_vignette_cover_the_whole_reel(tmp_path):
     assert f[:15, :15].mean() < f[90:100, 50:58].mean() - 10  # corners darker than the centre
     full = _gray_frame(out, 1.0, size=(1080, 1920))
     assert full[900:1000, 400:680].std() > 3.0  # grain: the flat grey is no longer flat (full resolution)
+
+
+def test_music_offset_puts_the_most_cuts_on_beats():
+    # beats every 500 ms, downbeats every 2 s; cuts at 3.0 s, 4.75 s and 6.25 s
+    meta = {"duration_ms": 60_000, "beats_ms": list(range(0, 60_000, 500)), "downbeats_ms": list(range(0, 60_000, 2000))}
+    cuts = [3_000_000, 4_750_000, 6_250_000]
+    off = music_offset_us(meta, cuts[0], 20_000_000, cuts)
+    # first cut stays on a downbeat, and the 250 ms-phase cuts can't all land: any downbeat offset gives 1 on-beat cut,
+    # so the earliest fitting downbeat wins the tie
+    assert (cuts[0] + off) % 2_000_000 == 0
+    cuts2 = [3_000_000, 4_000_000, 6_500_000]  # all on the half-second grid
+    off2 = music_offset_us(meta, cuts2[0], 20_000_000, cuts2)
+    assert all((c + off2) % 500_000 == 0 for c in cuts2)
+
+
+def test_beat_pulses_land_on_downbeats_and_respect_punch_ins():
+    from reel.compile import add_beat_pulses
+    from reel.schemas.plan import Ease
+    from reel.schemas.timeline import Keyframe
+
+    prov = Provenance(item="k0", words=[0, 0])
+    a = VideoClip(id="v_k0", asset="c", at_f=0, dur_f=100, src_in_us=0, src_out_us=4_000_000, src=prov)
+    b = VideoClip(id="v_k1", asset="c", at_f=100, dur_f=100, src_in_us=0, src_out_us=4_000_000, src=prov,
+                  scale=[Keyframe(f=0, v=1.0, ease=Ease.hold), Keyframe(f=48, v=1.2, ease=Ease.hold)])
+    meta = {"downbeats_ms": [1000, 2000, 3000, 5000, 6000]}  # at 25 fps: frames 25, 50, 75, 125, 150
+    n = add_beat_pulses([a, b], meta, 0, 200, Fraction(25), 0.04)
+    assert n == 4  # frame 150 sits on b's punch-in keyframe (148): skipped
+    peaks = [k for k in a.scale if k.v > 1.0]
+    assert [k.f for k in peaks] == [27, 52, 77] and all(k.v == pytest.approx(1.04) for k in peaks)
+    assert any(k.f == 27 and k.v == pytest.approx(1.04) for k in b.scale)  # pulse on top of the 1.0 base before the punch
+
+
+def _one_clip_tl(mezz_uri, dur_f, **clip_kw):
+    prov = Provenance(item="k0", words=[0, 0])
+    v = VideoClip(id="v_k0", asset="c01", at_f=0, dur_f=dur_f, src_in_us=0, src_out_us=clip_kw.pop("src_out_us", 2_000_000), src=prov, **clip_kw)
+    a = AudioClip(id="a_k0", asset="c01", at_f=0, dur_f=dur_f, role="voice", src=prov, speed=clip_kw.get("speed", 1.0))
+    return Timeline(fps="25/1", width=1080, height=1920, duration_f=dur_f, assets={"c01": Asset(id="c01", kind=AssetKind.video, uri=mezz_uri)},
+                    video=[v], audio=[a])
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not READY, reason="needs pinned ffmpeg")
+def test_hold_freezes_the_last_frame_and_keeps_length(tmp_path):
+    src = tmp_path / "mezz" / "c01.mov"
+    src.parent.mkdir()
+    tools.ffmpeg(["-y", "-f", "lavfi", "-i", "testsrc2=size=1080x1920:rate=25:duration=3", "-f", "lavfi", "-i", "sine=f=440:d=3:r=48000",
+                  "-c:v", "prores_ks", "-profile:v", "2", "-c:a", "pcm_s16le", "-ac", "2", str(src)])
+    tl = _one_clip_tl("mezz/c01.mov", 50 + 20, hold_f=20)
+    out = tmp_path / "h.mp4"
+    assert render.render_base(tl, tmp_path, out, finish_audio=False)["frames"] == 70
+    still_a, still_b = _gray_frame(out, 2.2, (1080, 1920)), _gray_frame(out, 2.7, (1080, 1920))
+    moving_a, moving_b = _gray_frame(out, 0.5, (1080, 1920)), _gray_frame(out, 1.0, (1080, 1920))
+    assert abs(still_a - still_b).mean() < 1.0 < abs(moving_a - moving_b).mean()  # frozen during the hold only
+    pcm = tools.run([str(config.ffmpeg_path()), "-v", "error", "-i", str(out), "-f", "s16le", "-ac", "1", "-ar", "48000", "-"]).stdout
+    y = np.frombuffer(pcm, dtype=np.int16).astype(float)
+    assert np.abs(y[48000 * 1: 48000 * 1 + 4800]).mean() > 1000 and np.abs(y[int(48000 * 2.3): int(48000 * 2.6)]).mean() < 50
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not READY, reason="needs pinned ffmpeg")
+def test_speed_ramp_length_matches_the_integral(tmp_path):
+    from reel.compile import ramp_factor
+
+    src = tmp_path / "mezz" / "c01.mov"
+    src.parent.mkdir()
+    tools.ffmpeg(["-y", "-f", "lavfi", "-i", "testsrc2=size=1080x1920:rate=25:duration=6", "-f", "lavfi", "-i", "anoisesrc=d=6:r=48000:a=0.1",
+                  "-c:v", "prores_ks", "-profile:v", "2", "-c:a", "pcm_s16le", "-ac", "2", str(src)])
+    factor = ramp_factor(1.0, 4.0)  # 6 s of source, 1× → 4× ⇒ 6·ln4/3 ≈ 2.77 s
+    dur_f = round(150 * factor)
+    tl = _one_clip_tl("mezz/c01.mov", dur_f, src_out_us=6_000_000, speed=1.0, speed_to=4.0)
+    tl.audio[0].speed = 1.0 / factor
+    meta = render.render_base(tl, tmp_path, tmp_path / "r.mp4", finish_audio=False)
+    assert meta["frames"] == dur_f == 69

@@ -105,7 +105,10 @@ def _library(name: str, items: dict[str, dict], fields: tuple[str, ...]) -> list
 def finish_pack(inp: Inputs, story: StoryPlan) -> str:
     lines = ["# What the renderer can do in this build", "",
              "- Colour: pick a look + strength (0.3–0.6 typical; `none` keeps the corrected footage).",
-             "- Speed: constant 0.25–4× on items with no speech only (validator rejects speech).",
+             "- Speed: 0.25–4× on items with no speech only (validator rejects speech); `ramp_to` eases the speed to a second value by the item's end (a speed ramp; 0 = constant).",
+             "- Holds (`holds`): freeze an item's last frame for 6–45 frames — lets a punchline land, or ends the reel on a clean frame (sound stops under it; music carries on).",
+             "- Beat pulse (`beat_pulse` 0.02–0.06, needs music): a short zoom pulse on every downbeat — energetic/music-led reels only; 0 for calm or talky ones. "
+             "The engine already starts the music so the most cuts land on beats.",
              "- Music: bed from the library (starts on a beat at the first cut, ducked under speech), or none.",
              "- Transitions: hard cut (default, nothing to add); `flash`, `zoom`, `whip`, `blur`, `dip_to_black`, `dip_to_white` (bright reset), `glitch` (RGB split + noise; tech/energy) — 2–15 frames, centred on the cut. Use rarely, on a real beat change.",
              "- Hook title: a short on-screen title over the opening line (≤ 7 words, ≤ 42 chars), or \"\" for none; style `card` or `behind` (behind the speaker's head — needs a clearly visible person).",
