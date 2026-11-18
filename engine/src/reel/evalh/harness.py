@@ -1,8 +1,8 @@
 """Eval manifest, run bookkeeping and the scoreboard (ADR-0029/0030).
 
-Step 1 scope: every reel in the chosen set is run through the stages that exist so far;
-families that need later stages are simply absent (the primary score re-normalises).
-The holdout set is refused unless explicitly requested (it is for release candidates only).
+Every gold reel of a split runs through the full edit (fix loop included, as in real use) and
+is scored against the owner's final (evalh/gold.py). The holdout set is refused unless
+explicitly requested (release candidates only).
 """
 
 from __future__ import annotations
@@ -16,9 +16,6 @@ from pathlib import Path
 import yaml
 
 from reel import config
-from reel.evalh.metrics import ReelScore
-from reel.runner import run_pipeline
-from reel.stages import PIPELINE
 from reel.workspace import Workspace
 
 MANIFEST = config.EVAL_DIR / "manifest.yaml"
@@ -28,6 +25,18 @@ GOLD_DIR = config.REPO_ROOT / "samples" / "gold"
 
 class HoldoutRefused(RuntimeError):
     pass
+
+
+def _rel(p: Path) -> str:
+    """Repo-relative when inside the repo (portable manifest), absolute otherwise."""
+    try:
+        return str(p.relative_to(config.REPO_ROOT))
+    except ValueError:
+        return str(p)
+
+
+def _abs(s: str) -> Path:
+    return Path(s) if Path(s).is_absolute() else config.REPO_ROOT / s
 
 
 def init_manifest(holdout: int = 6) -> dict:
@@ -45,8 +54,8 @@ def init_manifest(holdout: int = 6) -> dict:
             prev = existing.get(d.name, {})
             reels.append({
                 "id": d.name,
-                "raw": str((d / "raw").relative_to(config.REPO_ROOT)),
-                "final": str((d / "final.mp4").relative_to(config.REPO_ROOT)) if (d / "final.mp4").exists() else None,
+                "raw": _rel(d / "raw"),
+                "final": _rel(d / "final.mp4") if (d / "final.mp4").exists() else None,
                 "split": prev.get("split", "tuning"),
                 "genre": prev.get("genre"),
                 "language": prev.get("language"),
@@ -66,7 +75,8 @@ def _git(*args: str) -> str:
 
 def knowledge_hash() -> str:
     h = hashlib.sha256()
-    files = [config.KNOWLEDGE_DIR / "capabilities.yaml", *sorted((config.KNOWLEDGE_DIR / "graph").glob("*.yaml"))]
+    files = [config.KNOWLEDGE_DIR / "capabilities.yaml", *sorted((config.KNOWLEDGE_DIR / "graph").glob("*.yaml")),
+             *sorted((config.KNOWLEDGE_DIR / "learned").glob("*.yaml"))]
     for f in files:
         if f.exists():
             h.update(f.name.encode())
@@ -88,30 +98,64 @@ def tool_versions() -> dict:
     return out
 
 
-def run_eval(split: str = "tuning", *, allow_holdout: bool = False, work_root: Path | None = None) -> dict:
+def score_reel(r: dict, ws: Workspace, *, asr_backend, kappa: float | None) -> dict:
+    """Score one finished gold-set reel against the owner's final (ADR-0030 §2)."""
+    from reel import project
+    from reel.evalh import gold
+    from reel.perception import visual
+    from reel.perception.audio import extract_wav
+
+    final_ours = ws.path("render", "final.mp4")
+    heard, _ = asr_backend.transcribe(extract_wav(final_ours, ws.path("eval", "ours.wav")), r.get("language"), None)
+    raw = project.word_table(ws)
+    g = gold.load_gold(_abs(r["final"]), raw, asr_backend, config.EVAL_DIR / "cache" / f"{r['id']}.gold.json")
+    score, detail = gold.score_workspace(ws, g, heard_ours=heard, ours_cuts=len(visual.scene_cuts(final_ours)), kappa=kappa)
+    verdict = json.loads(ws.path("qa", "verdict.json").read_text()).get("status") if ws.path("qa", "verdict.json").exists() else None
+    review = json.loads(ws.path("qa", "review.json").read_text()) if ws.path("qa", "review.json").exists() else {}
+    used = []
+    for plan in ("story", "finish"):
+        f = ws.path("plan", f"{plan}.json")
+        if f.exists():
+            used += json.loads(f.read_text()).get("knowledge_used", [])
+    return {"families": score.families, "vetoes": score.vetoes, "primary": score.primary, "detail": detail, "verdict": verdict,
+            "review_issues": [f"{i['severity']} {i['category']}: {i['problem']}" for i in review.get("issues", [])],
+            "knowledge_used": sorted(set(used))}
+
+
+def run_eval(split: str = "tuning", *, allow_holdout: bool = False, work_root: Path | None = None, caller=None,
+             reels_filter: list[str] | None = None, label: str = "", fresh_decisions: bool = False) -> dict:
+    """Run the full edit (with the fix loop) on every gold reel of `split` and score it vs the owner's final."""
+    from reel import autofix, bakeoff, calibrate
+    from reel.stages import EDIT_PIPELINE
+
     if split == "holdout" and not allow_holdout:
         raise HoldoutRefused("The holdout set is for release candidates only. Pass --holdout to confirm.")
     if not MANIFEST.exists():
         init_manifest()
     manifest = yaml.safe_load(MANIFEST.read_text()) or {}
-    reels = [r for r in manifest.get("reels", []) if r.get("split") == split]
-    run_id = time.strftime("%Y%m%d-%H%M%S")
+    reels = [r for r in manifest.get("reels", []) if r.get("split") == split and (not reels_filter or r["id"] in reels_filter)]
+    run_id = time.strftime("%Y%m%d-%H%M%S") + (f"-{label}" if label else "")
     work_root = work_root or (config.REPO_ROOT / "projects" / "_eval" / run_id)
+    kappa = calibrate.report(calibrate.collect(config.REPO_ROOT / "projects"))["reviewer"]["kappa"]
+    asr = None
     results = []
     for r in reels:
         ws = Workspace.create(work_root / r["id"])
-        score = ReelScore()
+        gold_dir = GOLD_DIR / r["id"]
+        brief = gold_dir / "brief.json"
+        options = {"input": str(_abs(r["raw"])), "language": r.get("language"), "brief": str(brief) if brief.exists() else None}
         try:
-            state = run_pipeline(ws, PIPELINE, options={"input": str(config.REPO_ROOT / r["raw"])})
-            mezz = json.loads(ws.path("mezz", "report.json").read_text())
-            checks = [c["ok"] for c in mezz.get("clips", [])]
-            score.families["soft_gates"] = sum(checks) / len(checks) if checks else 0.0
-            stages_done = [k for k, v in state["stages"].items() if v.get("status") == "done"]
+            if not r.get("final"):
+                raise FileNotFoundError(f"{r['id']}: no final.mp4 (gold edit) to score against")
+            # fresh_decisions: re-ask the Editor even if inputs are unchanged (repeat runs measure decision variance)
+            autofix.run(ws, EDIT_PIPELINE, options, caller=caller, force={"story", "finish"} if fresh_decisions else None)
+            if asr is None:
+                eng = config.ASR_ENGINES.get(r.get("language") or "en", config.ASR_ENGINES["en"])
+                asr = bakeoff.engines([eng])[eng]
+            results.append({"id": r["id"], "language": r.get("language"), **score_reel(r, ws, asr_backend=asr, kappa=kappa)})
         except Exception as exc:  # crash = veto (ADR-0030)
-            score.vetoes.append(f"crash: {type(exc).__name__}: {exc}")
-            stages_done = []
-        results.append({"id": r["id"], "families": score.families, "vetoes": score.vetoes,
-                        "primary": score.primary, "stages": stages_done})
+            results.append({"id": r["id"], "language": r.get("language"), "families": {}, "primary": None,
+                            "vetoes": [f"crash: {type(exc).__name__}: {exc}"]})
     scored = [x["primary"] for x in results if x["primary"] is not None]
     row = {
         "run_id": run_id,
@@ -121,6 +165,7 @@ def run_eval(split: str = "tuning", *, allow_holdout: bool = False, work_root: P
         "dirty": bool(_git("status", "--porcelain")),
         "knowledge": knowledge_hash(),
         "tools": tool_versions(),
+        "reviewer_kappa": kappa,
         "reels": results,
         "mean_primary": round(sum(scored) / len(scored), 2) if scored else None,
         "vetoed": sum(1 for x in results if x["vetoes"]),

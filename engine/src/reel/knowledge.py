@@ -16,6 +16,10 @@ from reel import config
 EVIDENCE_RANK = {"platform": 0, "study": 1, "practitioner": 2, "theory": 3, "single_opinion": 4}
 
 
+LEARNED = config.KNOWLEDGE_DIR / "learned" / "overrides.yaml"
+EDITABLE_FIELDS = ("summary", "when_to_use", "avoid_when", "parameters", "core")
+
+
 @lru_cache(maxsize=1)
 def nodes() -> dict[str, dict]:
     out: dict[str, dict] = {}
@@ -27,6 +31,24 @@ def nodes() -> dict[str, dict]:
         for n in items or []:
             if isinstance(n, dict) and "id" in n:
                 out[n["id"]] = n
+    return apply_overrides(out, load_overrides())
+
+
+def load_overrides(path=None) -> dict:
+    """Learned deltas (self-improvement loop, ADR-0029): {"edit": {id: {field: value}}, "add": [node, ...]}.
+    Kept apart from the generated graph so build_kb.py never overwrites what was learned."""
+    path = path or LEARNED
+    return (yaml.safe_load(path.read_text()) or {}) if path.exists() else {}
+
+
+def apply_overrides(graph: dict[str, dict], ov: dict) -> dict[str, dict]:
+    out = dict(graph)
+    for nid, fields in (ov.get("edit") or {}).items():
+        if nid in out:
+            out[nid] = {**out[nid], **{k: v for k, v in fields.items() if k in EDITABLE_FIELDS}, "learned": True}
+    for n in ov.get("add") or []:
+        if isinstance(n, dict) and n.get("id") and n["id"] not in out:
+            out[n["id"]] = {**n, "learned": True}
     return out
 
 

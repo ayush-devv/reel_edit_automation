@@ -169,6 +169,24 @@ def _cmd_stock(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_improve(args: argparse.Namespace) -> int:
+    """Gated self-improvement over the tuning set (knowledge deltas only; holdout never used)."""
+    from reel import improve
+
+    evaluate, rows_of = improve.harness_evaluator()
+    res = improve.run_night(evaluate, improve.claude_proposer(), runs=args.runs, rounds=args.rounds, budget=args.budget,
+                            rows_of=rows_of, commit=not args.no_commit, dry_run=args.dry_run)
+    for r in res["rounds"]:
+        print(f"round {r['round']}: {r.get('outcome')} — {r.get('diagnosis', '')[:200]}")
+        for c in r["changes"]:
+            print(f"   {c['kind']} {c['node_id']}: {c['expected_effect'][:120]}")
+        if r.get("decision"):
+            d = r["decision"]
+            print(f"   gain {d.get('mean_gain')} (δ_min {d.get('delta_min')}), p={d.get('p')} {'; '.join(d.get('reasons', []))}")
+    print(f"\naccepted {len(res['accepted'])} change(s) · {res['reel_runs']} reel-runs · log {improve.LOG}")
+    return 0
+
+
 def _cmd_proof(args: argparse.Namespace) -> int:
     """Owner confirms or corrects unsure caption words (ADR-0021); captions re-render, the base does not."""
     from reel.workspace import atomic_write_json
@@ -362,6 +380,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", required=True, help="b-roll folder (e.g. projects/<p>/broll_src)")
     p.add_argument("--n", type=int, default=3)
     p.set_defaults(func=_cmd_stock)
+
+    p = sub.add_parser("improve", help="gated self-improvement on the tuning set (knowledge deltas; ADR-0029/0030)")
+    p.add_argument("--runs", type=int, default=3, help="runs per arm per reel")
+    p.add_argument("--rounds", type=int, default=5)
+    p.add_argument("--budget", type=int, default=100, help="max reel-runs for the night")
+    p.add_argument("--dry-run", action="store_true", help="baseline + proposal only, nothing tested or kept")
+    p.add_argument("--no-commit", action="store_true", help="keep accepted overrides uncommitted")
+    p.set_defaults(func=_cmd_improve)
 
     p = sub.add_parser("proof", help="confirm/correct unsure caption words, then re-render captions")
     p.add_argument("--project", required=True)
