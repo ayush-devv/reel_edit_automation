@@ -102,3 +102,49 @@ type Project = ProjectSummary & { brief: Record<string, unknown> | null; brand: 
   - 409: a job is already running for that project (one job per project at a time);
   - 422: validator issues;
   - 503: the engine toolchain is missing (`/api/health` says what).
+
+## v1.1 additions (web app)
+Added by the web app (`studio/web/`) for screens the v1 table didn't cover. Every addition is **additive**: new fields are optional for the web app (it degrades gracefully when they're missing), so a v1 API keeps working. Types are in `studio/web/src/api/types.ts`.
+
+**Fields on existing objects**
+- `ProjectSummary.client: string | null` — the brief's client, shown on every project card (FR-1).
+- `ProjectSummary.delivered_at: string | null` (ISO) — set by "Mark delivered"; FR-1 sorts delivered projects last.
+- `Project.eta_s?: number | null` — estimated seconds left in the run (FR-3). Without it the web app estimates from typical stage durations and labels it "≈".
+- `Decision.cost_usd?: number` — cost of the Claude call behind the decision, from `log/runs.jsonl` (FR-3 "cost of each AI call").
+- `review.issues[].severity?: "blocker" | "major" | "minor"`, `review.issues[].fix?: string` — FR-4 Reviewer notes.
+- `versions[].reply?: string`, `versions[].cost_usd?: number` — the Editor's one-line reply and the revision's cost (FR-6, AC-10). Guided adjustments are versions with `label: "Manual"` and `reply` = what changed (FR-8).
+- `Libraries.broll[]` = `{id, description, shot, duration_ms, source, license}`; `Libraries.unreadable?: {kind, file, reason}[]` (AC-14).
+
+**New endpoints / shapes**
+| Method | Path | Body / query | Returns |
+|---|---|---|---|
+| POST | /api/projects/{id}/delivered | — | 204; sets `delivered_at` (FR-9) |
+| GET | /api/projects/{id}/package | — | `{ files: {path, label, kind, bytes, thumb?}[], warnings: string[] }`, where `kind` is `final \| variant \| review_copy \| timeline \| captions \| stems \| overlay \| edit_list \| other` and `path` is relative to the project folder (FR-9) |
+| GET | /api/libraries/{kind}/{id}/media | `?token=`; Range | the library file, for the play buttons (FR-10); `kind` is `sfx \| music \| broll` |
+| GET / PUT | /api/settings | PUT body = the object | `{ max_jobs (1–3), projects_dir, default_brief (partial Brief), default_deliverables: ("feed_4x5"\|"square")[], pexels_key_set: boolean }`; PUT may carry a write-only `pexels_key` (FR-12) |
+
+**Shapes the v1 table left open**
+- `GET /api/projects/{id}/timeline` → `{ timeline: Timeline, reasons: Record<string, string> }`.
+  - `reasons` is keyed by plan item id (`k01`…), and by the timeline id of each placed piece: video clip id for a punch-in (`v_k04`), title / pip / effect / graphic / audio clip ids.
+  - Special keys `grade`, `captions` and `music` hold the finish plan's reasons for the look, the caption plan and the music bed.
+- `POST /api/projects/{id}/notes/preview` → `{ anchored: string[], unreadable?: string[] }`.
+  - `anchored[i]` belongs to the i-th readable line sent.
+  - `unreadable` lists lines that can't be acted on (AC-11). The web app also drops obviously unreadable lines before sending.
+- `GET /api/brands` → `{ id, brand: Brand }[]`.
+  - `POST /api/brands` takes `{ id, brand }` (409 if the id exists).
+  - `PUT /api/brands/{id}` takes the bare `Brand`.
+  - `id` is never inside `Brand` (it is `extra="forbid"`).
+- `GET /api/lab`:
+  - `calibration` = `{ agreement (0–1), n_labels, trusted: boolean, gates: {name, false_alarm_rate, mode: "warn" | "block"}[] }`;
+  - `improve_history[]` = `{ at, change, outcome: "accepted" | "rejected" | "pending", gain?, reason? }`;
+  - optional `runs: {id, at, split: "tuning" | "holdout", primary, families: Record<string, number>}[]` (the score chart);
+  - optional `gold_pairs: {id, split, language, source}[]`.
+- `POST /api/lab/eval` body `{ release?: boolean }` (`release: true` is the release check, refused with 409 while locked); `POST /api/lab/improve` body `{ budget_usd: number }`.
+
+**Known gaps the web app shows as "not available yet"** (no endpoint invented):
+- review links (FR-9, AC-13);
+- "Open in Finder" / "Open in Final Cut Pro" (the web app offers "Copy path" instead);
+- switching a gate between warn and block (FR-11);
+- per-reel scores of an eval run (FR-11);
+- story-list adjustments (reorder, remove, restore, trim lines; FR-8 / AC-12) — only the `adjust` kinds above exist;
+- b-roll files on project create (FR-2).

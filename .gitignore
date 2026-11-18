@@ -25,3 +25,7 @@ eval/cache/
 
 # Claude Code agent worktrees
 .claude/worktrees/
+
+# Reel Studio web build (served by the API)
+studio/web/dist/
+studio/web/test-results/

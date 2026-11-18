@@ -1,0 +1,112 @@
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-bg-base text-fg-primary font-sans text-body antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* Focus: 2 px accent.ai ring (design system). Only for keyboard focus. */
+:focus-visible {
+  outline: 2px solid theme("colors.ai.DEFAULT");
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+::selection {
+  background: rgba(106, 75, 240, 0.45);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: theme("colors.line.strong") transparent;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.skip-link {
+  position: absolute;
+  left: 8px;
+  top: -48px;
+  z-index: 100;
+  transition: top 120ms var(--ease);
+}
+.skip-link:focus {
+  top: 8px;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.pulse-dot {
+  animation: pulse-dot 1.4s var(--ease) infinite;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.fade-in {
+  animation: fade-in 200ms var(--ease) both;
+}
+
+@keyframes indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+.indeterminate {
+  animation: indeterminate 1.2s var(--ease) infinite;
+}
+
+/* Reduced motion: crossfades only, no movement (NFR-5). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-property: opacity, color, background-color, border-color !important;
+  }
+  .fade-in {
+    animation: none;
+  }
+}
