@@ -404,7 +404,10 @@ def _deliverables(ctx: StageContext) -> list[str]:
     from reel import brief as b, variants
 
     brief = b.load_brief(ctx.options.get("brief"))
-    return [d for d in (brief.deliverables if brief else []) if d in variants.PROFILES]
+    # brief deliverables + extra ones asked for at delivery time (Reel Studio "Deliver"; kept in run_options.json
+    # so a delivery never edits the brief, whose fingerprint would re-ask the Editor)
+    wanted = [*(brief.deliverables if brief else []), *(ctx.options.get("deliverables") or [])]
+    return [d for d in dict.fromkeys(wanted) if d in variants.PROFILES]
 
 
 def _variants_hash(ctx: StageContext) -> str:

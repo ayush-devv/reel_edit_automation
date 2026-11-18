@@ -35,6 +35,9 @@ def _print_state(state: dict, ws) -> None:
         print(f"reel: {ws.path('export', 'reel.mp4')}")
 
 
+CARRIED_OPTIONS = ("deliverables",)
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     from reel.runner import run_pipeline
     from reel.stages import EDIT_PIPELINE, PIPELINE
@@ -48,6 +51,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
                "brief": absolute(args.brief), "brand": absolute(args.brand), "asr_repo": args.asr_repo, "skip_visual": args.skip_visual,
                "broll": absolute(args.broll), "reference": absolute(args.reference)}
     options["skip_review"] = args.skip_review
+    prev = ws.path("run_options.json")
+    if prev.exists():  # options set outside `reel run` (Reel Studio's extra deliverables) survive a re-run
+        carried = {k: v for k, v in json.loads(prev.read_text()).items() if k in CARRIED_OPTIONS}
+        options = {**carried, **options}
     atomic_write_json(ws.path("run_options.json"), options)  # `reel revise` / `reel proof` reuse them
     if args.analyse_only:
         state = run_pipeline(ws, PIPELINE, options=options, force=set(args.force or []))
@@ -120,6 +127,37 @@ def _rerun_after_plan_change(ws, options) -> None:
     state = run_pipeline(ws, [edit.COMPILE, edit.RENDER, edit.OVERLAY, edit.COMPOSITE, edit.QA, edit.PACKAGE, edit.VARIANTS], options=options)
     _print_state(state, ws)
     _print_verdict(ws)
+
+
+def _cmd_rerun(args: argparse.Namespace) -> int:
+    """Re-run the pipeline from one edit stage onward (that stage forced), without Editor calls or the fix loop.
+
+    Used after a plan was changed by hand (Reel Studio adjustments, version restore, delivery variants), so the
+    owner's change is rendered as-is and never revised by the fix loop."""
+    from reel.runner import StageContext, load_state, run_pipeline, save_state
+    from reel.stages import edit
+
+    stages = edit.STAGES[[s.name for s in edit.STAGES].index(args.from_stage):]
+    ws, options = _load_ws(args.project)
+    with ws.lock():  # the plans on disk are now the accepted ones: a later `reel run` must not re-ask the Editor
+        state = load_state(ws)  # (as autofix.apply_revision does after a revision)
+        fin = state.get("stages", {}).get("finish")
+        if fin and fin.get("status") == "done" and ws.path("plan", "finish.json").exists():
+            fin["input_hash"] = edit.FINISH.input_hash(StageContext(ws=ws, options=options))
+            save_state(ws, state)
+    state = run_pipeline(ws, stages, options=options, force={args.from_stage})
+    _print_state(state, ws)
+    _print_verdict(ws)
+    return 0
+
+
+RERUN_FROM = ("compile", "render", "overlay", "composite", "qa", "package", "variants")
+
+
+def _cmd_studio(args: argparse.Namespace) -> int:
+    from reel.studio import server
+
+    return server.serve(port=args.port, open_browser=args.open, dev=args.dev, projects=args.projects)
 
 
 def _cmd_revise(args: argparse.Namespace) -> int:
@@ -427,6 +465,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--project", required=True)
     p.add_argument("request", help='what to change, e.g. "start with the 10%% line and make it punchier"')
     p.set_defaults(func=_cmd_revise)
+
+    p = sub.add_parser("rerun", help="re-render from an edit stage onward after a plan change (no Editor calls)")
+    p.add_argument("--project", required=True)
+    p.add_argument("--from", dest="from_stage", default="compile", choices=RERUN_FROM)
+    p.set_defaults(func=_cmd_rerun)
+
+    p = sub.add_parser("studio", help="Reel Studio: the local dashboard and its API on 127.0.0.1")
+    p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--open", action="store_true", help="open the dashboard in the browser")
+    p.add_argument("--dev", action="store_true", help="allow the Vite dev origin http://127.0.0.1:5173 (CORS)")
+    p.add_argument("--projects", help="projects folder (default: <repo>/projects, or $REEL_PROJECTS_ROOT)")
+    p.set_defaults(func=_cmd_studio)
 
     p = sub.add_parser("eval", help="eval harness")
     p.add_argument("--init", action="store_true", help="create/refresh eval/manifest.yaml from samples/gold/")
