@@ -85,7 +85,7 @@ def _download(url: str) -> bytes:
         if not curl or not url.startswith("https://"):
             raise
         log.info("urllib download failed (%s); retrying with curl", exc)
-        return tools.run([curl, "-fsSL", "--proto", "=https", "--max-time", str(DOWNLOAD_TIMEOUT_S * 6), url]).stdout
+        return tools.run([curl, "-fsSL", "--proto", "=https", "--connect-timeout", "10", "--max-time", str(DOWNLOAD_TIMEOUT_S * 6), url]).stdout
 
 
 def supported_platform() -> bool:

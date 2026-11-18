@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 from pathlib import Path
 
 from reel import enhance
@@ -83,8 +84,7 @@ def _run(ctx: StageContext) -> dict:
             out.unlink(missing_ok=True)
         report["clips"][cid] = entry
         log.info("voice %s: %s", cid, entry["reason"])
-    if work.exists():
-        work.rmdir()
+    shutil.rmtree(work, ignore_errors=True)  # also clears leftovers of a run killed mid-way
     atomic_write_json(_report(ctx), report)
     clips = report["clips"].values()
     return {"enhanced": sum(c["applied"] for c in clips), "clips": len(report["clips"]),
