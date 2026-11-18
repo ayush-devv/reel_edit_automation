@@ -1,0 +1,1347 @@
+# Sound design, dialogue editing and music editing — knowledge graph draft (v1)
+# Extends craft-playbook rules 19–23 and 25. Paraphrased; numbers are starting points, not laws.
+# Evidence labels: platform (published spec/standard or platform doc), study (measured/experimental),
+# practitioner (vendor/engineer guidance), theory (film-sound theory), single_opinion.
+# 30 fps assumed where frames are given (1 frame = 33.3 ms).
+
+nodes:
+
+  # ───────────────────────── PRINCIPLES ─────────────────────────
+
+  - id: principle.sound.sound_on_value
+    type: principle
+    name: Short-form is watched with sound on
+    summary: Sound is part of the product on TikTok-style feeds, not decoration. TikTok-commissioned Kantar research reports most users call sound essential and that audio ads draw more stops than on other platforms. Treat the mix as seriously as the picture, but still make the hook readable muted.
+    when_to_use: "Every reel; sets the budget for audio work."
+    how: ["Plan the audio layer (voice, bed, SFX, silence) alongside the cut", "Still satisfy the sound-off hook rule (playbook rule 4)"]
+    parameters: {}
+    avoid_when: "Never ignore; the sound-off caption layer is complementary, not a replacement."
+    genres: [genre.talking_head, genre.montage, genre.product, genre.vlog, genre.brand_story]
+    goals: [goal.retention_first_3s, goal.emotion, goal.brand_recall]
+    uses_capabilities: [cap.audio.mix]
+    conflicts_with: []
+    requires: []
+    evidence_level: study
+    confidence: medium
+    sources:
+      - {title: "Kantar report: How brands are making noise and driving impact with sound on TikTok", author: "TikTok for Business (Kantar, vendor-commissioned)", url: "https://ads.tiktok.com/business/en-US/blog/kantar-report-how-brands-are-making-noise-and-driving-impact-with-sound-on-tiktok", locator: "88% 'sound essential'; 73% stop for audio ads (2021)"}
+
+  - id: principle.sound.synchresis
+    type: principle
+    name: Synchresis and added value
+    summary: When a sound and a visual event coincide, viewers fuse them into one event and credit the image with the sound's meaning (Chion). This is why a whoosh makes a cut feel fast and a hit makes a punch-in feel strong. Sync points are where the edit gains or loses perceived impact.
+    when_to_use: "Choosing where SFX, music accents and cuts land."
+    how: ["Identify the visual peak frame (impact, reveal, text-in, cut)", "Place a sound whose transient lands on that frame", "Reserve hard sync points for moments that matter"]
+    parameters: {}
+    avoid_when: "Every frame is a sync point — the effect dilutes (see anti.sfx.overuse)."
+    genres: [genre.montage, genre.product, genre.event_recap]
+    goals: [goal.energy, goal.emotion]
+    uses_capabilities: [cap.audio.sfx_place]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "Audio-Vision: Sound on Screen (2nd ed.)", author: "Michel Chion, trans. C. Gorbman", url: "https://econtact.ca/19_2/basanta_synchresis.html", locator: "Basanta's summary of 'synchresis' and 'added value'"}
+      - {title: "Point of synchronization", author: "USC Scalar, Audiovisualities", url: "https://scalar.usc.edu/works/audiovisualities/point-of-synchronization", locator: "whole page"}
+
+  - id: principle.sound.av_sync_tolerance
+    type: principle
+    name: Audio-early is noticed sooner than audio-late
+    summary: ITU-R BT.1359 puts detectability of A/V offset at about 45 ms when audio leads and about 125 ms when audio lags (acceptability roughly +90/−185 ms). A sync sound that arrives early reads as wrong faster than one slightly late. At 30 fps, more than one frame early is risky; up to three frames late is usually unnoticed.
+    when_to_use: "Placing SFX, music hits, and dialogue after any slip edit."
+    how: ["Align SFX transient to the visual frame", "If rounding is needed, round the sound later (0 to +1 frame), never earlier", "Re-check lip sync after retiming"]
+    parameters: {audio_lead_detect_ms: 45, audio_lag_detect_ms: 125, audio_lead_accept_ms: 90, audio_lag_accept_ms: "185–190", safe_sfx_offset_frames_30fps: "0 to +1"}
+    avoid_when: ""
+    genres: []
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.audio.sfx_place, cap.audio.slip]
+    conflicts_with: []
+    requires: []
+    evidence_level: study
+    confidence: high
+    sources:
+      - {title: "Audio-to-video synchronization (summarising ITU-R BT.1359-1)", author: "Wikipedia", url: "https://en.wikipedia.org/wiki/Audio-to-video_synchronization", locator: "Recommendations section"}
+      - {title: "A subjective study of the perceptual acceptability of audio-video desynchronization in sports videos", author: "arXiv 2212.01686", url: "https://arxiv.org/pdf/2212.01686", locator: "Introduction (BT.1359 thresholds, newsreader material)"}
+
+  - id: principle.sound.dynamic_contrast
+    type: principle
+    name: Impact comes from contrast, not loudness
+    summary: Big moments feel big because something quieter came before them. Trailer sound designers keep pre-hit layers soft, cut to near-silence just before an impact, and avoid over-compression. A reel that is loud everywhere has no peaks left to spend.
+    when_to_use: "Reveals, punchlines, drops, before/after moments."
+    how: ["Pull bed and SFX down 6–12 dB in the 0.3–1 s before the peak", "Optionally drop to room tone only for 2–10 frames", "Land the hit/drop at full level"]
+    parameters: {pre_peak_dip_db: "6–12", void_length_frames: "2–10"}
+    avoid_when: "Talking-head stretches where steady intelligibility matters more than drama."
+    genres: [genre.product, genre.montage, genre.transformation, genre.brand_story]
+    goals: [goal.energy, goal.emotion, goal.rewatch]
+    uses_capabilities: [cap.audio.volume_keyframe, cap.audio.mix]
+    conflicts_with: [anti.loudness.overlimiting]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "5 Tips for Designing Trailer Sound Effects", author: "Krotos", url: "https://krotos.studio/blog/trailer-sound-design-tips-tricks", locator: "dynamics/hits and silence tips"}
+      - {title: "Designing a Movie for Sound", author: "Randy Thom", url: "https://filmsound.org/articles/designing_for_sound.htm", locator: "sections on space for sound"}
+
+  - id: principle.sound.leave_space
+    type: principle
+    name: Leave room for sound to speak
+    summary: Wall-to-wall talk and stacked effects crowd sound out. Randy Thom argues for brief holds before or after lines and for selective, sparse layers so each sound carries meaning. In short-form this means fewer, better-chosen sounds and occasional deliberate air.
+    when_to_use: "Emotional beats, reveals, endings; when the mix feels busy."
+    how: ["Decide which single layer owns each moment (voice, music, or SFX)", "Mute or duck the others", "Allow one held beat at the emotional peak"]
+    parameters: {layers_owning_a_moment: 1}
+    avoid_when: "Information-dense tutorials where every second is content."
+    genres: [genre.brand_story, genre.testimonial, genre.vlog]
+    goals: [goal.emotion, goal.clarity]
+    uses_capabilities: [cap.audio.mix, cap.audio.volume_keyframe]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Designing a Movie for Sound", author: "Randy Thom", url: "https://filmsound.org/articles/designing_for_sound.htm", locator: "on wall-to-wall dialogue and lingering shots"}
+
+  - id: principle.sound.small_speaker_translation
+    type: principle
+    name: Mix for phone speakers
+    summary: Most reels play on phone speakers that roll off heavily below roughly 150–300 Hz and are often near-mono. Sub-bass hits and bass-only music vanish; anything carried only by low end or stereo width is lost. Check every mix through a high-pass at 200–400 Hz and in mono.
+    when_to_use: "Final mix QA; choosing SFX and music."
+    how: ["Audition with a temporary HPF at 200, 300, 400 Hz", "Fold to mono and confirm nothing disappears", "Give hits and bass a mid-range layer or saturation so they read without sub"]
+    parameters: {phone_rolloff_hz: "~150–300 (blog estimates vary)", check_hpf_hz: [200, 300, 400], mono_check: true}
+    avoid_when: ""
+    genres: []
+    goals: [goal.clarity, goal.energy]
+    uses_capabilities: [cap.audio.eq, cap.analysis.mono_check]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "How to Make Bass Audible on Phone Speakers", author: "LANDR", url: "https://blog.landr.com/make-bass-audible-phone-speakers", locator: "phone roll-off below ~200 Hz"}
+      - {title: "8 Tips for Great Sounding Mixes on Small Speakers", author: "Waves", url: "https://www.waves.com/tips-for-great-mixes-on-small-speakers", locator: "HPF presets 200/400/800 Hz; mono check"}
+
+  - id: principle.sound.dialogue_anchor
+    type: principle
+    name: Dialogue is the anchor of the mix
+    summary: Long-form specs anchor loudness on dialogue (Netflix measures dialogue-gated loudness at −27 LKFS ±2 LU) rather than the whole mix. For reels, set the voice level first and fit music and SFX around it, never the reverse.
+    when_to_use: "Any reel with speech."
+    how: ["Level-match voice first", "Set bed relative to voice (tech.duck.depth)", "Set SFX relative to voice", "Only then normalise the master"]
+    parameters: {netflix_dialog_gated_lkfs: "-27 ±2 (long-form reference only)"}
+    avoid_when: "Music-only montages (music becomes the anchor)."
+    genres: [genre.talking_head, genre.interview, genre.podcast_clip, genre.tutorial, genre.testimonial]
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.analysis.loudness_measure, cap.audio.clip_gain]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: high
+    sources:
+      - {title: "Netflix Sound Mix Specifications & Best Practices v1.5", author: "Netflix", url: "https://backlothelp.netflix.com/hc/en-us/articles/360001794307-Netflix-Sound-Mix-Specifications-Best-Practices-v1-5", locator: "Loudness: dialogue-gated −27 LKFS"}
+
+  - id: principle.dialogue.repair_deepest_first
+    type: principle
+    name: Repair the deepest damage first
+    summary: iZotope's repair order fixes the most destructive problems first so later tools work on cleaner audio — clipping, then stereo/phase, then clicks, then hum, then broadband noise, then variable noise like sibilance and breaths. EQ before denoise makes noise louder and the denoiser work harder.
+    when_to_use: "Ordering any dialogue clean-up chain."
+    how: ["De-clip", "Fix phase/azimuth if stereo", "Mouth de-click", "De-hum (only if present)", "Denoise", "De-reverb", "De-ess / breath control", "Then tonal EQ and dynamics"]
+    parameters: {}
+    avoid_when: "Clean studio audio — skip the stages with nothing to fix."
+    genres: [genre.talking_head, genre.interview, genre.podcast_clip, genre.vlog]
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.audio.declip, cap.audio.declick, cap.audio.dehum, cap.audio.denoise, cap.audio.dereverb, cap.audio.deess, cap.audio.breath_reduce]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Order of audio repair operations", author: "iZotope", url: "https://www.izotope.com/en/learn/order-of-audio-repair-operations", locator: "whole article"}
+
+  # ───────────────────────── LOUDNESS ─────────────────────────
+
+  - id: principle.loudness.lufs_measurement
+    type: principle
+    name: Measure loudness in LUFS, not peaks
+    summary: ITU-R BS.1770 loudness (LUFS/LKFS) is what normalising platforms read. Integrated LUFS covers the whole piece, short-term uses a 3 s window, momentary 400 ms; LRA describes macro-dynamics; true peak (dBTP) catches inter-sample overs that codecs turn into distortion. Peak normalisation alone says nothing about perceived level.
+    when_to_use: "QA of every export; comparing stems (voice vs bed)."
+    how: ["Measure integrated LUFS, LRA and true peak on the master", "Use short-term LUFS per stem to compare voice and music", "Log values in the style vector"]
+    parameters: {short_term_window_s: 3, momentary_window_ms: 400}
+    avoid_when: ""
+    genres: []
+    goals: [goal.clarity]
+    uses_capabilities: [cap.analysis.loudness_measure]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: high
+    sources:
+      - {title: "EBU R 128 Loudness normalisation and permitted maximum level", author: "EBU", url: "https://tech.ebu.ch/publications/r128", locator: "definitions; EBU Tech 3341/3342 meters"}
+      - {title: "Loudness normalization on Spotify", author: "Spotify for Artists", url: "https://support.spotify.com/artists/article/loudness-normalization/", locator: "measured per ITU 1770"}
+
+  - id: principle.loudness.reference_targets
+    type: principle
+    name: Published loudness targets (reference map)
+    summary: "Broadcast EBU R128: −23 LUFS, true peak ≤ −1 dBTP. AES TD1008 streaming: speech −18, music −16, mixed ~−17 LUFS. Spotify plays at −14 (Loud −11, Quiet −19). Apple Podcasts asks for about −16 LUFS, ≤ −1 dBTP. YouTube −14 is widely reported (turn-down only) but undocumented. No reel platform publishes a target."
+    when_to_use: "Choosing an export target or explaining one."
+    how: ["Default short-form to tech.loudness.short_form_master", "Use −23 only for broadcast deliverables", "Use −16 for podcast audio exports"]
+    parameters: {ebu_r128_lufs: -23, ebu_true_peak_dbtp: -1, aes_td1008_speech_lufs: -18, aes_td1008_music_lufs: -16, aes_td1008_mixed_lufs: -17, spotify_normal_lufs: -14, spotify_loud_lufs: -11, spotify_quiet_lufs: -19, apple_podcasts_lufs: -16, youtube_reported_lufs: "-14 (unofficial)"}
+    avoid_when: ""
+    genres: []
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.loudness_normalize]
+    conflicts_with: []
+    requires: [principle.loudness.lufs_measurement]
+    evidence_level: platform
+    confidence: high
+    sources:
+      - {title: "EBU R 128", author: "EBU", url: "https://tech.ebu.ch/publications/r128", locator: "Target Level −23.0 LUFS; max true peak −1 dBTP"}
+      - {title: "AES TD1008 explained", author: "Ian Shepherd, Production Advice", url: "https://productionadvice.co.uk/td1008/", locator: "Distribution Loudness values"}
+      - {title: "Understanding Loudness for Streaming Audio", author: "Telos Alliance", url: "https://docs.telosalliance.com/docs/understanding-loudness-for-streaming-audio", locator: "TD1008 −17 for mixed content"}
+      - {title: "Loudness normalization on Spotify", author: "Spotify for Artists", url: "https://support.spotify.com/artists/article/loudness-normalization/", locator: "Loud/Normal/Quiet levels"}
+      - {title: "Audio requirements", author: "Apple Podcasts for Creators", url: "https://podcasters.apple.com/support/audio-requirements", locator: "loudness and true peak"}
+
+  - id: tech.loudness.short_form_master
+    type: technique
+    name: Short-form master at −14 LUFS / −1 dBTP
+    summary: Master reels to about −14 LUFS integrated with a true-peak ceiling of −1 dBTP, using a true-peak limiter then two-pass loudness normalisation. Quieter masters may sit weak next to neighbours in the feed; louder ones gain nothing where platforms turn down. If you push louder than −14, lower the ceiling to −2 dBTP.
+    when_to_use: "Final export of every reel (extends playbook rule 19)."
+    how: ["Limit with a true-peak limiter at −1 dBTP (≤ 3 dB gain reduction ideally)", "ffmpeg loudnorm pass 1: measure", "Pass 2: loudnorm=I=-14:TP=-1:LRA=7 with measured_* values and linear=true", "Re-measure; accept ±1 LU"]
+    parameters: {integrated_lufs: -14, tolerance_lu: "±1", true_peak_dbtp: -1, true_peak_if_louder_than_-14: -2, lra_lu: "≤7–9 (heuristic for mobile)", limiter_gr_db: "≤3", ffmpeg_loudnorm_defaults: "I=-24, TP=-2, LRA=7 (override them)"}
+    avoid_when: "Broadcast delivery (use −23) or podcast audio (−16)."
+    genres: []
+    goals: [goal.clarity, goal.energy]
+    uses_capabilities: [cap.audio.loudness_normalize, cap.audio.true_peak_limit, cap.analysis.loudness_measure]
+    conflicts_with: [anti.loudness.overlimiting]
+    requires: [principle.loudness.lufs_measurement]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Loudness normalization on Spotify", author: "Spotify for Artists", url: "https://support.spotify.com/artists/article/loudness-normalization/", locator: "−1 dBTP lossy; −2 dBTP if louder than −14"}
+      - {title: "FFmpeg Filters Documentation — loudnorm", author: "FFmpeg", url: "https://ffmpeg.org/ffmpeg-filters.html#loudnorm", locator: "loudnorm options I, LRA, TP, measured_*, linear"}
+      - {title: "Craft playbook (internal)", author: "project research", url: "docs/research/craft-playbook.md", locator: "§5 Loudness; rule 19"}
+
+  - id: tech.dialogue.level_match
+    type: technique
+    name: Level-match dialogue clips before processing
+    summary: Bring every dialogue clip to a consistent level with clip gain before compression, so the compressor does gentle smoothing rather than fixing big jumps. Jump-cut reels splice takes recorded at different distances; mismatches of 2–3 LU between adjacent clips are audible.
+    when_to_use: "After the dialogue cut, before the voice chain."
+    how: ["Measure short-term LUFS per clip (speech only)", "Apply clip gain so clips sit within ±1 LU of the target", "Then compress; then automate any remaining words"]
+    parameters: {clip_to_clip_tolerance_lu: "±1 (max ±2)", voice_stem_short_term_lufs: "≈ −16 to −18 before master limiting (heuristic)"}
+    avoid_when: "Intentional perspective change (whisper, shout) — keep the performance."
+    genres: [genre.talking_head, genre.podcast_clip, genre.interview, genre.tutorial]
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.audio.clip_gain, cap.analysis.loudness_measure]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Dialogue Editing for Motion Pictures (2nd ed.)", author: "John Purcell", url: "https://routledge.com/9780415828178", locator: "chapters on balancing and room tone"}
+      - {title: "Introduction to Dialogue Editing", author: "Post Super", url: "https://post-super.com/blog/introduction-to-dialogue-editing", locator: "clip gain before automation"}
+
+  - id: anti.loudness.overlimiting
+    type: anti_pattern
+    name: Crushing the master for loudness
+    summary: Limiting a reel to −8 or −9 LUFS flattens peaks, adds distortion after AAC encoding, and gains nothing where platforms turn loud uploads down. Power in the mix comes from dynamic contrast, not maximum loudness.
+    when_to_use: "Flag when integrated > −12 LUFS or limiter gain reduction > 4–6 dB."
+    how: ["Back off the limiter", "Restore dynamics around hits", "Re-normalise to −14"]
+    parameters: {flag_integrated_lufs_above: -12, flag_limiter_gr_db_above: 4}
+    avoid_when: ""
+    genres: []
+    goals: [goal.energy]
+    uses_capabilities: [cap.audio.true_peak_limit, cap.analysis.loudness_measure]
+    conflicts_with: [tech.loudness.short_form_master, principle.sound.dynamic_contrast]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Loudness normalization on Spotify", author: "Spotify for Artists", url: "https://support.spotify.com/artists/article/loudness-normalization/", locator: "louder tracks turned down; distortion warning"}
+      - {title: "5 Tips for Designing Trailer Sound Effects", author: "Krotos", url: "https://krotos.studio/blog/trailer-sound-design-tips-tricks", locator: "power from increasing dynamic range"}
+
+  # ───────────────────────── DIALOGUE EDITING ─────────────────────────
+
+  - id: tech.dialogue.edit_fades
+    type: technique
+    name: Micro-fade every dialogue edit
+    summary: Any edit that starts or ends at non-zero amplitude clicks. Put a short fade or crossfade on every boundary — 5–10 ms inside or next to speech so consonants survive, 20–50 ms where the cut sits in room tone. Batch-apply to all edits.
+    when_to_use: "Every audio edit point (refines playbook rule 10's 30 ms)."
+    how: ["Batch-fade all clip boundaries", "Use 5–10 ms at speech-adjacent edits", "Use 20–50 ms equal-power crossfades in pauses", "Listen for dulled consonants; shorten if so"]
+    parameters: {fade_speech_adjacent_ms: "5–10", fade_in_pause_ms: "20–50", min_fade_ms: 1, curve: "equal-power for crossfades"}
+    avoid_when: "Never skip; only the length changes."
+    genres: []
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.fade, cap.audio.crossfade]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "How to fade (Pro Tools User Guide)", author: "Avid", url: "https://www.avid.com/pro-tools/user-guide/how-to-fade", locator: "short fades to remove pops/clicks; batch fades"}
+      - {title: "Fades handout (EMS F2013)", author: "University of Iowa Electronic Music Studios", url: "https://theremin.music.uiowa.edu/EMS.Files/Handouts/2013/F.2013/EMS.F2013.Fades.pdf", locator: "5–10 ms minimum recommendation"}
+
+  - id: tech.dialogue.cut_point_selection
+    type: technique
+    name: Choose dialogue cut points that hide
+    summary: Edits hide best in true pauses, on the attack of a hard consonant or plosive (p, t, k, b), or under a breath that is then trimmed. Cutting mid-vowel or across a falling inflection exposes the join. Keep the sentence's natural pitch fall at the end of a thought.
+    when_to_use: "Silence removal and jump cuts in talking-head and podcast clips."
+    how: ["Prefer cuts in pauses ≥150 ms (playbook rule 9)", "Else cut just before a plosive onset", "Avoid joining two rising inflections", "Check zero-crossing then add a micro-fade"]
+    parameters: {min_pause_ms: 150, prefer: "pause > plosive onset > breath"}
+    avoid_when: "Never cut inside a word or a vowel."
+    genres: [genre.talking_head, genre.podcast_clip, genre.interview, genre.tutorial]
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.cut.ripple_delete, cap.analysis.transcribe, cap.audio.fade]
+    conflicts_with: []
+    requires: [tech.dialogue.edit_fades]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Dialogue Editing for Motion Pictures (2nd ed.)", author: "John Purcell", url: "https://routledge.com/9780415828178", locator: "'Choosing the Crossfade' / editing chapters"}
+      - {title: "Craft playbook (internal)", author: "project research", url: "docs/research/craft-playbook.md", locator: "rule 9"}
+
+  - id: tech.dialogue.room_tone_fill
+    type: technique
+    name: Fill gaps with room tone
+    summary: Fill every gap between dialogue clips with clean room tone so the background never drops out. Source it from on-set recordings, clip handles, or spliced clean fragments; avoid tone containing breaths or rustles. Very short snippets looped over long gaps sound repetitive.
+    when_to_use: "Any gap, removed breath or replaced noise in dialogue."
+    how: ["Collect 30–60 s of tone at the shoot if possible", "Else harvest clean tone from handles", "Use pieces ≥10 frames; crossfade joins 20–100 ms", "Match tone level to the background under speech"]
+    parameters: {record_tone_s: "30–60", min_piece_frames: 10, join_crossfade_ms: "20–100"}
+    avoid_when: "A hard cut to silence is the creative intent (rare; see tech.silence.music_dropout — still keep tone)."
+    genres: [genre.talking_head, genre.interview, genre.podcast_clip, genre.testimonial, genre.vlog]
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.audio.room_tone_fill, cap.audio.crossfade]
+    conflicts_with: [anti.dialogue.dead_air_or_gating]
+    requires: []
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Room tone (Frame.io Workflow Guide)", author: "Frame.io", url: "https://workflow.frame.io/guide/roomtone", locator: "sourcing and uses; ~10-frame minimum"}
+      - {title: "Introduction to Dialogue Editing", author: "Post Super", url: "https://post-super.com/blog/introduction-to-dialogue-editing", locator: "30–60 s room tone"}
+
+  - id: anti.dialogue.dead_air_or_gating
+    type: anti_pattern
+    name: Dead air and hard-gated backgrounds
+    summary: Dropping to digital silence between words, or using a hard noise gate, makes the background pop in and out with speech. Viewers notice the noise more, not less. Keep a continuous low background via room tone or a gentle expander with limited range.
+    when_to_use: "Flag when the noise floor between words falls below −70 dBFS or swings > 10 dB."
+    how: ["Replace digital silence with room tone", "Replace gates with an expander (tech.voice.expander)"]
+    parameters: {flag_floor_swing_db: 10}
+    avoid_when: ""
+    genres: []
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.audio.room_tone_fill, cap.audio.expand]
+    conflicts_with: [tech.dialogue.room_tone_fill]
+    requires: []
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Audio Engineering in Professional Podcast Post-Production: Gates", author: "Finchley", url: "https://www.finchley.co.uk/finchley-learning/visual-podcast/audio-engineering-in-a-professional-podcast-post-production-tools-gates", locator: "pumping and room tone"}
+      - {title: "Room tone (Frame.io Workflow Guide)", author: "Frame.io", url: "https://workflow.frame.io/guide/roomtone", locator: "background popping in and out"}
+
+  - id: tech.dialogue.breath_attenuation
+    type: technique
+    name: Attenuate breaths, don't erase them
+    summary: Removing every breath sounds robotic and can hurt comprehension; loud breaths distract. Use target-style reduction so only loud breaths are lowered and quiet ones stay natural. In jump-cut reels, breaths inside removed gaps disappear anyway; keep the ones that frame a sentence.
+    when_to_use: "Voice-over and talking head with audible breaths, before compression (which raises them)."
+    how: ["Detect breaths (RX Breath Control or level/spectral detection)", "Target mode: bring loud breaths down to about −40 to −50 dBFS", "Or gain mode 6–12 dB for heavy breathing", "Keep pacing gaps; fill with tone if a breath is deleted"]
+    parameters: {mode: "target (preferred) | gain", gain_reduction_db: "6–12", target_level_dbfs: "-40 to -50 (heuristic)"}
+    avoid_when: "Emotional testimony where a breath carries feeling."
+    genres: [genre.talking_head, genre.tutorial, genre.podcast_clip]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.breath_reduce]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Breath Control (RX 9 Help)", author: "iZotope", url: "https://s3.amazonaws.com/izotopedownloads/docs/rx9/en/breath-control/index.html", locator: "Target vs Gain mode"}
+      - {title: "How to Remove Vocal Breaths in Mix the Right Way", author: "Music Guy Mixing", url: "https://www.musicguymixing.com/vocal-breaths/", locator: "attenuate, don't remove"}
+
+  - id: tech.dialogue.background_crossfade_at_splits
+    type: technique
+    name: Smooth background changes between takes
+    summary: Takes from different setups carry different room sound. A hard switch in background on a jump cut or split edit is audible even when the words are fine. Crossfade the backgrounds (or lay continuous tone underneath) so the change is gradual.
+    when_to_use: "Cuts between takes, locations or mic positions."
+    how: ["Extend handles of both clips", "Crossfade 100–500 ms in the pause", "Or lay one continuous room-tone bed under both and denoise each to match"]
+    parameters: {background_crossfade_ms: "100–500"}
+    avoid_when: "Intentional location change where a hard sound cut sells the jump."
+    genres: [genre.vlog, genre.interview, genre.podcast_clip]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.crossfade, cap.audio.room_tone_fill]
+    conflicts_with: []
+    requires: [tech.dialogue.room_tone_fill]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Dialogue Editing for Motion Pictures (2nd ed.)", author: "John Purcell", url: "https://routledge.com/9780415828178", locator: "room tone balancing; perspective"}
+      - {title: "Room tone (Frame.io Workflow Guide)", author: "Frame.io", url: "https://workflow.frame.io/guide/roomtone", locator: "fading background noise in/out"}
+
+  # ───────────────────────── REPAIR ─────────────────────────
+
+  - id: tech.repair.declip_dehum
+    type: technique
+    name: De-clip and de-hum only when present
+    summary: Clipping is the deepest damage, so de-clip first, after lowering gain to give reconstructed peaks headroom. De-hum removes fixed tones (50/60 Hz and harmonics) and should be applied only if hum is audible; running it on clean audio just adds risk.
+    when_to_use: "Clipped phone/lav recordings; buzz from mains or lights."
+    how: ["Detect samples at/near 0 dBFS; lower gain ~3–6 dB then de-clip", "Detect a steady 50 or 60 Hz line plus harmonics; notch only if present"]
+    parameters: {pre_declip_gain_db: "-3 to -6", hum_fundamental_hz: "50 or 60", harmonics: "up to 16"}
+    avoid_when: "No clipping / no hum detected."
+    genres: []
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.declip, cap.audio.dehum]
+    conflicts_with: []
+    requires: [principle.dialogue.repair_deepest_first]
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Order of audio repair operations", author: "iZotope", url: "https://www.izotope.com/en/learn/order-of-audio-repair-operations", locator: "De-clip and De-hum steps"}
+
+  - id: tech.repair.mouth_declick
+    type: technique
+    name: Remove mouth clicks before noise reduction
+    summary: Dry-mouth clicks and lip smacks are short transients; phone and lav recordings close to the mouth catch many. Remove them before denoise so the noise model is not skewed. Broader thumps need interpolation instead.
+    when_to_use: "Close-miked voice, voice-over, ASMR-adjacent close talk."
+    how: ["Run a mouth de-click pass at low-to-medium sensitivity", "Spot-fix remaining thumps with spectral interpolation", "Listen for dulled consonants"]
+    parameters: {position_in_chain: "after de-clip, before denoise"}
+    avoid_when: "Clean recordings."
+    genres: [genre.talking_head, genre.tutorial, genre.podcast_clip]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.declick]
+    conflicts_with: []
+    requires: [principle.dialogue.repair_deepest_first]
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Order of audio repair operations", author: "iZotope", url: "https://www.izotope.com/en/learn/order-of-audio-repair-operations", locator: "Mouth De-click and Interpolate"}
+      - {title: "8 tips for editing dialogue with RX 7", author: "iZotope", url: "https://www.izotope.com/en/learn/8-tips-for-editing-dialogue-with-rx-7", locator: "Mouth De-click first in commercial chain"}
+
+  - id: tech.repair.denoise
+    type: technique
+    name: Moderate noise reduction
+    summary: Broadband noise (AC, traffic, hiss) is reduced after clicks and hum. A dialogue-aware denoiser followed by a gentle spectral pass beats one heavy pass; reductions near 18 dB and beyond tend to leave phasey, hollow artifacts. Aim to lower noise, not erase it.
+    when_to_use: "Noisy phone or on-location dialogue."
+    how: ["Learn the noise profile from a pause", "Pass 1: voice denoise, moderate", "Pass 2: spectral denoise about 6–12 dB", "A/B against bypass; stop when artifacts appear"]
+    parameters: {total_reduction_db: "6–12 typical; ≤18 max", passes: "1–2 gentle"}
+    avoid_when: "Noise is already below the music bed — the bed will mask it."
+    genres: [genre.vlog, genre.talking_head, genre.interview, genre.event_recap]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.denoise]
+    conflicts_with: [anti.repair.over_processing]
+    requires: [principle.dialogue.repair_deepest_first]
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Order of audio repair operations", author: "iZotope", url: "https://www.izotope.com/en/learn/order-of-audio-repair-operations", locator: "Steady broadband noise step (18 dB vs Voice De-noise + −12 dB)"}
+
+  - id: tech.repair.dereverb
+    type: technique
+    name: Subtle de-reverb for roomy recordings
+    summary: Phone recordings in bare rooms sound distant. A light de-reverb pass after denoise tightens the voice; heavy settings produce warbly artifacts. Lowering sustain with a transient shaper is an alternative.
+    when_to_use: "Echoey rooms, phone held at arm's length."
+    how: ["Run after denoise", "Reduce reverb gently until the room is 'tamped down', not gone", "Re-check sibilance afterwards (de-reverb can exaggerate it)"]
+    parameters: {position_in_chain: "after denoise", strength: "subtle"}
+    avoid_when: "Dry close-mic recordings."
+    genres: [genre.vlog, genre.talking_head, genre.testimonial]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.dereverb]
+    conflicts_with: [anti.repair.over_processing]
+    requires: [tech.repair.denoise]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "8 tips for editing dialogue with RX 7", author: "iZotope", url: "https://www.izotope.com/en/learn/8-tips-for-editing-dialogue-with-rx-7", locator: "Tip 3 Dialogue De-reverb subtle"}
+      - {title: "6 ways to use Neutron 3 for post production", author: "iZotope", url: "https://www.izotope.com/en/learn/6-ways-to-use-neutron-3-for-post-production", locator: "transient shaper lowering sustain"}
+
+  - id: anti.repair.over_processing
+    type: anti_pattern
+    name: Over-processed voice
+    summary: Stacking aggressive denoise, de-reverb, de-essing and gating yields watery, lispy, pumping speech that sounds worse than mild noise. Viewers forgive some room noise; they don't forgive robotic voices.
+    when_to_use: "Flag when total denoise > 18 dB, de-ess GR > 8 dB, or artifacts audible."
+    how: ["Back off each stage by half", "Let the music bed mask residual noise", "Compare against the unprocessed clip"]
+    parameters: {flag_denoise_db_above: 18, flag_deess_gr_db_above: 8}
+    avoid_when: ""
+    genres: []
+    goals: [goal.trust, goal.clarity]
+    uses_capabilities: [cap.audio.denoise, cap.audio.deess]
+    conflicts_with: [tech.repair.denoise, tech.repair.dereverb]
+    requires: []
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Order of audio repair operations", author: "iZotope", url: "https://www.izotope.com/en/learn/order-of-audio-repair-operations", locator: "phasey artifacts at 18 dB; up to 40 dB harms voice"}
+
+  # ───────────────────────── VOICE PROCESSING ─────────────────────────
+
+  - id: tech.voice.highpass
+    type: technique
+    name: High-pass the voice
+    summary: Remove rumble, handling noise and plosive thumps below the voice with a high-pass filter around 80 Hz for lower voices and 100 Hz for higher ones. Phone speakers can't reproduce that range anyway, so it only costs headroom.
+    when_to_use: "Every voice track, first EQ move."
+    how: ["HPF at 80–100 Hz, 12–18 dB/oct", "Raise to 100–120 Hz for handheld/phone footage with handling noise", "Check the voice doesn't thin out"]
+    parameters: {cutoff_hz: "80 (lower voice) – 100 (higher voice); up to 120 for phone handling noise", slope_db_per_oct: "12–18"}
+    avoid_when: "Deep-voiced narration meant for headphones — stay at ≤80 Hz."
+    genres: []
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.highpass]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "How to EQ vocals", author: "iZotope", url: "https://www.izotope.com/en/learn/how-to-eq-vocals", locator: "low-end rumble below 80–100 Hz"}
+      - {title: "Voice EQ — the best settings", author: "Music Guy Mixing", url: "https://www.musicguymixing.com/voice-eq/", locator: "80/100 Hz HPF"}
+
+  - id: tech.voice.mud_cut
+    type: technique
+    name: Cut low-mid mud and boxiness
+    summary: Close or small-room recordings build up in roughly 200–500 Hz, making voices muffled or boxy. A wide, modest cut clears this; too much leaves the voice thin. Find the resonance by sweeping, don't cut blindly.
+    when_to_use: "Muddy, boxy or 'cardboard' voices; phone recordings in small rooms."
+    how: ["Sweep a narrow boost 200–500 Hz to find the worst band", "Cut 2–4 dB with wide Q (~1)", "Use dynamic EQ if it only builds on certain words"]
+    parameters: {band_hz: "200–500", cut_db: "-2 to -4", q: "~0.7–1.4"}
+    avoid_when: "Already-thin phone audio."
+    genres: []
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.eq]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "How to EQ vocals", author: "iZotope", url: "https://www.izotope.com/en/learn/how-to-eq-vocals", locator: "muddiness 200–500 Hz"}
+      - {title: "Here's how to use EQ to improve your podcast audio", author: "Cleanvoice", url: "https://cleanvoice.ai/blog/podcast-eq/", locator: "mud 200–400 Hz"}
+
+  - id: tech.voice.presence_boost
+    type: technique
+    name: Add presence for intelligibility
+    summary: Consonant clarity lives in roughly 2–5 kHz. A small boost around 3–5 kHz makes speech cut through music and small speakers; pair it with a de-esser because it also lifts sibilance.
+    when_to_use: "Dull voices, voices competing with a music bed."
+    how: ["Bell or shelf +1 to +3 dB at 3–5 kHz", "Follow with de-esser", "Prefer cutting mud first; boost last"]
+    parameters: {band_hz: "3000–5000", boost_db: "+1 to +3"}
+    avoid_when: "Harsh phone recordings already peaky at 2–4 kHz (cut instead)."
+    genres: []
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.eq]
+    conflicts_with: []
+    requires: [tech.voice.deess]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "How to EQ vocals", author: "iZotope", url: "https://www.izotope.com/en/learn/how-to-eq-vocals", locator: "presence 3–5 kHz"}
+
+  - id: tech.voice.compression
+    type: technique
+    name: Gentle voice compression
+    summary: Compression evens out word-to-word level so speech stays above the bed. Start around 3:1, attack 10–25 ms (lets consonants through), release 60–200 ms, with 3–6 dB gain reduction on louder phrases. More than that pumps and raises breaths and noise.
+    when_to_use: "Every speech track after level matching."
+    how: ["Ratio 2.5:1–4:1", "Attack 10–25 ms; release 60–200 ms", "Threshold for 3–6 dB GR on loud words", "Make-up gain to restore level", "Optional second stage: light limiter/leveler"]
+    parameters: {ratio: "2.5–4:1", attack_ms: "10–25 (1–5 for very peaky voices)", release_ms: "60–200", gain_reduction_db: "3–6"}
+    avoid_when: "Raw uncleaned noisy audio — compression raises the noise; clean first."
+    genres: []
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.compress]
+    conflicts_with: []
+    requires: [tech.dialogue.level_match]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "A guide to vocal compression for podcasters", author: "Acast", url: "https://www.acast.com/en/blog/a-guide-to-vocal-compression-for-podcasters", locator: "ratio/attack/release ranges"}
+      - {title: "Fairlight compressor for dialogue", author: "DaVinci Resolve Club", url: "https://davinciresolveclub.com/fairlight-compressor-dialogue/", locator: "2.5–3:1 starting range; defaults not dialogue timings"}
+
+  - id: tech.voice.deess
+    type: technique
+    name: De-ess sibilance
+    summary: Harsh s/sh/t sounds cluster around 4–10 kHz (often 5–8 kHz) and get worse after compression and presence EQ. Use a split-band de-esser that only reduces the high band, aiming for 3–6 dB reduction on sibilants and none on ordinary consonants.
+    when_to_use: "Bright voices; after compression/presence boost; earbuds listening."
+    how: ["Detection band 5–8 kHz (3–6 kHz lower voices, 6–8 kHz higher voices)", "Lower threshold until only true sibilants trigger", "3–6 dB reduction, split-band mode"]
+    parameters: {detect_band_hz: "5000–8000 (range 4000–10000)", gain_reduction_db: "3–6", mode: "split-band"}
+    avoid_when: "Dull voices — de-essing causes a lisp."
+    genres: []
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.deess]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "De-essing", author: "Wikipedia", url: "https://en.wikipedia.org/wiki/De-essing", locator: "frequency range 4–10 kHz; wide vs split band"}
+      - {title: "Order of audio repair operations", author: "iZotope", url: "https://www.izotope.com/en/learn/order-of-audio-repair-operations", locator: "De-ess before Breath Control"}
+
+  - id: tech.voice.expander
+    type: technique
+    name: Downward expander instead of a gate
+    summary: To reduce residual noise between phrases, use a gentle downward expander (about 1.5:1–2:1) with a limited range (6–15 dB) so room tone dips but never vanishes. A gate is an expander with an extreme ratio and causes pumping.
+    when_to_use: "Noise remaining after denoise; between-phrase hiss in voice-over."
+    how: ["Measure room-tone RMS in a pause", "Threshold 3–6 dB above it", "Ratio 1.5:1–2:1; range 6–15 dB", "Attack ~5 ms; release 100–250 ms"]
+    parameters: {ratio: "1.5–2:1", range_db: "6–15", threshold: "3–6 dB above room-tone RMS", attack_ms: 5, release_ms: "100–250"}
+    avoid_when: "Noise level near speech level — it won't separate them."
+    genres: [genre.talking_head, genre.podcast_clip, genre.tutorial]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.expand]
+    conflicts_with: [anti.dialogue.dead_air_or_gating]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Audio Engineering in Professional Podcast Post-Production: Expanders", author: "Finchley", url: "https://www.finchley.co.uk/finchley-learning/visual-podcast/audio-engineering-in-a-professional-podcast-post-production-tools-expanders", locator: "gentle ratios and limited range"}
+      - {title: "How to use an expander to reduce background audio noise", author: "Envato Tuts+", url: "https://photography.tutsplus.com/tutorials/how-to-use-an-expander-to-efficiently-reduce-background-audio-noise--cms-26430", locator: "1.5:1, −35 dB threshold, 5 ms attack example"}
+
+  - id: tech.voice.phone_recording_profile
+    type: technique
+    name: Treating phone-recorded voice
+    summary: Phone mics already roll off lows and apply their own processing; the usual faults are room echo, boxiness (300–600 Hz), harsh upper mids (2–4 kHz), handling noise and occasional clipping. Clean and subtract rather than boost; never add low end the listener's phone can't play.
+    when_to_use: "Footage shot on smartphones (most UGC reels)."
+    how: ["Check for clipping and AGC pumping", "HPF 100–120 Hz", "Cut boxiness 300–600 Hz −2 to −4 dB", "If harsh, cut 2–4 kHz −1 to −3 dB instead of a presence boost", "Light de-reverb; moderate denoise"]
+    parameters: {hpf_hz: "100–120", boxy_band_hz: "300–600", harsh_band_hz: "2000–4000", low_boost: "none"}
+    avoid_when: "External lav/shotgun recorded to phone — treat as normal mic."
+    genres: [genre.talking_head, genre.vlog, genre.testimonial]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.eq, cap.audio.highpass, cap.audio.dereverb, cap.audio.denoise]
+    conflicts_with: []
+    requires: [tech.voice.highpass]
+    evidence_level: single_opinion
+    confidence: low
+    sources:
+      - {title: "How to EQ vocals", author: "iZotope", url: "https://www.izotope.com/en/learn/how-to-eq-vocals", locator: "frequency regions (adapted to phone audio)"}
+      - {title: "How to Make Bass Audible on Phone Speakers", author: "LANDR", url: "https://blog.landr.com/make-bass-audible-phone-speakers", locator: "mobile low-frequency roll-off"}
+
+  - id: tech.voice.processing_chain
+    type: technique
+    name: Recommended reel voice chain
+    summary: "Default order for a speech stem: repair (de-clip → mouth de-click → de-hum if present → denoise 6–12 dB → light de-reverb → breath control), then tone and dynamics (HPF → corrective EQ → compression → presence → de-ess), then mix (duck bed, true-peak limit, normalise to −14 LUFS)."
+    when_to_use: "Default pipeline for any reel with speech; skip stages with nothing to fix."
+    how: ["Level-match clips", "Repair in deepest-damage order", "HPF 80–100 Hz; mud −2 to −4 dB at 200–500 Hz", "Compress 3:1, 10–25 ms / 60–200 ms, 3–6 dB GR", "Presence +1 to +3 dB at 3–5 kHz", "De-ess 5–8 kHz, 3–6 dB", "Optional expander 1.5:1, 6–15 dB range", "Master: −1 dBTP limit, −14 LUFS"]
+    parameters: {order: "declip, declick, dehum, denoise, dereverb, breath, hpf, eq_cut, compress, presence, deess, duck, limit, loudnorm"}
+    avoid_when: "Clean studio VO — only HPF, light compression, de-ess and loudness."
+    genres: [genre.talking_head, genre.tutorial, genre.podcast_clip, genre.interview, genre.testimonial]
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.audio.declip, cap.audio.declick, cap.audio.dehum, cap.audio.denoise, cap.audio.dereverb, cap.audio.breath_reduce, cap.audio.highpass, cap.audio.eq, cap.audio.compress, cap.audio.deess, cap.audio.duck_sidechain, cap.audio.true_peak_limit, cap.audio.loudness_normalize]
+    conflicts_with: []
+    requires: [principle.dialogue.repair_deepest_first, tech.dialogue.level_match]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Order of audio repair operations", author: "iZotope", url: "https://www.izotope.com/en/learn/order-of-audio-repair-operations", locator: "repair order"}
+      - {title: "Audio post production workflow 101", author: "iZotope", url: "https://www.izotope.com/en/learn/audio-post-production-workflow-101", locator: "clean → mix → deliver"}
+      - {title: "Review: iZotope RX 8 Advanced for podcast/spoken word", author: "Mix Online", url: "https://www.mixonline.com/recording/review-izotope-rx-8-advanced-podcast-spoken-word-how-to", locator: "practitioner chain (EQ/filters, de-ess, NR, comp, post-EQ)"}
+
+  # ───────────────────────── DUCKING ─────────────────────────
+
+  - id: tech.duck.depth
+    type: technique
+    name: Music bed depth under speech
+    summary: Under speech, keep the music stem's short-term loudness well below the voice — about 18–22 dB for busy or lyrical beds, 12–18 dB for sparse instrumentals. Broadcasters' audits found background music is a top intelligibility complaint, and BBC guidance was to bring music down a further 3–4 dB.
+    when_to_use: "Any reel with speech over music (extends playbook rule 20)."
+    how: ["Measure voice and bed short-term LUFS during speech", "Set bed 12–22 dB under voice depending on density", "Err lower for older audiences and dense mixes", "Between phrases let it rise only per tech.duck.timing"]
+    parameters: {bed_below_voice_lu_sparse: "12–18", bed_below_voice_lu_busy: "18–22", plugin_max_duck_db_default: "-20 (Vindral)", bbc_extra_reduction_db: "3–4"}
+    avoid_when: "Music-led montage without speech."
+    genres: [genre.talking_head, genre.tutorial, genre.testimonial, genre.brand_story, genre.vlog]
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.audio.duck_sidechain, cap.audio.volume_keyframe, cap.analysis.loudness_measure]
+    conflicts_with: [anti.mix.music_masks_voice]
+    requires: [principle.sound.dialogue_anchor]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Sidechain Ducking operator", author: "Vindral Composer docs", url: "https://composer-docs.vindral.com/operators/operators-sidechain-ducking.html", locator: "defaults: −30 dBFS thr, 4:1, −20 dB max"}
+      - {title: "What their telly tells them, most Brits can't always tell", author: "Hearing Health Matters (reporting BBC/Channel 4 research)", url: "https://hearinghealthmatters.org/hearingnewswatch/2011/what-their-telly-tells-them-most-brits-sometimes-cant-tell/", locator: "background music and audibility"}
+      - {title: "Craft playbook (internal)", author: "project research", url: "docs/research/craft-playbook.md", locator: "§5 Ducking; rule 20"}
+
+  - id: tech.duck.timing
+    type: technique
+    name: Ducking timing
+    summary: Start the duck just before the first word so the onset isn't masked, ramp down quickly, hold through short pauses, and recover slowly. Too-fast release lets music bounce up between words and breaths. Keyframed ducks with 300–800 ms ramps sound most natural in edited reels.
+    when_to_use: "Sidechain or keyframe ducking under speech."
+    how: ["Keyframe: begin ramp 150–300 ms before first word, reach depth by the word", "Hold through pauses < 0.7–1 s", "Recover over 300–800 ms after the phrase", "Sidechain: attack 10–20 ms, hold 100–300 ms, release 250–500 ms"]
+    parameters: {pre_roll_ms: "150–300", duck_ramp_ms: "200–500", hold_through_gap_s: "<0.7–1.0", recover_ms: "300–800", sidechain_attack_ms: "10–20", sidechain_hold_ms: "100–300", sidechain_release_ms: "250–500", ffmpeg_sidechaincompress_defaults: "attack 20, release 250"}
+    avoid_when: ""
+    genres: []
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.duck_sidechain, cap.audio.volume_keyframe]
+    conflicts_with: [anti.duck.pumping]
+    requires: [tech.duck.depth]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Sidechain Ducking operator", author: "Vindral Composer docs", url: "https://composer-docs.vindral.com/operators/operators-sidechain-ducking.html", locator: "attack/release guidance"}
+      - {title: "Adjust audio using Essential Sound (training)", author: "Indiana University IT Training", url: "https://ittrainingcontent.iu.edu/training/proba/files/pc/adjust-audio-using-essential-sound.c.html", locator: "ducking fade ~1000 ms example"}
+      - {title: "Automatic audio ducking", author: "Adobe Premiere Pro Help", url: "https://helpx.adobe.com/premiere-pro/how-to/automatic-audio-ducking.html", locator: "Sensitivity / Duck amount / Fade duration"}
+
+  - id: tech.duck.spectral_carve
+    type: technique
+    name: Carve a speech window in the music
+    summary: Instead of (or on top of) a deep level duck, dip the music only in the speech-critical band (about 1–5 kHz) when the voice is present, using sidechained dynamic EQ. The bed keeps its energy and low end while words stay clear. Research also supports downward expansion of the background over plain ducking.
+    when_to_use: "Energetic beds that sound limp when fully ducked; montage with occasional VO."
+    how: ["Dynamic EQ on music, sidechained to voice", "Dip 3–6 dB at 1–5 kHz, wide Q", "Reduce overall duck depth by a similar amount"]
+    parameters: {band_hz: "1000–5000", dip_db: "3–6"}
+    avoid_when: "Lyrical music (swap track instead; see anti.music.lyrics_under_speech)."
+    genres: [genre.montage, genre.event_recap, genre.product, genre.vlog]
+    goals: [goal.clarity, goal.energy]
+    uses_capabilities: [cap.audio.dynamic_eq, cap.audio.duck_sidechain]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "6 ways to use Neutron 3 for post production", author: "iZotope", url: "https://www.izotope.com/en/learn/6-ways-to-use-neutron-3-for-post-production", locator: "masking meter; sidechained dynamic EQ on music"}
+      - {title: "Downward dynamic range expansion versus ducking test of speech intelligibility (data)", author: "Philippa Demonte, University of Salford (2022)", url: "https://salford-repository.worktribe.com/output/3626626/downward-dynamic-range-expansion-versus-ducking-test-of-speech-intelligibility-data", locator: "abstract"}
+
+  - id: anti.duck.pumping
+    type: anti_pattern
+    name: Pumping music between words
+    summary: A fast release lets the bed surge up in every breath and comma, so the music audibly breathes against the speech. It's distracting and reads as amateur.
+    when_to_use: "Flag when the bed rises > 6 dB in gaps shorter than 700 ms."
+    how: ["Lengthen release / add hold", "Or replace with keyframed duck spanning the whole phrase"]
+    parameters: {flag_rise_db_in_short_gap: 6, short_gap_ms: 700}
+    avoid_when: "Deliberate EDM-style pump on a music-only montage."
+    genres: []
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.duck_sidechain]
+    conflicts_with: [tech.duck.timing]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Sidechain Ducking operator", author: "Vindral Composer docs", url: "https://composer-docs.vindral.com/operators/operators-sidechain-ducking.html", locator: "short releases sound pumpy"}
+      - {title: "Audio Foundations: Compression — Keying gates/compressors/ducking", author: "LinkedIn Learning", url: "https://www.lynda.com/Logic-Pro-tutorials/Keying-gates-compressors-andor-ducking/85998/96060-4.html", locator: "prefer longer release when ducking"}
+
+  - id: anti.mix.music_masks_voice
+    type: anti_pattern
+    name: Music too loud under speech
+    summary: The most common amateur mix fault — the bed sounds right on studio speakers but buries words on a phone. If any word is hard to understand at low phone volume, the bed is too loud.
+    when_to_use: "Flag when voice-minus-bed short-term difference < 12 LU during speech."
+    how: ["Lower bed per tech.duck.depth", "Check on a phone speaker at low volume"]
+    parameters: {flag_voice_minus_bed_lu_below: 12}
+    avoid_when: ""
+    genres: []
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.analysis.loudness_measure, cap.audio.duck_sidechain]
+    conflicts_with: [tech.duck.depth]
+    requires: []
+    evidence_level: study
+    confidence: medium
+    sources:
+      - {title: "What their telly tells them, most Brits can't always tell", author: "Hearing Health Matters (reporting BBC/Channel 4/Widex survey)", url: "https://hearinghealthmatters.org/hearingnewswatch/2011/what-their-telly-tells-them-most-brits-sometimes-cant-tell/", locator: "background music reduces audibility"}
+
+  # ───────────────────────── MUSIC EDITING ─────────────────────────
+
+  - id: tech.music.edit_on_bars_phrases
+    type: technique
+    name: Edit music on bars and phrases
+    summary: Shorten or extend music by removing or repeating whole bars, ideally whole 4- or 8-bar phrases, joined on matching downbeats. Edits that keep the bar grid are invisible; edits that skip half a beat are heard instantly.
+    when_to_use: "Cutting any rhythmic track to length."
+    how: ["Detect BPM and downbeats", "Pick an out-point and in-point on equivalent beats of the bar (ideally phrase starts)", "Join with a 5–20 ms crossfade placed just before the transient", "Listen across the join twice"]
+    parameters: {unit: "1 bar min; prefer 4/8/16-bar phrases", join_crossfade_ms: "5–20 before the transient"}
+    avoid_when: "Free-time ambient pads (use tech.music.ambient_crossfade)."
+    genres: [genre.montage, genre.event_recap, genre.product, genre.brand_story]
+    goals: [goal.energy, goal.watch_through]
+    uses_capabilities: [cap.analysis.beat_detect, cap.audio.crossfade, cap.audio.music_retime]
+    conflicts_with: [anti.music.off_grid_edit]
+    requires: []
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Quick tips for cutting music cues", author: "Film Editing Pro", url: "https://www.filmeditingpro.com/quick-tips-for-cutting-music-cues/", locator: "editing on beats and bars"}
+      - {title: "How to perfectly sync music with visuals", author: "RouteNote Licensing", url: "https://licensing.routenote.com/blog/?p=9560", locator: "4-bar phrases"}
+
+  - id: tech.music.mid_bar_hidden_edit
+    type: technique
+    name: Hide the music edit mid-bar on the backbeat
+    summary: Cutting from bar-end to bar-start chops drum fills and reverb tails. Move the edit into the middle of the bar, on a strong transient such as the snare backbeat, and the hit masks the join. Slipping the edit point changes nothing about total length.
+    when_to_use: "Tracks with drums where bar-line edits sound clipped."
+    how: ["Find snare/backbeat peaks in the waveform", "Cut from mid-bar to the equivalent mid-bar point", "Slip until seamless; crossfade a few ms before the hit", "Or hide the join under dialogue or an SFX hit"]
+    parameters: {edit_on: "snare backbeat (beat 2 or 4)", crossfade_ms: "5–20"}
+    avoid_when: "No percussive transient — use ambient crossfade."
+    genres: [genre.montage, genre.product, genre.vlog]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.analysis.beat_detect, cap.audio.crossfade]
+    conflicts_with: []
+    requires: [tech.music.edit_on_bars_phrases]
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Quick tips for cutting music cues", author: "Film Editing Pro", url: "https://www.filmeditingpro.com/quick-tips-for-cutting-music-cues/", locator: "snare back beat; hiding edits"}
+
+  - id: tech.music.ambient_crossfade
+    type: technique
+    name: Long crossfade for unstructured music
+    summary: Ambient, pad or drone tracks with no clear beat tolerate edits almost anywhere; join point A to point B with a long crossfade of about half a second and adjust by ear. Harmonic clashes are the main risk, so slip until chords line up.
+    when_to_use: "Atmospheric beds under talking head or testimonial."
+    how: ["Cut to length ignoring structure", "Crossfade ~0.5 s (15 frames at 30 fps)", "Slip/lengthen fade until no harmonic clash"]
+    parameters: {crossfade_s: "0.3–1.0 (start 0.5)"}
+    avoid_when: "Rhythmic music (bar grid will break)."
+    genres: [genre.talking_head, genre.testimonial, genre.brand_story]
+    goals: [goal.emotion]
+    uses_capabilities: [cap.audio.crossfade]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Quick tips for cutting music cues", author: "Film Editing Pro", url: "https://www.filmeditingpro.com/quick-tips-for-cutting-music-cues/", locator: "atmospheric tracks, ~15-frame crossfade"}
+
+  - id: tech.music.backtime_ending
+    type: technique
+    name: Backtime the music to the last frame
+    summary: Place the track's real ending so it lands on the video's end, then make the length edit earlier (mid-track, on a phrase). The song resolves naturally instead of fading or being chopped. For loopable reels, edit so the last bar flows into the first.
+    when_to_use: "Any reel using a track with a composed ending."
+    how: ["Align the musical ending to the final frame (or 0.3–0.5 s after the last word)", "Find a phrase boundary earlier where the excess can be removed", "Join with tech.music.edit_on_bars_phrases", "Loop variant: end on the bar before the downbeat that matches frame 1"]
+    parameters: {end_tail_after_last_word_s: "≤0.5 (playbook rule 29)"}
+    avoid_when: "Track has no usable ending (use tech.music.ring_out_ending)."
+    genres: [genre.montage, genre.brand_story, genre.product, genre.event_recap]
+    goals: [goal.watch_through, goal.rewatch]
+    uses_capabilities: [cap.audio.music_retime, cap.analysis.beat_detect]
+    conflicts_with: [anti.music.hard_cut_ending]
+    requires: [tech.music.edit_on_bars_phrases]
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Cap your music tracks for a smooth ending", author: "PremiumBeat", url: "https://www.premiumbeat.com/blog/cap-your-music-tracks-for-a-smooth-ending/", locator: "move the music ending to the video end"}
+      - {title: "A quick way to make any music track fit your video", author: "Frame.io Insider", url: "https://blog.frame.io/2017/11/08/make-music-fit-your-video/", locator: "whole post"}
+
+  - id: tech.music.ring_out_ending
+    type: technique
+    name: Let the final hit ring out
+    summary: If the edit must end where the music doesn't, end on a strong downbeat or hit and let it sustain — use the track's own decay or add a reverb tail of 1–3 s — rather than chopping mid-note. A clean button (short final hit) also works for punchy reels.
+    when_to_use: "Custom-length endings; CTA end cards."
+    how: ["End on a downbeat/hit", "Extend with natural decay or reverb tail 1–3 s", "Fade the tail 0.5–2 s; never cut audio before the visual end"]
+    parameters: {tail_s: "1–3", tail_fade_s: "0.5–2"}
+    avoid_when: "Loop-designed reels (a ring-out breaks the loop)."
+    genres: [genre.brand_story, genre.product, genre.montage]
+    goals: [goal.emotion, goal.brand_recall]
+    uses_capabilities: [cap.audio.reverb, cap.audio.fade]
+    conflicts_with: [anti.music.hard_cut_ending]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "A quick way to make any music track fit your video", author: "Frame.io Insider", url: "https://blog.frame.io/2017/11/08/make-music-fit-your-video/", locator: "make the final hit sting out"}
+      - {title: "How to use reverb to end a song anywhere in Premiere Pro", author: "Motion Array", url: "https://motionarray.com/tutorials/premiere-pro-tutorials/how-to/how-to-use-reverb-to-end-a-song-anywhere", locator: "decay controls tail"}
+
+  - id: tech.music.stinger_button
+    type: technique
+    name: Stinger or button on the payoff
+    summary: A stinger is a short musical gesture (about 1–3 s) that punctuates a reveal, logo or CTA; a button is the single final hit that closes a cue. They mark the end of a thought and aid brand recall without needing a full outro.
+    when_to_use: "End cards, logo, product reveal, punchline."
+    how: ["Use a library stinger/end-edit of the same track when available", "Land its transient on the reveal frame", "Duck or stop the bed 2–6 frames before"]
+    parameters: {stinger_length_s: "1–3"}
+    avoid_when: "Loopable endings; quiet emotional endings."
+    genres: [genre.product, genre.brand_story, genre.tutorial]
+    goals: [goal.brand_recall, goal.cta_conversion]
+    uses_capabilities: [cap.audio.sfx_place, cap.audio.volume_keyframe]
+    conflicts_with: [tech.music.backtime_ending]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Outro sound effects", author: "Morphic", url: "https://morphic.com/resources/sounds/outro-sound-effects", locator: "stinger vs outro song"}
+
+  - id: tech.music.riser_into_drop
+    type: technique
+    name: Build and drop on the reveal
+    summary: Tension and release — a riser or musical build of a few seconds peaks exactly on the reveal, often with a brief near-silence just before the drop or hit. The contrast makes the drop feel bigger than any level change could.
+    when_to_use: "Transformations, product reveals, before/after, the first big moment."
+    how: ["Pick a drop in the track or add an SFX riser 1–4 s long", "Align the riser peak/drop downbeat to the reveal frame", "Optional void: cut to room tone 2–10 frames before the drop", "Land a hit with the drop"]
+    parameters: {riser_length_s: "1–4", void_frames: "2–10"}
+    avoid_when: "More than 1–2 times per reel — it stops working."
+    genres: [genre.transformation, genre.product, genre.montage, genre.event_recap]
+    goals: [goal.energy, goal.watch_through, goal.rewatch]
+    uses_capabilities: [cap.audio.sfx_place, cap.analysis.beat_detect, cap.audio.volume_keyframe]
+    conflicts_with: []
+    requires: [principle.sound.dynamic_contrast]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "5 Tips for Designing Trailer Sound Effects", author: "Krotos", url: "https://krotos.studio/blog/trailer-sound-design-tips-tricks", locator: "risers and silence before impacts"}
+      - {title: "Learn how to make high-impact sounds for movies and trailers", author: "Ableton", url: "https://www.ableton.com/en/blog/learn-how-to-make-high-impact-sounds-for-movies-and-trailers/", locator: "whole article"}
+
+  - id: tech.music.beat_synced_cuts
+    type: technique
+    name: Beat-synced cutting
+    summary: "Frames per beat = fps × 60 / BPM (120 BPM at 30 fps = 15 frames). Cut on downbeats or every 2–4 beats for normal sections, every beat only at peaks. When the beat falls between frames, put the cut on or one frame before the transient so the sound is never early relative to the picture."
+    when_to_use: "Montages, recaps, music-led product reels."
+    how: ["Detect BPM and beat grid (check for half/double-time errors)", "Compute frames per beat", "Snap cuts to downbeats; vary between 1, 2 and 4 beats", "Round toward audio-late (principle.sound.av_sync_tolerance)"]
+    parameters: {frames_per_beat: "fps*60/BPM", typical_interval_beats: "2–4", peak_interval_beats: 1, rounding: "cut on or 1 frame before beat"}
+    avoid_when: "Dialogue-led reels — cut on speech, not on music."
+    genres: [genre.montage, genre.event_recap, genre.product, genre.vlog]
+    goals: [goal.energy, goal.rewatch]
+    uses_capabilities: [cap.analysis.beat_detect, cap.cut.snap_to_marker]
+    conflicts_with: [anti.music.cut_every_beat]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "BPM to FPS calculator", author: "Silverman Sound", url: "https://www.silvermansound.com/bpm-to-fps-calculator", locator: "formula"}
+      - {title: "Synced cuts and BPM: brief templates", author: "Artfolio", url: "https://www.artfolio.com/article/synced-cuts-and-bpm-brief-templates-that-align-artists-with-music-video-crews", locator: "multi-beat intervals; vary cut rate"}
+
+  - id: tech.music.tempo_energy_match
+    type: technique
+    name: Match music energy to content
+    summary: Choose tempo and density to fit the content's pace and emotion; music that is faster or busier than the speech fights it. Rough starting bands — reflective/testimonial 60–90 BPM, explainer beds 85–110 BPM sparse, hype montage 120–140+ BPM — are heuristics, not standards.
+    when_to_use: "Picking a track before editing."
+    how: ["Classify mood and speech rate", "Pick tempo band and arrangement density", "Prefer tracks whose energy rises where the reel's payoff is"]
+    parameters: {reflective_bpm: "60–90", explainer_bpm: "85–110", hype_bpm: "120–140+"}
+    avoid_when: "Trend-sound formats where the sound itself is the content."
+    genres: [genre.talking_head, genre.montage, genre.testimonial, genre.product]
+    goals: [goal.emotion, goal.energy]
+    uses_capabilities: [cap.analysis.beat_detect, cap.audio.music_select]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: low
+    sources:
+      - {title: "How to choose the right BPM for your video", author: "Artlist", url: "https://artlist.io/blog/?p=7077", locator: "whole post (not fully reviewed; numbers here are heuristic)"}
+      - {title: "Designing a Movie for Sound", author: "Randy Thom", url: "https://filmsound.org/articles/designing_for_sound.htm", locator: "sound works on emotion"}
+
+  - id: tech.music.auto_retime
+    type: technique
+    name: Automatic music retiming
+    summary: Tools like Premiere's Remix re-edit a track to a target length by recombining segments; Adobe states results land within 5 s of target, usually within 1 s. Works best on instrumental, structured music; struggles with lyrics and with lengthening short clips.
+    when_to_use: "Quick length fits; first pass before manual polish."
+    how: ["Set target duration", "Adjust segment/variation settings if repeats are obvious", "Verify the end lands where needed; fix the last second manually"]
+    parameters: {accuracy_s: "≤5, typically ≤1"}
+    avoid_when: "Lyrical tracks; needs exact frame landing of a hit."
+    genres: []
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.audio.music_retime]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: high
+    sources:
+      - {title: "Remix tool considerations in Premiere", author: "Adobe", url: "https://helpx.adobe.com/premiere/desktop/add-audio-effects/apply-audio-effects/remix-tool-considerations-in-premiere.html", locator: "accuracy statement"}
+      - {title: "The new Remix tool in Adobe Premiere Pro", author: "Larry Jordan", url: "https://larryjordan.com/articles/the-new-remix-tool-in-adobe-premiere-pro-beta", locator: "limits on lyrical/short clips"}
+
+  - id: tech.music.phrase_aligned_start
+    type: technique
+    name: Start music on a phrase or fade it in
+    summary: Music entering mid-phrase sounds like a mistake. Start on the downbeat of a phrase (ideally aligned to the first cut or hook word), or start mid-track with a 200–500 ms fade-in under speech so the entry is not exposed.
+    when_to_use: "Opening of every reel with music; re-entry after a dropout."
+    how: ["Choose an in-point on a phrase downbeat", "Align that downbeat with frame 0 or the first visual change", "Otherwise fade in 200–500 ms"]
+    parameters: {fade_in_ms: "200–500"}
+    avoid_when: "Cold-open music sting where the hit IS the hook."
+    genres: []
+    goals: [goal.retention_first_3s]
+    uses_capabilities: [cap.analysis.beat_detect, cap.audio.fade]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "How to perfectly sync music with visuals", author: "RouteNote Licensing", url: "https://licensing.routenote.com/blog/?p=9560", locator: "phrases as cut units"}
+      - {title: "Trimming music for time", author: "Videomaker", url: "https://www.videomaker.com/article/c4/15659-trimming-music-for-time", locator: "whole article"}
+
+  - id: anti.music.off_grid_edit
+    type: anti_pattern
+    name: Off-grid music edit
+    summary: A music edit that drops or adds a fraction of a beat, or joins mismatched chords, produces an audible stumble that even non-musicians notice. It is the clearest sign of an amateur music cut.
+    when_to_use: "Flag when an internal music edit is > 20 ms off the detected beat grid."
+    how: ["Re-snap both sides to beat positions", "Hide under dialogue or an SFX hit if unavoidable"]
+    parameters: {flag_offset_ms: 20}
+    avoid_when: ""
+    genres: []
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.analysis.beat_detect]
+    conflicts_with: [tech.music.edit_on_bars_phrases]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Quick tips for cutting music cues", author: "Film Editing Pro", url: "https://www.filmeditingpro.com/quick-tips-for-cutting-music-cues/", locator: "beats and bars"}
+
+  - id: anti.music.cut_every_beat
+    type: anti_pattern
+    name: Cutting on every single beat
+    summary: Cutting on every beat for the whole reel becomes monotonous and tiring; the sync stops registering. Use beat cuts as an accent and vary intervals so peaks stand out.
+    when_to_use: "Flag when > 80% of cuts fall on consecutive beats for > 8 s."
+    how: ["Mix 1-, 2- and 4-beat intervals", "Reserve every-beat cutting for the peak section"]
+    parameters: {flag_consecutive_beat_ratio: 0.8, flag_span_s: 8}
+    avoid_when: ""
+    genres: [genre.montage, genre.event_recap]
+    goals: [goal.energy]
+    uses_capabilities: [cap.analysis.beat_detect]
+    conflicts_with: [tech.music.beat_synced_cuts]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Synced cuts and BPM: brief templates", author: "Artfolio", url: "https://www.artfolio.com/article/synced-cuts-and-bpm-brief-templates-that-align-artists-with-music-video-crews", locator: "cutting every beat can exhaust viewers"}
+      - {title: "How to perfectly sync music with visuals", author: "RouteNote Licensing", url: "https://licensing.routenote.com/blog/?p=9560", locator: "beat sync can be overused"}
+
+  - id: anti.music.hard_cut_ending
+    type: anti_pattern
+    name: Music chopped at the end
+    summary: Music that stops mid-note or fades abruptly when the picture ends tells the viewer the edit was forced. Either backtime a real ending, end on a hit with a tail, or design a seamless loop.
+    when_to_use: "Flag when music level at the last frame is within 6 dB of its average and not on a downbeat."
+    how: ["Apply tech.music.backtime_ending or tech.music.ring_out_ending"]
+    parameters: {}
+    avoid_when: "Loop-designed reels where the cut back to frame 1 continues the bar."
+    genres: []
+    goals: [goal.rewatch]
+    uses_capabilities: [cap.audio.fade, cap.audio.music_retime]
+    conflicts_with: [tech.music.backtime_ending, tech.music.ring_out_ending]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Cap your music tracks for a smooth ending", author: "PremiumBeat", url: "https://www.premiumbeat.com/blog/cap-your-music-tracks-for-a-smooth-ending/", locator: "whole post"}
+
+  - id: anti.music.lyrics_under_speech
+    type: anti_pattern
+    name: Sung lyrics under speech
+    summary: Listeners try to parse both the speaker and the singer; ducking alone rarely fixes it. Use instrumentals under speech, or place vocal sections only where nobody talks.
+    when_to_use: "Flag any vocal stem overlapping dialogue."
+    how: ["Swap to instrumental version", "Or stem-separate and drop vocals under speech", "Or move vocal phrases into non-speech gaps"]
+    parameters: {}
+    avoid_when: "Trend-audio lip-sync formats (the song is the content)."
+    genres: [genre.talking_head, genre.tutorial, genre.testimonial, genre.podcast_clip]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.stem_separate, cap.audio.music_select]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Background music volume under voiceover", author: "Overseer OS blog", url: "https://www.overseeros.com/blog/background-music-volume-under-voiceover", locator: "lyrics vs narration"}
+      - {title: "Effect of background music arrangement and tempo on foreground speech intelligibility (data)", author: "P. Demonte, University of Salford", url: "https://salford-repository.worktribe.com/output/3636737/effect-of-background-music-arrangement-and-tempo-on-foreground-speech-intelligibility-listening-experiment-data-and-statistical-analyses-spreadsheets", locator: "abstract"}
+
+  # ───────────────────────── SFX ─────────────────────────
+
+  - id: tech.sfx.whoosh_transition
+    type: technique
+    name: Whoosh on whip/slide transitions
+    summary: A whoosh sells motion between shots. Match its length to the transition (±100 ms), put its loudest point on the cut frame, and pan it with the on-screen direction of movement.
+    when_to_use: "Whip pans, slides, zoom transitions, fast text flies."
+    how: ["Pick whoosh duration ≈ transition duration ±100 ms", "Align peak to the cut frame", "Pan L→R or R→L with motion", "Sit 8–15 dB below voice if speech overlaps"]
+    parameters: {length_match_ms: "±100", peak_at: "cut frame", level_below_voice_db: "8–15"}
+    avoid_when: "Plain hard cuts with no visual motion (playbook rule 22)."
+    genres: [genre.montage, genre.product, genre.vlog, genre.tutorial]
+    goals: [goal.energy]
+    uses_capabilities: [cap.audio.sfx_place, cap.audio.pan]
+    conflicts_with: [anti.sfx.overuse]
+    requires: [principle.sound.synchresis]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "5 Tips for Designing Trailer Sound Effects", author: "Krotos", url: "https://krotos.studio/blog/trailer-sound-design-tips-tricks", locator: "whooshes; pan/volume automation"}
+      - {title: "Craft playbook (internal)", author: "project research", url: "docs/research/craft-playbook.md", locator: "rule 23"}
+
+  - id: tech.sfx.hit_on_impact
+    type: technique
+    name: Hit on the impact frame
+    summary: Impacts, punch-ins and big text slams get a hit whose transient lands on the exact frame of the visual event (or one frame later, never earlier). Nudge by frames until the transient and picture fuse.
+    when_to_use: "Emphasis punch-ins, reveals, object drops, stat callouts."
+    how: ["Find the impact frame", "Align hit transient to it (0 to +1 frame)", "Duck bed 3–6 dB for 100–300 ms around it"]
+    parameters: {offset_frames: "0 to +1", bed_dip_db: "3–6", bed_dip_ms: "100–300"}
+    avoid_when: "Over a spoken word's stressed syllable — it masks the word."
+    genres: [genre.product, genre.montage, genre.tutorial, genre.transformation]
+    goals: [goal.energy, goal.rewatch]
+    uses_capabilities: [cap.audio.sfx_place, cap.audio.volume_keyframe]
+    conflicts_with: [anti.sfx.overuse]
+    requires: [principle.sound.av_sync_tolerance]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "5 Tips for Designing Trailer Sound Effects", author: "Krotos", url: "https://krotos.studio/blog/trailer-sound-design-tips-tricks", locator: "hits triggered for sync; punches matched to picture"}
+      - {title: "Audio-to-video synchronization", author: "Wikipedia (ITU-R BT.1359)", url: "https://en.wikipedia.org/wiki/Audio-to-video_synchronization", locator: "detectability thresholds"}
+
+  - id: tech.sfx.pop_on_text
+    type: technique
+    name: Pop/click on text and UI elements
+    summary: Short, bright pops, clicks or swipes (50–200 ms) on text-in, sticker or UI events add tactility. Keep them light — clearly under the voice — and consistent within a reel so they read as a design language.
+    when_to_use: "Text appearances, checklist items, UI/screen-recording demos."
+    how: ["Place transient on text-in frame", "Level 10–15 dB below voice", "Use one sound family per reel; vary pitch slightly"]
+    parameters: {length_ms: "50–200", level_below_voice_db: "10–15"}
+    avoid_when: "Every word-by-word caption cue — far too many."
+    genres: [genre.tutorial, genre.product, genre.talking_head]
+    goals: [goal.clarity, goal.energy]
+    uses_capabilities: [cap.audio.sfx_place]
+    conflicts_with: [anti.sfx.overuse]
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Craft playbook (internal; video-use practice)", author: "project research", url: "docs/research/craft-playbook.md", locator: "§5 SFX; rule 23"}
+
+  - id: tech.sfx.layering
+    type: technique
+    name: Layer hits for small speakers
+    summary: Designed impacts are built from a transient/click layer, a mid 'body' layer and a sub layer, each EQ'd into its own band. On phones the sub disappears, so the transient and body (roughly 150 Hz–4 kHz) must carry the impact.
+    when_to_use: "Creating or choosing hits, booms, drops."
+    how: ["Layer transient + body + sub", "EQ each layer to its band to avoid clashes", "Check with HPF at 200–300 Hz — the hit must still read"]
+    parameters: {layers: "transient, body, sub", body_band_hz: "150–4000"}
+    avoid_when: ""
+    genres: [genre.product, genre.montage, genre.transformation]
+    goals: [goal.energy]
+    uses_capabilities: [cap.audio.eq, cap.audio.sfx_place]
+    conflicts_with: []
+    requires: [principle.sound.small_speaker_translation]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Learn how to make high-impact sounds for movies and trailers", author: "Ableton", url: "https://www.ableton.com/en/blog/learn-how-to-make-high-impact-sounds-for-movies-and-trailers/", locator: "layering impacts"}
+      - {title: "How to Make Bass Audible on Phone Speakers", author: "LANDR", url: "https://blog.landr.com/make-bass-audible-phone-speakers", locator: "harmonics for small speakers"}
+
+  - id: tech.sfx.variation
+    type: technique
+    name: Vary repeated SFX
+    summary: The same sample on consecutive events sounds mechanical. Rotate between variants and add slight random pitch/speed changes so repeated whooshes or pops feel organic.
+    when_to_use: "Any SFX used more than twice in a reel."
+    how: ["Keep 3–5 variants per SFX type", "Never repeat a sample on consecutive events", "Randomise pitch ±1–2 semitones"]
+    parameters: {variants_per_type: "3–5", pitch_jitter_semitones: "±1–2"}
+    avoid_when: "A deliberate signature sound (brand sonic logo)."
+    genres: []
+    goals: [goal.energy]
+    uses_capabilities: [cap.audio.sfx_place, cap.audio.pitch_shift]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "5 Tips for Designing Trailer Sound Effects", author: "Krotos", url: "https://krotos.studio/blog/trailer-sound-design-tips-tricks", locator: "randomised banks; playback-speed variation"}
+
+  - id: tech.sfx.level_under_voice
+    type: technique
+    name: Keep SFX from masking words
+    summary: An SFX peak on top of a stressed syllable erases the word. Place SFX in the gaps between words where possible, or keep them 8–15 dB below the voice and filter their speech-band content when they must overlap.
+    when_to_use: "Any SFX during speech."
+    how: ["Check word timestamps around the SFX", "Shift within ±2 frames toward a gap if the visual allows", "Else lower 8–15 dB and/or dip 1–4 kHz in the SFX"]
+    parameters: {level_below_voice_db: "8–15", max_shift_frames: 2}
+    avoid_when: ""
+    genres: [genre.talking_head, genre.tutorial, genre.podcast_clip]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.audio.sfx_place, cap.analysis.transcribe, cap.audio.eq]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "5 Tips for Designing Trailer Sound Effects", author: "Krotos", url: "https://krotos.studio/blog/trailer-sound-design-tips-tricks", locator: "mix levels vs dialogue"}
+      - {title: "Netflix Sound Mix Specifications & Best Practices", author: "Netflix", url: "https://backlothelp.netflix.com/hc/en-us/articles/360001794307-Netflix-Sound-Mix-Specifications-Best-Practices-v1-5", locator: "dialogue intelligibility priority"}
+
+  - id: tech.sfx.nat_sound_bed
+    type: technique
+    name: Natural sound under b-roll
+    summary: B-roll with its own sync sound (pour, click, crowd, keyboard) or a matching ambience feels real; silent b-roll over music feels like stock. Keep nat sound low under speech and let it pop up briefly in gaps.
+    when_to_use: "B-roll inserts, product close-ups, vlog location shots."
+    how: ["Keep the clip's original audio or add matching foley/ambience", "Under speech: 20–30 dB below voice", "In gaps: raise for 0.3–1 s 'nat pops'"]
+    parameters: {under_speech_below_voice_db: "20–30", nat_pop_length_s: "0.3–1"}
+    avoid_when: "Noisy or distracting original audio."
+    genres: [genre.vlog, genre.product, genre.event_recap, genre.brand_story]
+    goals: [goal.trust, goal.emotion]
+    uses_capabilities: [cap.audio.volume_keyframe, cap.audio.sfx_place]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "5 Tips for Designing Trailer Sound Effects", author: "Krotos", url: "https://krotos.studio/blog/trailer-sound-design-tips-tricks", locator: "ambience layers ground the scene"}
+      - {title: "Audio-Vision: Sound on Screen", author: "Michel Chion", url: "https://econtact.ca/19_2/basanta_synchresis.html", locator: "added value of sound to image"}
+
+  - id: anti.sfx.overuse
+    type: anti_pattern
+    name: SFX on every cut
+    summary: When every edit gets a boom or whoosh, none of them land and the reel reads as a template. Reserve SFX for visible events and key beats; about 8 per minute reads as designed, ~20 as generic.
+    when_to_use: "Flag when SFX > 8 per 60 s or the same SFX on consecutive cuts."
+    how: ["Keep only SFX tied to visible motion or emphasis", "Prioritise the hook, reveal and payoff"]
+    parameters: {max_per_60s: 8, max_same_consecutive: 1}
+    avoid_when: ""
+    genres: []
+    goals: [goal.energy, goal.trust]
+    uses_capabilities: [cap.audio.sfx_place]
+    conflicts_with: [tech.sfx.whoosh_transition, tech.sfx.hit_on_impact, tech.sfx.pop_on_text]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Sound Design for Trailers", author: "Violet Recording", url: "https://violetrecording.com/sound-design-for-trailers/", locator: "a boom on every edit"}
+      - {title: "Craft playbook (internal)", author: "project research", url: "docs/research/craft-playbook.md", locator: "rule 22"}
+
+  # ───────────────────────── SILENCE & SPLIT EDITS ─────────────────────────
+
+  - id: tech.silence.music_dropout
+    type: technique
+    name: Music dropout before the key line
+    summary: Cutting the music (to room tone, not digital silence) for 0.3–1 s right before a punchline, stat or confession focuses attention like a spotlight. The bed's return afterwards adds lift.
+    when_to_use: "Punchlines, key claims, emotional admissions — once or twice per reel."
+    how: ["Fade or cut music 0.3–1 s before the line (cut on a beat)", "Keep room tone", "Bring music back on the next downbeat, optionally with a hit"]
+    parameters: {dropout_s: "0.3–1.0", max_per_reel: 2}
+    avoid_when: "Information-dense tutorials; first 2 s (risk of looking broken)."
+    genres: [genre.talking_head, genre.testimonial, genre.brand_story, genre.podcast_clip]
+    goals: [goal.emotion, goal.shares_saves]
+    uses_capabilities: [cap.audio.volume_keyframe, cap.audio.room_tone_fill]
+    conflicts_with: []
+    requires: [principle.sound.dynamic_contrast]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "5 Tips for Designing Trailer Sound Effects", author: "Krotos", url: "https://krotos.studio/blog/trailer-sound-design-tips-tricks", locator: "silence as contrast; void"}
+      - {title: "Designing a Movie for Sound", author: "Randy Thom", url: "https://filmsound.org/articles/designing_for_sound.htm", locator: "space for sound"}
+
+  - id: tech.silence.linger_after_peak
+    type: technique
+    name: Hold a beat after the emotional peak
+    summary: Thom argues editors trim away the moments after a line that let audiences feel it. At one emotional peak per reel, keep 0.5–1.5 s of held reaction with room tone or a sustained note — an intentional exception to aggressive silence removal.
+    when_to_use: "Testimonials, confessions, transformations — the single emotional peak."
+    how: ["Identify the peak line", "Keep 0.5–1.5 s after it (exempt from silence removal)", "Hold music low or on a sustained chord"]
+    parameters: {hold_s: "0.5–1.5", max_per_reel: 1}
+    avoid_when: "Fast tutorials and hooks."
+    genres: [genre.testimonial, genre.brand_story, genre.transformation]
+    goals: [goal.emotion]
+    uses_capabilities: [cap.cut.trim]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: low
+    sources:
+      - {title: "Designing a Movie for Sound", author: "Randy Thom", url: "https://filmsound.org/articles/designing_for_sound.htm", locator: "lingering after dialogue ends"}
+
+  - id: tech.split.j_cut_audio_lead
+    type: technique
+    name: J-cut from the sound side
+    summary: Let the next section's audio (voice, ambience or music) start before its picture so the cut feels motivated. Dialogue leads typically 6–12 frames (200–400 ms); ambience or music pre-laps can run 0.5–1 s. Crossfade the outgoing background under the lead.
+    when_to_use: "Section transitions, cutting to a new speaker or location (extends playbook rule 25)."
+    how: ["Unlink A/V", "Extend incoming audio earlier by 6–12 frames (speech) or 15–30 (ambience/music)", "Crossfade backgrounds 100–300 ms"]
+    parameters: {speech_lead_frames_30fps: "6–12", ambience_lead_frames_30fps: "15–30", bg_crossfade_ms: "100–300"}
+    avoid_when: "Very first frame of the reel (no previous shot)."
+    genres: [genre.interview, genre.vlog, genre.brand_story, genre.podcast_clip]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.cut.split_edit, cap.audio.crossfade]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "J-cuts and L-cuts", author: "Adobe", url: "https://www.adobe.com/creativecloud/video/discover/j-cut-and-l-cut.html", locator: "definitions"}
+      - {title: "J-cuts and L-cuts dialogue edits", author: "CapCut", url: "https://www.capcut.com/create/j-cuts-and-l-cuts-dialogue-edits", locator: "6–12 frame lead (single vendor)"}
+
+  - id: tech.split.l_cut_audio_tail
+    type: technique
+    name: L-cut and sound bridges
+    summary: Let the outgoing audio continue under the next picture — a line finishing over a reaction or b-roll, or music carrying across scene changes as a sound bridge. It smooths jump-heavy edits and ties montage segments together.
+    when_to_use: "Cutting to b-roll mid-sentence; montage segments; reactions."
+    how: ["Extend outgoing audio 6–15 frames under the new shot", "Fade its tail 100–300 ms", "For montages, keep one continuous music track across cuts"]
+    parameters: {tail_frames_30fps: "6–15", tail_fade_ms: "100–300"}
+    avoid_when: "Hard tonal/topic changes that should feel abrupt."
+    genres: [genre.vlog, genre.montage, genre.interview, genre.event_recap]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.cut.split_edit, cap.audio.fade]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "A video editor's guide to J-cuts and L-cuts", author: "Soundstripe", url: "https://www.soundstripe.com/blogs/a-video-editors-guide-to-j-cuts-and-l-cuts", locator: "L-cut definition"}
+      - {title: "L and J cuts: smoother, more cinematic", author: "Boris FX", url: "https://borisfx.com/blog/l-and-j-cuts-smoother-more-cinematic/", locator: "whole post"}
+
+  # ───────────────────────── GENRE MIX PROFILES ─────────────────────────
+
+  - id: tech.mix.profile_talking_head
+    type: technique
+    name: Mix profile — talking head / tutorial
+    summary: Voice is everything. Full repair+voice chain, sparse instrumental bed 18–22 dB under the voice (or none), SFX only on text/zoom events at ≤8/min, music dropout on the key line, master −14 LUFS.
+    when_to_use: "Educational, opinion, explainer reels."
+    how: ["tech.voice.processing_chain", "Instrumental bed, low density", "Pops on text, hits on punch-ins only", "One dropout or hold at the peak"]
+    parameters: {bed_below_voice_lu: "18–22", sfx_per_min: "≤8"}
+    avoid_when: ""
+    genres: [genre.talking_head, genre.tutorial]
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.audio.duck_sidechain, cap.audio.sfx_place, cap.audio.loudness_normalize]
+    conflicts_with: []
+    requires: [tech.voice.processing_chain, tech.duck.depth]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Netflix Sound Mix Specifications & Best Practices", author: "Netflix", url: "https://backlothelp.netflix.com/hc/en-us/articles/360001794307-Netflix-Sound-Mix-Specifications-Best-Practices-v1-5", locator: "dialogue anchor"}
+      - {title: "Craft playbook (internal)", author: "project research", url: "docs/research/craft-playbook.md", locator: "rules 19–22"}
+
+  - id: tech.mix.profile_podcast_clip
+    type: technique
+    name: Mix profile — podcast / interview clip
+    summary: Two or more voices must sit within about 1 LU of each other; crosstalk and room tone continuity matter more than music. Often no bed at all, or a very low one; SFX minimal. Use AES TD1008 speech logic, then master to −14 for the reel.
+    when_to_use: "Clips from podcasts, interviews, panels."
+    how: ["Level-match each speaker separately", "Process each mic with its own chain", "Keep room tone continuous across speaker cuts", "Bed optional at ≥20 dB under"]
+    parameters: {speaker_match_lu: "±1", bed_below_voice_lu: "≥20 or none"}
+    avoid_when: ""
+    genres: [genre.podcast_clip, genre.interview]
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.audio.clip_gain, cap.audio.room_tone_fill, cap.analysis.loudness_measure]
+    conflicts_with: []
+    requires: [tech.dialogue.level_match]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "AES TD1008 explained", author: "Production Advice", url: "https://productionadvice.co.uk/td1008/", locator: "speech −18 LUFS"}
+      - {title: "Room tone (Frame.io Workflow Guide)", author: "Frame.io", url: "https://workflow.frame.io/guide/roomtone", locator: "gap filling"}
+
+  - id: tech.mix.profile_montage
+    type: technique
+    name: Mix profile — montage / event recap
+    summary: Music is the anchor and plays near full level; cuts follow the beat grid with varied intervals; nat-sound pops and a few designed hits/whooshes punctuate; one build-and-drop. Any VO ducks the bed or carves a speech window.
+    when_to_use: "Event recaps, travel, sports, highlight reels."
+    how: ["Pick track by energy; backtime ending", "Beat-synced cuts (2–4 beats, 1 at peak)", "Nat pops in gaps", "One riser→drop on the best moment"]
+    parameters: {music_role: "anchor", cut_interval_beats: "1–4"}
+    avoid_when: ""
+    genres: [genre.montage, genre.event_recap]
+    goals: [goal.energy, goal.rewatch]
+    uses_capabilities: [cap.analysis.beat_detect, cap.audio.music_retime, cap.audio.sfx_place]
+    conflicts_with: []
+    requires: [tech.music.beat_synced_cuts, tech.music.backtime_ending]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Quick tips for cutting music cues", author: "Film Editing Pro", url: "https://www.filmeditingpro.com/quick-tips-for-cutting-music-cues/", locator: "whole post"}
+      - {title: "5 Tips for Designing Trailer Sound Effects", author: "Krotos", url: "https://krotos.studio/blog/trailer-sound-design-tips-tricks", locator: "tension/release"}
+
+  - id: tech.mix.profile_vlog
+    type: technique
+    name: Mix profile — vlog
+    summary: Mixed sources (phone, ambient, wind). Prioritise consistent voice level and smoothed background changes; let music swell between talking segments and drop under speech; keep nat sound to sell place.
+    when_to_use: "Day-in-the-life, travel, behind-the-scenes."
+    how: ["Denoise moderately; crossfade backgrounds at cuts", "Music up in gaps, ducked under speech", "Nat-sound pops on b-roll"]
+    parameters: {music_swell_in_gaps_db: "+6 to +10 above ducked level"}
+    avoid_when: ""
+    genres: [genre.vlog]
+    goals: [goal.trust, goal.emotion]
+    uses_capabilities: [cap.audio.denoise, cap.audio.duck_sidechain, cap.audio.volume_keyframe]
+    conflicts_with: []
+    requires: [tech.dialogue.background_crossfade_at_splits, tech.sfx.nat_sound_bed]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Room tone (Frame.io Workflow Guide)", author: "Frame.io", url: "https://workflow.frame.io/guide/roomtone", locator: "background continuity"}
+      - {title: "Sidechain Ducking operator", author: "Vindral Composer docs", url: "https://composer-docs.vindral.com/operators/operators-sidechain-ducking.html", locator: "ducking behaviour"}
+
+  - id: tech.mix.profile_product
+    type: technique
+    name: Mix profile — product / ad
+    summary: Crisp, deliberate sound design — foley-like clicks and UI pops on interactions, a riser into the reveal, a hit or stinger on the logo/CTA, energetic but instrumental music. Restraint still applies — every SFX tied to a visible event.
+    when_to_use: "Product demos, unboxings, app walkthroughs, ads."
+    how: ["Foley/pops on interactions", "Riser→hit on reveal", "Stinger/button on CTA", "≤8 SFX per minute"]
+    parameters: {sfx_per_min: "≤8"}
+    avoid_when: ""
+    genres: [genre.product]
+    goals: [goal.brand_recall, goal.cta_conversion, goal.energy]
+    uses_capabilities: [cap.audio.sfx_place, cap.audio.music_select]
+    conflicts_with: []
+    requires: [tech.music.riser_into_drop, tech.music.stinger_button]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Kantar report on sound on TikTok", author: "TikTok for Business", url: "https://ads.tiktok.com/business/en-US/blog/kantar-report-how-brands-are-making-noise-and-driving-impact-with-sound-on-tiktok", locator: "audio ads and purchase intent"}
+      - {title: "Outro sound effects", author: "Morphic", url: "https://morphic.com/resources/sounds/outro-sound-effects", locator: "stingers"}
+
+  - id: tech.mix.profile_testimonial
+    type: technique
+    name: Mix profile — testimonial / brand story
+    summary: Emotion first. Slower, sparse music (often ambient, crossfade-edited) well under the voice, almost no SFX, breaths left natural, a music swell only in gaps, one held beat or dropout at the emotional peak, and a ring-out ending.
+    when_to_use: "Customer stories, founder stories, emotional brand pieces."
+    how: ["Gentle voice chain; keep breaths", "Ambient bed 18–22 dB under", "One linger/dropout at the peak", "Ring-out ending"]
+    parameters: {bed_below_voice_lu: "18–22", sfx_per_min: "0–3"}
+    avoid_when: ""
+    genres: [genre.testimonial, genre.brand_story]
+    goals: [goal.emotion, goal.trust]
+    uses_capabilities: [cap.audio.duck_sidechain, cap.audio.crossfade, cap.audio.reverb]
+    conflicts_with: []
+    requires: [tech.silence.linger_after_peak, tech.music.ring_out_ending]
+    evidence_level: theory
+    confidence: low
+    sources:
+      - {title: "Designing a Movie for Sound", author: "Randy Thom", url: "https://filmsound.org/articles/designing_for_sound.htm", locator: "restraint; space for sound"}
+      - {title: "Quick tips for cutting music cues", author: "Film Editing Pro", url: "https://www.filmeditingpro.com/quick-tips-for-cutting-music-cues/", locator: "atmospheric tracks"}

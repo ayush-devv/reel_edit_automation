@@ -1,0 +1,590 @@
+{
+ "model": "mlx-community/whisper-large-v3-turbo",
+ "language": "en",
+ "elapsed_s": 4.6,
+ "text": " Guys, any business you're doing, I would suggest, don't look anywhere, just come straight away to them. Hi, I'm Madhsa Reddy, the founder of Diorma. This is a team of super creative people and the work is absolutely world class, I can say. Nothing more than that. I don't have any better words than that. The whole team is like super efficient and super on time. I can say that they under commit and over deliver. That's probably their USP. That is Wortham Creative Agency and I can't tell how grateful I am to have found them.",
+ "words": [
+  {
+   "w": "Guys,",
+   "start": 0.0,
+   "end": 0.38,
+   "p": 0.905
+  },
+  {
+   "w": "any",
+   "start": 0.8,
+   "end": 1.38,
+   "p": 0.972
+  },
+  {
+   "w": "business",
+   "start": 1.38,
+   "end": 1.7,
+   "p": 0.999
+  },
+  {
+   "w": "you're",
+   "start": 1.7,
+   "end": 1.96,
+   "p": 0.935
+  },
+  {
+   "w": "doing,",
+   "start": 1.96,
+   "end": 2.18,
+   "p": 1.0
+  },
+  {
+   "w": "I",
+   "start": 2.48,
+   "end": 2.98,
+   "p": 0.994
+  },
+  {
+   "w": "would",
+   "start": 2.98,
+   "end": 3.1,
+   "p": 0.995
+  },
+  {
+   "w": "suggest,",
+   "start": 3.1,
+   "end": 3.54,
+   "p": 0.999
+  },
+  {
+   "w": "don't",
+   "start": 3.78,
+   "end": 5.08,
+   "p": 0.994
+  },
+  {
+   "w": "look",
+   "start": 5.08,
+   "end": 5.28,
+   "p": 0.998
+  },
+  {
+   "w": "anywhere,",
+   "start": 5.28,
+   "end": 5.66,
+   "p": 0.982
+  },
+  {
+   "w": "just",
+   "start": 5.74,
+   "end": 5.9,
+   "p": 0.999
+  },
+  {
+   "w": "come",
+   "start": 5.9,
+   "end": 6.1,
+   "p": 0.998
+  },
+  {
+   "w": "straight",
+   "start": 6.1,
+   "end": 6.34,
+   "p": 0.999
+  },
+  {
+   "w": "away",
+   "start": 6.34,
+   "end": 6.58,
+   "p": 0.92
+  },
+  {
+   "w": "to",
+   "start": 6.58,
+   "end": 6.72,
+   "p": 0.931
+  },
+  {
+   "w": "them.",
+   "start": 6.72,
+   "end": 6.96,
+   "p": 0.415
+  },
+  {
+   "w": "Hi,",
+   "start": 11.68,
+   "end": 12.32,
+   "p": 0.978
+  },
+  {
+   "w": "I'm",
+   "start": 12.5,
+   "end": 12.74,
+   "p": 0.984
+  },
+  {
+   "w": "Madhsa",
+   "start": 12.74,
+   "end": 13.06,
+   "p": 0.396
+  },
+  {
+   "w": "Reddy,",
+   "start": 13.06,
+   "end": 13.34,
+   "p": 0.929
+  },
+  {
+   "w": "the",
+   "start": 13.54,
+   "end": 13.62,
+   "p": 0.988
+  },
+  {
+   "w": "founder",
+   "start": 13.62,
+   "end": 13.92,
+   "p": 0.991
+  },
+  {
+   "w": "of",
+   "start": 13.92,
+   "end": 14.4,
+   "p": 1.0
+  },
+  {
+   "w": "Diorma.",
+   "start": 14.4,
+   "end": 15.26,
+   "p": 0.423
+  },
+  {
+   "w": "This",
+   "start": 18.44,
+   "end": 19.08,
+   "p": 0.997
+  },
+  {
+   "w": "is",
+   "start": 19.08,
+   "end": 19.5,
+   "p": 1.0
+  },
+  {
+   "w": "a",
+   "start": 19.5,
+   "end": 20.3,
+   "p": 1.0
+  },
+  {
+   "w": "team",
+   "start": 20.3,
+   "end": 20.62,
+   "p": 1.0
+  },
+  {
+   "w": "of",
+   "start": 20.62,
+   "end": 21.32,
+   "p": 1.0
+  },
+  {
+   "w": "super",
+   "start": 21.32,
+   "end": 22.18,
+   "p": 1.0
+  },
+  {
+   "w": "creative",
+   "start": 22.18,
+   "end": 22.72,
+   "p": 0.984
+  },
+  {
+   "w": "people",
+   "start": 22.72,
+   "end": 23.2,
+   "p": 1.0
+  },
+  {
+   "w": "and",
+   "start": 23.2,
+   "end": 24.82,
+   "p": 0.475
+  },
+  {
+   "w": "the",
+   "start": 24.82,
+   "end": 25.74,
+   "p": 0.998
+  },
+  {
+   "w": "work",
+   "start": 25.74,
+   "end": 26.14,
+   "p": 1.0
+  },
+  {
+   "w": "is",
+   "start": 26.14,
+   "end": 26.64,
+   "p": 1.0
+  },
+  {
+   "w": "absolutely",
+   "start": 26.64,
+   "end": 27.56,
+   "p": 0.998
+  },
+  {
+   "w": "world",
+   "start": 27.56,
+   "end": 28.68,
+   "p": 0.991
+  },
+  {
+   "w": "class,",
+   "start": 28.68,
+   "end": 28.94,
+   "p": 0.456
+  },
+  {
+   "w": "I",
+   "start": 28.96,
+   "end": 29.14,
+   "p": 1.0
+  },
+  {
+   "w": "can",
+   "start": 29.14,
+   "end": 29.28,
+   "p": 1.0
+  },
+  {
+   "w": "say.",
+   "start": 29.28,
+   "end": 29.54,
+   "p": 0.999
+  },
+  {
+   "w": "Nothing",
+   "start": 31.66,
+   "end": 32.28,
+   "p": 0.783
+  },
+  {
+   "w": "more",
+   "start": 32.28,
+   "end": 32.46,
+   "p": 0.997
+  },
+  {
+   "w": "than",
+   "start": 32.46,
+   "end": 32.6,
+   "p": 0.981
+  },
+  {
+   "w": "that.",
+   "start": 32.6,
+   "end": 32.78,
+   "p": 0.994
+  },
+  {
+   "w": "I",
+   "start": 32.9,
+   "end": 32.96,
+   "p": 0.997
+  },
+  {
+   "w": "don't",
+   "start": 32.96,
+   "end": 33.16,
+   "p": 0.993
+  },
+  {
+   "w": "have",
+   "start": 33.16,
+   "end": 33.38,
+   "p": 0.999
+  },
+  {
+   "w": "any",
+   "start": 33.38,
+   "end": 33.64,
+   "p": 0.995
+  },
+  {
+   "w": "better",
+   "start": 33.64,
+   "end": 33.86,
+   "p": 0.997
+  },
+  {
+   "w": "words",
+   "start": 33.86,
+   "end": 34.2,
+   "p": 0.993
+  },
+  {
+   "w": "than",
+   "start": 34.2,
+   "end": 34.38,
+   "p": 0.916
+  },
+  {
+   "w": "that.",
+   "start": 34.38,
+   "end": 34.6,
+   "p": 0.997
+  },
+  {
+   "w": "The",
+   "start": 35.08,
+   "end": 35.68,
+   "p": 0.99
+  },
+  {
+   "w": "whole",
+   "start": 35.68,
+   "end": 36.02,
+   "p": 0.999
+  },
+  {
+   "w": "team",
+   "start": 36.02,
+   "end": 36.36,
+   "p": 0.999
+  },
+  {
+   "w": "is",
+   "start": 36.36,
+   "end": 36.84,
+   "p": 0.996
+  },
+  {
+   "w": "like",
+   "start": 36.84,
+   "end": 37.08,
+   "p": 0.555
+  },
+  {
+   "w": "super",
+   "start": 37.08,
+   "end": 37.42,
+   "p": 0.947
+  },
+  {
+   "w": "efficient",
+   "start": 37.42,
+   "end": 37.92,
+   "p": 0.943
+  },
+  {
+   "w": "and",
+   "start": 37.92,
+   "end": 38.62,
+   "p": 0.915
+  },
+  {
+   "w": "super",
+   "start": 38.62,
+   "end": 39.06,
+   "p": 0.995
+  },
+  {
+   "w": "on",
+   "start": 39.06,
+   "end": 39.36,
+   "p": 0.994
+  },
+  {
+   "w": "time.",
+   "start": 39.36,
+   "end": 39.64,
+   "p": 0.716
+  },
+  {
+   "w": "I",
+   "start": 40.36,
+   "end": 40.98,
+   "p": 0.52
+  },
+  {
+   "w": "can",
+   "start": 40.98,
+   "end": 41.18,
+   "p": 0.999
+  },
+  {
+   "w": "say",
+   "start": 41.18,
+   "end": 41.46,
+   "p": 0.992
+  },
+  {
+   "w": "that",
+   "start": 41.46,
+   "end": 41.82,
+   "p": 0.987
+  },
+  {
+   "w": "they",
+   "start": 41.82,
+   "end": 42.88,
+   "p": 0.937
+  },
+  {
+   "w": "under",
+   "start": 42.88,
+   "end": 44.26,
+   "p": 0.875
+  },
+  {
+   "w": "commit",
+   "start": 44.26,
+   "end": 44.56,
+   "p": 0.366
+  },
+  {
+   "w": "and",
+   "start": 44.56,
+   "end": 44.76,
+   "p": 0.938
+  },
+  {
+   "w": "over",
+   "start": 44.76,
+   "end": 45.02,
+   "p": 0.985
+  },
+  {
+   "w": "deliver.",
+   "start": 45.02,
+   "end": 45.32,
+   "p": 0.896
+  },
+  {
+   "w": "That's",
+   "start": 46.13,
+   "end": 46.44,
+   "p": 0.987
+  },
+  {
+   "w": "probably",
+   "start": 46.44,
+   "end": 46.76,
+   "p": 0.998
+  },
+  {
+   "w": "their",
+   "start": 46.76,
+   "end": 47.0,
+   "p": 0.947
+  },
+  {
+   "w": "USP.",
+   "start": 47.0,
+   "end": 47.5,
+   "p": 0.838
+  },
+  {
+   "w": "That",
+   "start": 60.86,
+   "end": 61.52,
+   "p": 0.732
+  },
+  {
+   "w": "is",
+   "start": 61.52,
+   "end": 62.12,
+   "p": 0.986
+  },
+  {
+   "w": "Wortham",
+   "start": 62.12,
+   "end": 63.48,
+   "p": 0.572
+  },
+  {
+   "w": "Creative",
+   "start": 63.48,
+   "end": 64.58,
+   "p": 0.832
+  },
+  {
+   "w": "Agency",
+   "start": 64.58,
+   "end": 65.32,
+   "p": 0.989
+  },
+  {
+   "w": "and",
+   "start": 65.32,
+   "end": 67.28,
+   "p": 0.452
+  },
+  {
+   "w": "I",
+   "start": 67.28,
+   "end": 67.88,
+   "p": 0.984
+  },
+  {
+   "w": "can't",
+   "start": 67.88,
+   "end": 68.16,
+   "p": 0.83
+  },
+  {
+   "w": "tell",
+   "start": 68.16,
+   "end": 68.34,
+   "p": 0.998
+  },
+  {
+   "w": "how",
+   "start": 68.34,
+   "end": 68.54,
+   "p": 0.991
+  },
+  {
+   "w": "grateful",
+   "start": 68.54,
+   "end": 68.92,
+   "p": 0.993
+  },
+  {
+   "w": "I",
+   "start": 68.92,
+   "end": 69.18,
+   "p": 0.989
+  },
+  {
+   "w": "am",
+   "start": 69.18,
+   "end": 69.36,
+   "p": 0.992
+  },
+  {
+   "w": "to",
+   "start": 69.36,
+   "end": 69.86,
+   "p": 0.969
+  },
+  {
+   "w": "have",
+   "start": 69.86,
+   "end": 70.0,
+   "p": 0.977
+  },
+  {
+   "w": "found",
+   "start": 70.0,
+   "end": 70.24,
+   "p": 0.997
+  },
+  {
+   "w": "them.",
+   "start": 70.24,
+   "end": 70.4,
+   "p": 0.978
+  }
+ ]
+}

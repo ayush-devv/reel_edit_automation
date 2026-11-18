@@ -1,0 +1,2144 @@
+# Short-form editing craft per genre — knowledge-graph draft (ADR-0027 schema, knowledge/SCHEMA.md §2)
+# Extends docs/research/craft-playbook.md (rules 1–30). Numbers that repeat playbook rules are referenced, not re-derived.
+# Evidence honesty: per-genre cut rates / shot lengths are HEURISTIC anchors around shortformkit's overall
+# median (2.3 s shot, ~25 hard cuts/min); vendor/agency blogs are "practitioner"; one creator's view is "single_opinion".
+# uses_capabilities point at cap.* ids expected from capabilities_*.yaml drafts (merge dependency).
+nodes:
+
+  # ───────────────────────────── GENRES ─────────────────────────────
+  - id: genre.talking_head
+    type: genre
+    name: Talking head (direct-to-camera)
+    summary: "One person speaking to lens delivers an idea, opinion or explanation. Retention rides on a spoken hook in the first second, a tight jump-cut rhythm, scale changes and illustrative b-roll so framing never sits still. Structure: hook, foreshadowed payoff, but/therefore body, abrupt payoff."
+    when_to_use: "Opinion, explainer, advice, commentary, founder POV, educational creators."
+    how:
+      - "Hook (0–2 s): first word ≤0.3 s, hook text on screen by 0.3 s (playbook rules 1–2)"
+      - "Foreshadow the payoff in ≤3 s (tech.loop.foreshadow_payoff)"
+      - "Body as but/therefore beats; each new point gets a new image (b-roll, punch-in, graphic)"
+      - "Payoff, then end within 0.5 s; optional loop seam"
+    parameters: {cut_rate_per_min: "20–30 hard cuts (jump cuts) + ≥20 visual changes", median_shot_s: "2–3", hook_window_s: "0–2", caption_density: "every word, 1–3 words/cue, word-synced", typical_length_s: "20–60"}
+    avoid_when: "Speaker's emotional delivery is the point (switch to testimonial pacing). Cut-rate numbers are heuristic anchors, not measured per-genre norms."
+    genres: []
+    goals: [goal.retention_first_3s, goal.watch_through, goal.clarity]
+    uses_capabilities: [cap.cut.jump_cut, cap.transform.punch_in, cap.text.captions, cap.compositing.broll_overlay]
+    conflicts_with: []
+    requires: [tech.structure.hook_foreshadow_body_payoff]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Short-form video hook study 2026", author: "shortformkit", url: "https://github.com/shortformkit/short-form-video-hook-study-2026", locator: "pacing results (median shot 2.3 s; 84% talking videos speak within 2 s)"}
+      - {title: "Jenny Hoyos episode", author: "Creator Science (Jay Clouse)", url: "https://creatorscience.com/podcast/jenny-hoyos/", locator: "structure and pacing section"}
+      - {title: "What is a jump cut", author: "Adobe", url: "https://www.adobe.com/creativecloud/video/discover/jump-cut", locator: "talking-head use on YouTube"}
+
+  - id: genre.testimonial
+    type: genre
+    name: Testimonial / customer review
+    summary: "A real customer or creator tells their personal story with a product or service: situation, specific result, recommendation. Trust beats polish, so pacing is calmer than talking-head explainers, jump cuts are hidden under proof b-roll, and emotional peaks are left uncut."
+    when_to_use: "Higher-price or new-brand offers where trust is the main barrier; UGC ads; service businesses."
+    how:
+      - "Hook (0–3 s): the result or a testimonial line ('I was skeptical until…')"
+      - "Personal situation/problem, briefly"
+      - "Specific, concrete result with proof b-roll (product in use, before/after)"
+      - "Recommendation + single CTA spoken and on screen"
+    parameters: {cut_rate_per_min: "12–20 (heuristic)", median_shot_s: "2.5–4", hook_window_s: "0–3", caption_density: "every word, word-synced", typical_length_s: "15–45 (ads: TikTok's 2021 21–34 s finding)"}
+    avoid_when: "The speaker reads a script that sounds like an ad (anti.testimonial.scripted_ad_tone). Numbers heuristic."
+    genres: []
+    goals: [goal.trust, goal.cta_conversion]
+    uses_capabilities: [cap.compositing.broll_overlay, cap.text.captions, cap.cut.jump_cut]
+    conflicts_with: []
+    requires: [tech.structure.testimonial_story_result_recommend]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "How to write UGC ad scripts", author: "Motion", url: "https://motionapp.com/blog/how-to-write-ugc-ad-scripts", locator: "testimonial structure; search-result summary"}
+      - {title: "The Complete Guide to UGC Video Ads", author: "Influencer Marketing Hub", url: "https://influencermarketinghub.com/ugc-video-ads", locator: "frameworks section; search-result summary"}
+      - {title: "TikTok Shop shoppable video content guide (report)", author: "PPC Land", url: "https://ppc.land/tiktok-shops-shoppable-video-content-guide-tells-creators-what-actually-works/", locator: "Personal Product Review style"}
+
+  - id: genre.product
+    type: genre
+    name: Product demo / showcase
+    summary: "Shows a product solving a problem or delivering a result, ideally in use and in close-up. Platform research favours showing the product early and repeatedly, stating clear selling points and a clear CTA, while keeping overt branding a minority of runtime."
+    when_to_use: "E-commerce, D2C, TikTok Shop, app demos, gadgets, beauty."
+    how:
+      - "Hook (0–3 s): product or outcome on screen, or name the product category"
+      - "Demo in use: hands/close-ups, 2–3 USPs, each with its own shot + text"
+      - "Show the product again in a different scene; brand presence <25% of runtime"
+      - "CTA spoken and as text"
+    parameters: {cut_rate_per_min: "20–35 (heuristic)", median_shot_s: "1.5–2.5", hook_window_s: "0–3 (Shop guide: hook 3–6 s)", caption_density: "benefit/keyword text per shot + speech captions if VO", typical_length_s: "15–45"}
+    avoid_when: "The hook test shows a story-first opening outperforms (tech.hook.story_first_product_reveal)."
+    genres: []
+    goals: [goal.cta_conversion, goal.brand_recall, goal.clarity]
+    uses_capabilities: [cap.text.title, cap.transform.punch_in, cap.cut.reorder]
+    conflicts_with: []
+    requires: [tech.structure.hook_problem_solution_proof_cta]
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Want Reels ads that actually work? Meta just revealed the playbook", author: "Best Media Info (reporting Meta x Toluna study)", url: "https://bestmediainfo.com/insights/want-reels-ads-that-actually-work-meta-just-revealed-the-playbook-10866888", locator: "performance/DR campaign findings"}
+      - {title: "Pay attention to me: report shares brand tips (TikTok x CreatorIQ)", author: "Marketing Brew", url: "https://www.marketingbrew.com/stories/2023/12/18/pay-attention-to-me-report-shares-brand-tips-for-catching-users-interest-on-tiktok", locator: "product demonstration +31% attention"}
+      - {title: "TikTok Shop shoppable video content guide (report)", author: "PPC Land", url: "https://ppc.land/tiktok-shops-shoppable-video-content-guide-tells-creators-what-actually-works/", locator: "structure: hook, key message, CTA"}
+
+  - id: genre.tutorial
+    type: genre
+    name: Tutorial / how-to
+    summary: "Teaches one outcome in steps. Show the finished result first, promise the number of steps, then deliver each step with a new shot and a step label, and close on the result again. Clarity outranks speed: let dense steps breathe."
+    when_to_use: "Recipes, software tips, DIY, makeup, coding, fitness form."
+    how:
+      - "Result shot in 0–2 s + promise ('3 steps to…')"
+      - "One step per beat: step number text + action shot + 1-line VO"
+      - "Pause briefly after dense steps"
+      - "End on the result (loop seam back to the opening shot)"
+    parameters: {cut_rate_per_min: "15–25 visual changes (heuristic)", median_shot_s: "2–4", hook_window_s: "0–2", caption_density: "speech captions + persistent step label", typical_length_s: "30–60"}
+    avoid_when: "The process itself is the spectacle (use genre.transformation pacing)."
+    genres: []
+    goals: [goal.clarity, goal.shares_saves, goal.watch_through]
+    uses_capabilities: [cap.text.title, cap.speed.ramp, cap.cut.reorder]
+    conflicts_with: []
+    requires: [tech.structure.tutorial_result_steps_recap]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "TikTok Shop shoppable video content guide (report)", author: "PPC Land", url: "https://ppc.land/tiktok-shops-shoppable-video-content-guide-tells-creators-what-actually-works/", locator: "Step-by-step Tutorial/DIY style"}
+      - {title: "How Jenny Hoyos actually makes viral Shorts", author: "vidIQ (via Rosetta)", url: "https://rosetta.to/u/vidiq/how-jenny-hoyos-actually-makes-viral-shorts", locator: "foreshadowing ('three reasons') and breathing room"}
+      - {title: "How to edit short-form video", author: "Descript", url: "https://descript.com/blog/article/edit-short-form-video", locator: "tie cuts to speech structure; search-result summary"}
+
+  - id: genre.vlog
+    type: genre
+    name: Vlog / day-in-the-life
+    summary: "A personal slice of a day or trip, usually voiceover-led over many short clips in chronological order. Film and keep the moments that show change, not every task; cut clips to the voiceover rhythm, with energetic or calm cadence chosen by mood."
+    when_to_use: "Lifestyle, travel, 'day in my life', GRWM, behind-the-scenes."
+    how:
+      - "Hook (0–3 s): most striking moment or a promise line in VO + text"
+      - "Record/lay VO first, then place clips on it"
+      - "Chronological unless grouped by theme; 1 clip per VO phrase"
+      - "End on a reflective or punchline beat; optional loop to the first shot"
+    parameters: {cut_rate_per_min: "20–40", median_shot_s: "1–3 energetic / 2–4 calm", hook_window_s: "0–3", caption_density: "VO subtitles, sparse location/time labels", typical_length_s: "15–60"}
+    avoid_when: "Clips under ~1 s throughout (reads as chaotic per vendor guides)."
+    genres: []
+    goals: [goal.emotion, goal.watch_through]
+    uses_capabilities: [cap.audio.voiceover, cap.text.captions, cap.cut.trim]
+    conflicts_with: []
+    requires: [tech.structure.vlog_change_moments]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Day in the life TikTok template", author: "Nemo Video", url: "https://www.nemovideo.com/ja-JP/templates/day-in-the-life-tiktok-template", locator: "1–3 s energetic vs 2–4 s calm clip length; search-result summary"}
+      - {title: "How to create a compelling daily routine video", author: "FlexClip", url: "https://www.flexclip.com/learn/daily-routine-video.html", locator: "chronology, film moments of change; search-result summary"}
+      - {title: "Mastering travel vlog pacing for Instagram Reels in 2026", author: "Splice", url: "https://spliceapp.com/blog/mastering-travel-vlog-pacing-for-instagram-reels-in-2026/", locator: "pacing guidance; search-result summary"}
+
+  - id: genre.montage
+    type: genre
+    name: Montage / music edit
+    summary: "Music-driven sequence of short shots with little or no speech, where the soundtrack's beat grid sets the cut points. Energy is shaped by cut density: two- or four-beat cuts as the base, short every-beat bursts at peaks, transitions saved for major hits."
+    when_to_use: "Aesthetic edits, travel cinematics, sports/gaming highlights, fashion, B-roll showcases."
+    how:
+      - "Pick track; detect BPM and the first-beat offset"
+      - "Open on the single strongest shot (0–1 s)"
+      - "Base cadence every 2–4 beats; bursts of every-beat cuts for 4–8 beats at drops"
+      - "End on the track's resolution or loop seam"
+    parameters: {cut_rate_per_min: "30–60 at 120 BPM (1 cut per 2 beats = 60/min)", median_shot_s: "0.5–2", hook_window_s: "0–1", caption_density: "none or a single title", typical_length_s: "7–30"}
+    avoid_when: "There's a message to communicate in words (use talking_head/tutorial)."
+    genres: []
+    goals: [goal.energy, goal.rewatch, goal.emotion]
+    uses_capabilities: [cap.analysis.beat_detect, cap.cut.trim, cap.transition.whip]
+    conflicts_with: []
+    requires: [tech.beat.cut_grid]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Beat-based editing in CapCut", author: "Cursa", url: "https://cursa.app/en/page/beat-based-editing-in-capcut-syncing-cuts-transitions-and-motion-to-music", locator: "cut frequency; search-result summary"}
+      - {title: "Beat sync editing skill", author: "Open Design", url: "https://open-design.ai/skills/beat-sync-editing/", locator: "first-beat offset; search-result summary"}
+
+  - id: genre.podcast_clip
+    type: genre
+    name: Podcast / interview clip
+    summary: "A self-contained excerpt of a longer conversation reframed to vertical. Start on the first meaningful sentence, make it understandable without the episode, keep one complete idea with a payoff, and use speaker-tracking or stacked layouts instead of high hard-cut rates."
+    when_to_use: "Repurposing podcasts, interviews, panels, webinars, sermons."
+    how:
+      - "Pick a complete idea with a natural punchline or insight"
+      - "Open on the strongest line (or move it to the front as a cold open)"
+      - "Add a ≤6-word context title if needed"
+      - "Single-speaker fill framing; stacked/split when both reactions matter"
+      - "End on the payoff line"
+    parameters: {cut_rate_per_min: "6–15 hard cuts + speaker-switch reframes (heuristic; lower than playbook rule 6)", median_shot_s: "3–8", hook_window_s: "0–3", caption_density: "dense, every word, keyword emphasis", typical_length_s: "30–75"}
+    avoid_when: "The clip only makes sense with earlier episode context (anti.podcast.context_dependent_clip)."
+    genres: [genre.interview]
+    goals: [goal.retention_first_3s, goal.clarity, goal.shares_saves]
+    uses_capabilities: [cap.transform.reframe, cap.compositing.split_screen, cap.text.captions]
+    conflicts_with: []
+    requires: [tech.structure.podcast_hook_context_payoff]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "AI Shorts guide", author: "Captions", url: "https://captions.ai/help/guides/creators/ai-shorts.md", locator: "first 3 s / trim to stronger moment; search-result summary"}
+      - {title: "AI podcast clipper for Shorts", author: "Fluxnote", url: "https://fluxnote.io/guides/ai-podcast-clipper-for-shorts", locator: "30–75 s target; search-result summary"}
+      - {title: "How to edit podcast Shorts like a pro", author: "OpusClip", url: "https://www.opus.pro/blog/how-to-edit-podcast-shorts-like-a-pro-using-opus-clip-pc-mac", locator: "layouts; search-result summary"}
+
+  - id: genre.transformation
+    type: genre
+    name: Transformation / before-after
+    summary: "Shows a change of state (room, body, hair, code, product result). The craft is in the reveal: identical framing for before and after, a sped-up process, and a single clean transition (match cut, cover wipe) timed to a beat. Either tease the after first or hold it to the end."
+    when_to_use: "Makeovers, renovations, cleaning, fitness, edits, design, restoration."
+    how:
+      - "Hook: flash the after (0–1 s) or state the stakes over the before"
+      - "Before in the locked framing"
+      - "Process compressed (speed ramp / timelapse / 0.5–1.5 s shots)"
+      - "Reveal on a beat with one transition; hold the after 1.5–3 s"
+    parameters: {cut_rate_per_min: "30–50 in process section (heuristic)", median_shot_s: "0.5–1.5 process, 1.5–3 reveal", hook_window_s: "0–2", caption_density: "minimal: stakes line + labels BEFORE/AFTER", typical_length_s: "7–30"}
+    avoid_when: "Before and after were shot from different positions (anti.transform.mismatched_framing)."
+    genres: []
+    goals: [goal.rewatch, goal.shares_saves, goal.emotion]
+    uses_capabilities: [cap.transition.match_cut, cap.speed.ramp, cap.analysis.beat_detect]
+    conflicts_with: []
+    requires: [tech.structure.transformation_before_process_after]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Instagram Reel transition trends", author: "CapCut", url: "https://www.capcut.com/create/instagram-reel-transitions-viral-edit-tips", locator: "match cuts, one transition language; search-result summary"}
+      - {title: "5 easy Reels or TikTok transitions for beginners", author: "Planoly", url: "https://planoly.com/blog/easy-reels-tiktok-transitions", locator: "same camera position; search-result summary"}
+      - {title: "Meta Reels India announcement", author: "Meta", url: "https://about.fb.com/news/2025/09/five-years-on-reels-reigns-as-indias-top-short-form-video-platform/", locator: "beauty transformations named among Reels trends"}
+
+  - id: genre.event_recap
+    type: genre
+    name: Event recap / highlight
+    summary: "Compresses an event (wedding, conference, launch, concert) into a music-led highlight. Lock the track first, label clips by narrative job, and build setup to momentum to a peak moment, with cuts on beats and a few on-camera quotes or crowd reactions for human texture."
+    when_to_use: "Weddings, conferences, meetups, product launches, college fests, sports days."
+    how:
+      - "Open on the peak moment or best crowd reaction (0–2 s)"
+      - "Setup: venue/establishing, name + date lower-third"
+      - "Momentum: 1–3 s clips cut to beats; insert 1–2 short sound-bites (music ducked)"
+      - "Peak: the headline moment; close on a smile/applause or loop seam"
+    parameters: {cut_rate_per_min: "30–60, beat-synced", median_shot_s: "1–3", hook_window_s: "0–2", caption_density: "sparse: title, place/date, quote captions only", typical_length_s: "15–45 (photographer guide: 15–30 for IG)"}
+    avoid_when: "The audience needs the talk content (cut a podcast_clip from the keynote instead)."
+    genres: [genre.montage]
+    goals: [goal.energy, goal.emotion, goal.brand_recall]
+    uses_capabilities: [cap.analysis.beat_detect, cap.audio.ducking, cap.text.title]
+    conflicts_with: []
+    requires: [tech.structure.event_recap_jobs]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "How to turn event photos into an Instagram-ready recap video", author: "FotoOwl", url: "https://fotoowl.ai/blogs/how-to-turn-event-photos-into-an-instagram-ready-recap-video", locator: "15–30 s; 1–3 s clips; search-result summary"}
+      - {title: "Highlight video music, energy and pacing", author: "Sonilo", url: "https://sonilo.com/blog/guides/highlight-video-music-energy-pacing", locator: "lock music first; search-result summary"}
+
+  - id: genre.brand_story
+    type: genre
+    name: Brand / founder story
+    summary: "A compact three-act story about why a brand exists: a real protagonist hits a problem, finds a turn, and the product or mission resolves it. Emotion over features; slower shots, voiceover or interview audio, and a clear but soft close."
+    when_to_use: "Founder-led marketing, about-us, mission/CSR, small-business origin stories, launches."
+    how:
+      - "Hook 2–3 s: the friction moment or a pointed question"
+      - "Conflict 15–20 s: the problem and stakes"
+      - "Turn/solution 20–30 s: insight, product, proof"
+      - "Mission + CTA 10–15 s"
+    parameters: {cut_rate_per_min: "10–20 (heuristic)", median_shot_s: "2.5–5", hook_window_s: "0–3", caption_density: "every word if VO; restrained styling", typical_length_s: "45–90"}
+    avoid_when: "Cold audience on TikTok with a direct-response goal — use genre.product structure."
+    genres: []
+    goals: [goal.emotion, goal.trust, goal.brand_recall]
+    uses_capabilities: [cap.audio.voiceover, cap.audio.music_bed, cap.compositing.broll_overlay]
+    conflicts_with: []
+    requires: [tech.structure.brand_story_three_act]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "How to tell a brand story in 60 seconds", author: "Antoine X. Adams", url: "https://antoinexadams.com/blog/how-to-tell-a-brand-story-in-60-seconds", locator: "60 s time allocation; search-result summary"}
+      - {title: "Founder story examples", author: "Tolstoy", url: "https://www.gotolstoy.com/blog/founder-story-examples", locator: "origin moment; search-result summary"}
+      - {title: "Brand story video ad format guide", author: "Fluxnote", url: "https://fluxnote.io/guides/brand-story-video-ad-format-guide", locator: "45–90 s; search-result summary"}
+
+  # ───────────────────────── STRUCTURE TEMPLATES ─────────────────────────
+  - id: tech.structure.hook_foreshadow_body_payoff
+    type: technique
+    name: Hook → foreshadow → transition → body → abrupt payoff
+    summary: "A Shorts story skeleton from a top Shorts creator: a short visual hook, one or two spoken lines (≤3 s) that state what the payoff will be, a smooth transition into a problem/solution or but/therefore body, and an ending that cuts right after the payoff or reaction."
+    when_to_use: "Talking head, story-driven Shorts, challenges, tutorials with a reveal."
+    how:
+      - "Write the hook and the last line first"
+      - "Foreshadow line ≤3 s that names the payoff"
+      - "Body beats linked by 'but'/'so', not 'and then'"
+      - "Cut within a beat of the payoff"
+    parameters: {foreshadow_s: "≤3", ending_tail_s: "≤0.5"}
+    avoid_when: "Pure montage with no narrative."
+    genres: [genre.talking_head, genre.tutorial, genre.vlog]
+    goals: [goal.watch_through, goal.rewatch]
+    uses_capabilities: [cap.cut.reorder, cap.text.title]
+    conflicts_with: []
+    requires: [tech.loop.foreshadow_payoff]
+    evidence_level: single_opinion
+    confidence: medium
+    sources:
+      - {title: "Jenny Hoyos episode", author: "Creator Science", url: "https://creatorscience.com/podcast/jenny-hoyos/", locator: "Structure and Pacing; Scripting process"}
+      - {title: "How Jenny Hoyos actually makes viral Shorts", author: "vidIQ (via Rosetta)", url: "https://rosetta.to/u/vidiq/how-jenny-hoyos-actually-makes-viral-shorts", locator: "foreshadowing, ending"}
+
+  - id: tech.structure.testimonial_story_result_recommend
+    type: technique
+    name: Testimonial arc — story, specific result, recommendation
+    summary: "Order a testimonial as personal situation, a concrete measurable result, then a recommendation and one CTA. Lead with the result or a skeptic line as the hook so the payoff is promised early; keep the speaker's natural phrasing so it sounds like a review."
+    when_to_use: "Customer reviews, UGC ads, case-study reels, coaching/service businesses."
+    how:
+      - "Hook: result line or 'I didn't believe…' (0–3 s)"
+      - "Situation ≤8 s"
+      - "Result with proof b-roll laid over the claim"
+      - "Recommendation + single CTA"
+    parameters: {situation_s: "≤8", proof_broll_s: "1.5–3 each"}
+    avoid_when: "No genuine customer footage (fabricated testimonials are a compliance risk)."
+    genres: [genre.testimonial]
+    goals: [goal.trust, goal.cta_conversion]
+    uses_capabilities: [cap.cut.reorder, cap.compositing.broll_overlay]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "How to write UGC ad scripts", author: "Motion", url: "https://motionapp.com/blog/how-to-write-ugc-ad-scripts", locator: "testimonial structure; search-result summary"}
+      - {title: "UGC script template", author: "Sideshift", url: "https://sideshift.app/blog/ugc-script-template", locator: "search-result summary"}
+
+  - id: tech.structure.hook_problem_solution_proof_cta
+    type: technique
+    name: Hook → problem → solution → proof → CTA
+    summary: "The dominant direct-response short-form skeleton: open on a hook, name the viewer's problem (optionally agitate it), present the product as the fix, prove it on screen with a demo or result, then give one clear action. Variants add value props and social proof before the CTA."
+    when_to_use: "Product ads, UGC ads, app promos, service offers."
+    how:
+      - "Hook 1–3 s"
+      - "Problem 2–5 s (agitate if the pain is mild)"
+      - "Solution + live demo"
+      - "Proof: result, numbers, reviews"
+      - "CTA, spoken + text"
+    parameters: {hook_s: "1–3", total_s: "15–45"}
+    avoid_when: "Organic entertainment content where an ad arc kills watch time."
+    genres: [genre.product, genre.testimonial]
+    goals: [goal.cta_conversion, goal.clarity]
+    uses_capabilities: [cap.cut.reorder, cap.text.title]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "How to write UGC ad scripts", author: "Motion", url: "https://motionapp.com/blog/how-to-write-ugc-ad-scripts", locator: "core sequence; search-result summary"}
+      - {title: "TikTok ad creative frameworks (UGC)", author: "AdCreate", url: "https://adcreate.com/blog/ugc-video-ads-frameworks-that-convert", locator: "search-result summary"}
+      - {title: "Creative best practices for performance ads", author: "TikTok Ads Help Center", url: "https://ads.tiktok.com/help/article/creative-best-practices?lang=en", locator: "close with clear CTA"}
+
+  - id: tech.structure.shop_hook_message_cta
+    type: technique
+    name: TikTok Shop three-part video (hook, key message, CTA) in four styles
+    summary: "TikTok Shop's creator guidance splits a shoppable video into a product-related hook (roughly the first 3–6 s), a key message of benefits and selling points, and an easy CTA spoken or shown as text. It names four styles: personal review, before/after, unboxing, and step-by-step tutorial."
+    when_to_use: "Commerce videos for any platform, not just TikTok Shop."
+    how:
+      - "Pick one style: review | before-after | unboxing | tutorial"
+      - "Hook must relate to the product so it flows into the message"
+      - "Key message: 2–3 benefits, each visualised"
+      - "CTA as voice and on-screen text (many watch muted)"
+    parameters: {hook_s: "3–6"}
+    avoid_when: "Brand-building pieces with no purchase path."
+    genres: [genre.product, genre.testimonial, genre.tutorial, genre.transformation]
+    goals: [goal.cta_conversion]
+    uses_capabilities: [cap.text.title, cap.text.captions]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "TikTok Shop's shoppable video content guide tells creators what actually works", author: "PPC Land", url: "https://ppc.land/tiktok-shops-shoppable-video-content-guide-tells-creators-what-actually-works/", locator: "structure; four content styles"}
+
+  - id: tech.structure.tutorial_result_steps_recap
+    type: technique
+    name: Tutorial — result, numbered steps, result again
+    summary: "Show the end result first, promise a countable number of steps, deliver one step per beat with a persistent step label, then return to the result. The count is a built-in reason to finish, and ending on the opening image makes the loop seamless."
+    when_to_use: "Any how-to with ≤5 steps."
+    how:
+      - "0–2 s: finished result + 'N steps' text"
+      - "Each step: label 'STEP k/N' + action shot + 1 line"
+      - "Breathe ~0.5 s after dense steps"
+      - "Close on the result shot used in the hook"
+    parameters: {max_steps: "3–5", step_label: "persistent top-safe-zone text"}
+    avoid_when: "More than ~5 steps — split into a series."
+    genres: [genre.tutorial]
+    goals: [goal.clarity, goal.watch_through, goal.shares_saves]
+    uses_capabilities: [cap.text.title, cap.cut.reorder]
+    conflicts_with: []
+    requires: [tech.loop.reason_to_finish_mechanism]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "How Jenny Hoyos actually makes viral Shorts", author: "vidIQ (via Rosetta)", url: "https://rosetta.to/u/vidiq/how-jenny-hoyos-actually-makes-viral-shorts", locator: "'three reasons' foreshadowing"}
+      - {title: "Anatomy of a viral TikTok in 2026", author: "OpusClip", url: "https://www.opus.pro/blog/anatomy-of-a-viral-tiktok-2026", locator: "product/outcome showcase hooks top-ranked"}
+
+  - id: tech.structure.vlog_change_moments
+    type: technique
+    name: Vlog — voiceover spine over moments of change
+    summary: "Build day-in-the-life edits on a voiceover recorded first, then lay short clips on each phrase in chronological order. Keep only moments where something changes (location, mood, outcome); drop routine tasks unless they set up a payoff."
+    when_to_use: "Day-in-the-life, travel days, GRWM, behind-the-scenes."
+    how:
+      - "Write/record VO; mark phrase boundaries"
+      - "One clip per phrase; 2–4 s calm, 1–3 s energetic"
+      - "Time labels or location text sparingly"
+      - "Close on a reflective or funny line"
+    parameters: {clip_s: "1–4"}
+    avoid_when: "Footage has strong natural audio/dialogue that should lead."
+    genres: [genre.vlog]
+    goals: [goal.emotion, goal.watch_through]
+    uses_capabilities: [cap.audio.voiceover, cap.cut.trim]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "How to create a compelling daily routine video", author: "FlexClip", url: "https://www.flexclip.com/learn/daily-routine-video.html", locator: "search-result summary"}
+      - {title: "Day in the life TikTok template", author: "Nemo Video", url: "https://www.nemovideo.com/ja-JP/templates/day-in-the-life-tiktok-template", locator: "search-result summary"}
+
+  - id: tech.structure.podcast_hook_context_payoff
+    type: technique
+    name: Podcast clip — strongest line, minimal context, complete payoff
+    summary: "Choose a complete idea, not an arbitrary chunk. Start at the first sentence that carries meaning (or cold-open the punchline), add a short context title only if needed, and end on the insight. The clip must make sense to someone who never heard the episode."
+    when_to_use: "Any long-form conversation repurposed to vertical."
+    how:
+      - "Transcribe; find self-contained idea units with a punchline"
+      - "Trim leading filler to the first meaningful sentence"
+      - "Optional cold open: punchline line first, then rewind"
+      - "Context title ≤6 words, top safe zone"
+    parameters: {length_s: "30–75", context_title_words: "≤6"}
+    avoid_when: "The hook would promise more than the clip delivers."
+    genres: [genre.podcast_clip]
+    goals: [goal.clarity, goal.retention_first_3s]
+    uses_capabilities: [cap.analysis.transcribe, cap.cut.reorder, cap.text.title]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "How to clip a podcast for Reels", author: "Soundstripe", url: "https://www.soundstripe.com/blogs/how-to-clip-a-podcast", locator: "search-result summary"}
+      - {title: "How to repurpose podcast into Shorts", author: "Choppity", url: "https://www.choppity.com/blog/how-to-repurpose-podcast-into-shorts/", locator: "complete ideas vs arbitrary chunks; search-result summary"}
+      - {title: "AI Shorts guide", author: "Captions", url: "https://captions.ai/help/guides/creators/ai-shorts.md", locator: "search-result summary"}
+
+  - id: tech.structure.transformation_before_process_after
+    type: technique
+    name: Transformation — before, compressed process, timed reveal
+    summary: "Lock camera position for before and after, compress the process with speed ramps or rapid shots, and land the reveal on a clear beat with one transition. Optional reverse variant: show the after first, then play the process forward to explain it."
+    when_to_use: "Makeovers, cleaning, renovation, fitness progress, design/code before-after."
+    how:
+      - "Tripod-locked before and after framing"
+      - "Process: 0.5–1.5 s shots or timelapse"
+      - "Reveal transition on a downbeat or action"
+      - "Hold after-state 1.5–3 s"
+    parameters: {reveal_hold_s: "1.5–3"}
+    avoid_when: "The result is underwhelming without context — lead with stakes instead."
+    genres: [genre.transformation]
+    goals: [goal.rewatch, goal.emotion]
+    uses_capabilities: [cap.speed.ramp, cap.transition.match_cut]
+    conflicts_with: []
+    requires: [tech.transition.match_cut_reveal]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Mastering reveal edits", author: "Splice", url: "https://spliceapp.com/blog/mastering-reveal-edits-essential-techniques-for-hobby-creators/", locator: "search-result summary"}
+      - {title: "Instagram Reel transition trends", author: "CapCut", url: "https://www.capcut.com/create/instagram-reel-transitions-viral-edit-tips", locator: "search-result summary"}
+
+  - id: tech.structure.event_recap_jobs
+    type: technique
+    name: Event recap — silent assembly by clip job, then cut to locked music
+    summary: "Before choosing cuts, label each clip by its narrative job (setup, momentum, surprise, payoff, outro) and assemble silently; then lock the music and snap cuts to beats, letting motion and importance decide the exact frame."
+    when_to_use: "Event and highlight reels with lots of raw footage."
+    how:
+      - "Tag clips: setup | momentum | surprise | payoff | outro"
+      - "Order: payoff teaser → setup → momentum → surprise → payoff → outro"
+      - "Lock track, then snap cuts to nearest beat that fits the action"
+      - "Duck music under 1–2 sound-bites"
+    parameters: {clip_s: "1–3"}
+    avoid_when: "Footage is too thin to fill the beat grid — use a slower track."
+    genres: [genre.event_recap, genre.montage]
+    goals: [goal.energy, goal.emotion]
+    uses_capabilities: [cap.analysis.beat_detect, cap.audio.ducking]
+    conflicts_with: []
+    requires: [tech.beat.cut_grid]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Make a highlight reel from raw footage", author: "OnsetEngine", url: "https://onsetengine.pages.dev/guides/make-highlight-reel-from-raw-footage", locator: "clip jobs; search-result summary"}
+      - {title: "Highlight video music, energy and pacing", author: "Sonilo", url: "https://sonilo.com/blog/guides/highlight-video-music-energy-pacing", locator: "search-result summary"}
+
+  - id: tech.structure.brand_story_three_act
+    type: technique
+    name: Brand story — hook, conflict, turn, mission
+    summary: "Fit a founder or brand origin into about 60 s: a 2–3 s hook on the friction moment, ~15–20 s of conflict, ~20–30 s of turn and proof, ~10–15 s of mission and CTA. Put a real protagonist and a problem before the product appears."
+    when_to_use: "About-us, founder-led, launch, mission content."
+    how:
+      - "Hook on the frustrating moment or a pain-point question"
+      - "Conflict: stakes, specific details"
+      - "Turn: the insight + product + one proof"
+      - "Mission line, soft CTA"
+    parameters: {hook_s: "2–3", conflict_s: "15–20", turn_s: "20–30", mission_s: "10–15"}
+    avoid_when: "There is no genuine story beat — a product demo will do better."
+    genres: [genre.brand_story]
+    goals: [goal.emotion, goal.trust]
+    uses_capabilities: [cap.cut.reorder, cap.audio.voiceover]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "How to tell a brand story in 60 seconds", author: "Antoine X. Adams", url: "https://antoinexadams.com/blog/how-to-tell-a-brand-story-in-60-seconds", locator: "search-result summary"}
+      - {title: "How to use video for founder-led storytelling", author: "RevBoss", url: "https://revboss.com/blog/use-video-founder-led-storytelling", locator: "search-result summary"}
+
+  - id: tech.structure.montage_build_peak
+    type: technique
+    name: Montage — open strong, build density, peak on the drop
+    summary: "Open on the best single shot, settle into a two- or four-beat base rhythm, then shorten shots into every-beat bursts as the music builds, saving transitions and effects for the biggest hits. End on the track's resolution or a frame that loops to the opening."
+    when_to_use: "Music-led montages and highlight reels."
+    how:
+      - "Shot 1 = strongest image"
+      - "Base: cut every 2–4 beats"
+      - "Build: every beat for 4–8 beats into the drop"
+      - "Transitions only on major hits; final frame matches first"
+    parameters: {burst_beats: "4–8"}
+    avoid_when: "Cutting every beat throughout (anti.beat.overcutting)."
+    genres: [genre.montage, genre.event_recap]
+    goals: [goal.energy, goal.rewatch]
+    uses_capabilities: [cap.analysis.beat_detect, cap.transition.whip]
+    conflicts_with: []
+    requires: [tech.beat.cut_grid]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Beat-sync montage", author: "Cardboard", url: "https://learn.usecardboard.com/ai-editing/beat-sync-montage.md", locator: "search-result summary"}
+      - {title: "Beat-based editing in CapCut", author: "Cursa", url: "https://cursa.app/en/page/beat-based-editing-in-capcut-syncing-cuts-transitions-and-motion-to-music", locator: "search-result summary"}
+
+  # ───────────────────────────── HOOKS ─────────────────────────────
+  - id: tech.hook.person_in_first_seconds
+    type: technique
+    name: Person on screen in the first seconds
+    summary: "Show a human face (creator, customer, employee) within the first couple of seconds. TikTok and CreatorIQ reported this raises hooking power by about 50% and ad recognition by about 32% for brand videos. Platform ad guides likewise advise featuring people."
+    when_to_use: "Any genre with a human subject; especially product and testimonial ads."
+    how:
+      - "Pick an opening shot with a face, eyes to lens, at medium or close-up scale"
+      - "Avoid opening on logo, packshot or empty scene"
+    parameters: {face_by_s: "≤2"}
+    avoid_when: "Faceless genres (montage, some transformation) where the subject is an object/place."
+    genres: [genre.talking_head, genre.testimonial, genre.product, genre.brand_story, genre.podcast_clip]
+    goals: [goal.retention_first_3s, goal.brand_recall]
+    uses_capabilities: [cap.cut.reorder]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Pay attention to me: report shares brand tips (TikTok x CreatorIQ)", author: "Marketing Brew", url: "https://www.marketingbrew.com/stories/2023/12/18/pay-attention-to-me-report-shares-brand-tips-for-catching-users-interest-on-tiktok", locator: "timing and hooks"}
+      - {title: "Creative best practices for performance ads", author: "TikTok Ads Help Center", url: "https://ads.tiktok.com/help/article/creative-best-practices?lang=en", locator: "human presence"}
+
+  - id: tech.hook.direct_address_you
+    type: technique
+    name: Direct address ('you') in the first five seconds
+    summary: "Have the speaker greet or address the viewer directly and say 'you' early. In the TikTok/CreatorIQ study a direct creator greeting was linked to +112% brand recall and saying 'you' in the first five seconds to +128% purchase intent. Meta also advises looking into the lens for a personal feel."
+    when_to_use: "Talking head, testimonial, product, brand story."
+    how:
+      - "Keep the first sentence second-person ('You're doing X wrong')"
+      - "Prefer takes with eye contact to lens for the hook"
+    parameters: {you_by_s: "≤5"}
+    avoid_when: "Observational/cinematic pieces where breaking the fourth wall clashes with tone."
+    genres: [genre.talking_head, genre.testimonial, genre.product]
+    goals: [goal.retention_first_3s, goal.brand_recall, goal.cta_conversion]
+    uses_capabilities: [cap.analysis.transcribe]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Pay attention to me: report shares brand tips (TikTok x CreatorIQ)", author: "Marketing Brew", url: "https://www.marketingbrew.com/stories/2023/12/18/pay-attention-to-me-report-shares-brand-tips-for-catching-users-interest-on-tiktok", locator: "creator presence and direct address"}
+      - {title: "Reels best practices, tips and tricks", author: "Meta for Creators", url: "https://creators.facebook.com/reels-best-practices-tips-tricks", locator: "sections 1–2 (look into the lens)"}
+
+  - id: tech.hook.result_first
+    type: technique
+    name: Product / outcome showcase hook
+    summary: "Open on the finished outcome or the product doing its thing. In OpusClip's 2026 production-data analysis, product/outcome showcase hooks averaged roughly twice the views of the weakest hook type, while slow story-setup openers ranked worst. Extends the playbook's result-first hook with genre evidence."
+    when_to_use: "Product, tutorial, transformation, recipe."
+    how:
+      - "Find the most visually striking result frame"
+      - "Place it at 0–1 s with a ≤5-word promise"
+      - "Then cut back to the start of the process"
+    parameters: {hook_window_s: "0–1"}
+    avoid_when: "The reveal is the only reason to watch (use a visual open loop instead)."
+    genres: [genre.product, genre.tutorial, genre.transformation]
+    goals: [goal.retention_first_3s]
+    uses_capabilities: [cap.cut.reorder, cap.text.title]
+    conflicts_with: [tech.loop.visual_withhold, tech.hook.story_first_product_reveal]
+    requires: []
+    evidence_level: study
+    confidence: low
+    sources:
+      - {title: "Anatomy of a viral TikTok in 2026: what 13.5M clips reveal", author: "OpusClip", url: "https://www.opus.pro/blog/anatomy-of-a-viral-tiktok-2026", locator: "hooks section (34,635-clip subset; vendor data, correlational)"}
+
+  - id: tech.hook.story_first_product_reveal
+    type: technique
+    name: Story-first opening with product as the resolution
+    summary: "Open on a relatable situation or story and let the product arrive as the resolution, instead of showing it in the first frame. Some commerce practitioners report top Shop videos look like stories, not demos, at the start. Evidence conflicts with product-first advice, so treat it as an A/B variant."
+    when_to_use: "Saturated product categories; audiences fatigued by obvious ads."
+    how:
+      - "Hook on the problem moment, product off-screen"
+      - "Reveal product by ~5–8 s as the fix"
+      - "Test against a product-first cut with the same body"
+    parameters: {product_reveal_s: "5–8"}
+    avoid_when: "Meta DR guidance (brand/message within 5 s) applies and the story delays it further."
+    genres: [genre.product, genre.testimonial]
+    goals: [goal.watch_through, goal.trust]
+    uses_capabilities: [cap.cut.reorder]
+    conflicts_with: [tech.hook.result_first, tech.hook.brand_message_within_5s]
+    requires: []
+    evidence_level: single_opinion
+    confidence: low
+    sources:
+      - {title: "TikTok Shop demos: the discovery-first playbook", author: "Influencers Time", url: "https://www.influencers-time.com/tiktok-shop-demos-the-discovery-first-playbook-that-converts/", locator: "search-result summary"}
+
+  - id: tech.hook.brand_message_within_5s
+    type: technique
+    name: Brand and main message within 5 s, with sound and visuals together
+    summary: "For branded Reels, Meta's Toluna-run study reported that showing the brand and core message in the first five seconds made creatives 1.7x likelier to rank top-20% for purchase intent, and opening with both sound and visuals 1.5x. Keep total brand presence modest elsewhere."
+    when_to_use: "Brand and DR ads on Reels; branded creator content."
+    how:
+      - "Name or show the brand once by 5 s (not a logo intro card)"
+      - "Start audio (speech or music) on frame 1 with a moving visual"
+    parameters: {brand_by_s: "≤5"}
+    avoid_when: "Organic creator content where early promotion lowers engagement (anti.brand.heavy_promo_early)."
+    genres: [genre.product, genre.brand_story]
+    goals: [goal.brand_recall, goal.cta_conversion]
+    uses_capabilities: [cap.text.title, cap.graphics.logo]
+    conflicts_with: [anti.brand.heavy_promo_early]
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Want Reels ads that actually work? Meta just revealed the playbook", author: "Best Media Info (reporting Meta x Toluna)", url: "https://bestmediainfo.com/insights/want-reels-ads-that-actually-work-meta-just-revealed-the-playbook-10866888", locator: "hooks and timing"}
+
+  - id: tech.hook.kallaway_three_step
+    type: technique
+    name: Three-step spoken hook (context, interjection, contrarian turn)
+    summary: "A creator-educator formula for spoken hooks: a context line that makes the topic clear and relatable, a short scroll-stopping interjection (often built on 'but'), then a contrarian turn that sends the viewer's expectation the other way and opens a curiosity gap."
+    when_to_use: "Talking head, explainers, podcast cold opens."
+    how:
+      - "Line 1: topic + common ground or pain"
+      - "Line 2: 2–4 word interjection with contrast"
+      - "Line 3: the unexpected angle the video will prove"
+    parameters: {lines: 3, total_s: "≤5"}
+    avoid_when: "The contrarian claim cannot be backed in the body."
+    genres: [genre.talking_head, genre.podcast_clip]
+    goals: [goal.retention_first_3s]
+    uses_capabilities: [cap.analysis.transcribe]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: low
+    sources:
+      - {title: "How to create irresistible hooks (transcript summary)", author: "Kallaway via SozAI", url: "https://sozai.app/transcript/create-irresistible-hooks-blow-content/", locator: "three-step formula"}
+
+  - id: tech.hook.thumbnail_test
+    type: technique
+    name: First frame passes the thumbnail test
+    summary: "Treat the opening frame like a long-form thumbnail: centred subject, at most about three objects, readable with sound off. If the first frame could not earn a click as a thumbnail, rework it. Galloway's Shorts data likewise urged treating the intro like a thumbnail."
+    when_to_use: "All genres; essential for Shorts where viewed-vs-swiped is the first gate."
+    how:
+      - "Freeze frame 0: is subject centred and uncluttered?"
+      - "≤3 visual objects; hook text big, inside safe zone"
+      - "Understandable muted"
+    parameters: {max_objects: 3}
+    avoid_when: "Never — but montage may accept an abstract striking frame."
+    genres: [genre.talking_head, genre.product, genre.tutorial, genre.transformation, genre.montage]
+    goals: [goal.retention_first_3s]
+    uses_capabilities: [cap.transform.reframe, cap.text.title]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "How Jenny Hoyos actually makes viral Shorts", author: "vidIQ (via Rosetta)", url: "https://rosetta.to/u/vidiq/how-jenny-hoyos-actually-makes-viral-shorts", locator: "hook"}
+      - {title: "Shorts study thread (3.3B views)", author: "Paddy Galloway", url: "https://threadreaderapp.com/thread/1646898356419981315.html", locator: "VVSA / intro advice"}
+
+  - id: tech.hook.plain_language
+    type: technique
+    name: Plain-language hook (low reading level)
+    summary: "Write the spoken and on-screen hook so a young or non-native viewer gets it instantly: short common words, no jargon, terms defined. One top Shorts creator checks hooks against roughly a 5th-grade reading level with a readability tool."
+    when_to_use: "All spoken genres; especially Hinglish/multilingual audiences."
+    how:
+      - "Run the hook text through a readability checker"
+      - "Replace abstract nouns with concrete ones"
+      - "Prefer ≤8 spoken words, ≤5 on screen"
+    parameters: {reading_grade: "≤5 (heuristic)"}
+    avoid_when: "Niche expert audiences who expect the jargon as a signal."
+    genres: [genre.talking_head, genre.tutorial, genre.podcast_clip]
+    goals: [goal.clarity, goal.retention_first_3s]
+    uses_capabilities: [cap.text.title]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: medium
+    sources:
+      - {title: "Jenny Hoyos episode", author: "Creator Science", url: "https://creatorscience.com/podcast/jenny-hoyos/", locator: "Hooks; Audience"}
+
+  - id: tech.hook.cold_open_reaction
+    type: technique
+    name: Cold-open on the reaction, withhold the cause
+    summary: "Start on the emotional reaction (a gasp, laugh, tears) without revealing what caused it, then rewind to the setup. The withheld cause becomes an open loop paid off at the end."
+    when_to_use: "Gifts, surprises, pranks, reveals, testimonials with an emotional peak, podcast punchlines."
+    how:
+      - "Clip the 1–2 s reaction peak"
+      - "Place at 0 s, then cut to setup with a text bridge ('2 hours earlier')"
+      - "Replay the reaction in full context at the payoff"
+    parameters: {reaction_clip_s: "1–2"}
+    avoid_when: "The reaction is mild — it over-promises."
+    genres: [genre.vlog, genre.testimonial, genre.podcast_clip, genre.transformation]
+    goals: [goal.retention_first_3s, goal.emotion]
+    uses_capabilities: [cap.cut.reorder, cap.text.title]
+    conflicts_with: []
+    requires: [tech.loop.nested_open_loops]
+    evidence_level: single_opinion
+    confidence: low
+    sources:
+      - {title: "How Jenny Hoyos actually makes viral Shorts", author: "vidIQ (via Rosetta)", url: "https://rosetta.to/u/vidiq/how-jenny-hoyos-actually-makes-viral-shorts", locator: "grandma reaction cold open"}
+
+  - id: tech.hook.category_callout
+    type: technique
+    name: Category / audience call-out hook
+    summary: "Name the product category or the target viewer in the first line or text so the right people self-select ('If you have curly hair…'). Commerce practitioners recommend this for Shop videos; it trades broad reach for relevance."
+    when_to_use: "Product, tutorial and testimonial videos aimed at a niche."
+    how:
+      - "First text card = category or audience in ≤5 words"
+      - "Spoken line repeats it with the benefit"
+    parameters: {}
+    avoid_when: "Broad entertainment content where narrowing loses viewers."
+    genres: [genre.product, genre.tutorial]
+    goals: [goal.retention_first_3s, goal.cta_conversion]
+    uses_capabilities: [cap.text.title]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "TikTok Shop script generator", author: "Wild and Free Tools", url: "https://wildandfreetools.com/blog/tiktok-shop-script-generator/", locator: "search-result summary"}
+
+  - id: tech.hook.testimonial_line
+    type: technique
+    name: Testimonial / social-proof hook
+    summary: "Open with a customer's verdict or result line ('This fixed my back pain in a week'). UGC practitioners recommend it when trust, not awareness, is the barrier: higher price points or unknown brands."
+    when_to_use: "Testimonial and product ads for new or premium brands."
+    how:
+      - "Pull the single most specific result sentence from the interview"
+      - "Place it first, then cut to the person's story"
+    parameters: {}
+    avoid_when: "Claims that can't be substantiated (compliance)."
+    genres: [genre.testimonial, genre.product]
+    goals: [goal.trust, goal.retention_first_3s]
+    uses_capabilities: [cap.cut.reorder, cap.analysis.transcribe]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "How to write UGC ad scripts", author: "Motion", url: "https://motionapp.com/blog/how-to-write-ugc-ad-scripts", locator: "hook types; search-result summary"}
+
+  - id: tech.hook.variant_testing
+    type: technique
+    name: Test hooks, hold the body constant
+    summary: "Produce several cuts that share the same body, proof and CTA but open differently, ideally three materially different entry points (problem, outcome, demonstration). TikTok's ad guidance similarly asks for 3–5 meaningfully different creatives per ad group."
+    when_to_use: "Paid or Trial-Reels testing; any reel where the hook is uncertain."
+    how:
+      - "Export 3 variants: problem-first, outcome-first, demo-first"
+      - "Keep everything after ~3 s identical"
+      - "Compare viewed-vs-swiped / 3 s hold rates"
+    parameters: {variants: "3–5"}
+    avoid_when: "Single organic post with no testing surface."
+    genres: [genre.product, genre.testimonial, genre.talking_head]
+    goals: [goal.retention_first_3s]
+    uses_capabilities: [cap.export.variants]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "How to write UGC ad scripts", author: "Motion", url: "https://motionapp.com/blog/how-to-write-ugc-ad-scripts", locator: "testing; search-result summary"}
+      - {title: "Creative best practices for performance ads", author: "TikTok Ads Help Center", url: "https://ads.tiktok.com/help/article/creative-best-practices?lang=en", locator: "creative volume and testing"}
+
+  - id: tech.hook.restack_midroll
+    type: technique
+    name: Hook stacking (re-hooks mid-video)
+    summary: "Add small new hooks through the body — a new question, a 'but here's the catch', a visual tease — rather than relying on the opening alone. UGC practitioners use it to lift view-through; it's the scripted counterpart of a pattern interrupt."
+    when_to_use: "Videos over ~25 s; talking head and testimonial bodies."
+    how:
+      - "Every ~8–12 s, open a fresh micro-question"
+      - "Pair each with a visual change (punch-in, b-roll, text)"
+    parameters: {interval_s: "8–12 (heuristic)"}
+    avoid_when: "Clips under ~15 s."
+    genres: [genre.talking_head, genre.testimonial, genre.podcast_clip]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.text.title, cap.transform.punch_in]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Hook stacking: the secret to longer VTR", author: "UGC Social", url: "https://ugcsocial.substack.com/p/hook-stacking-the-secret-to-longer", locator: "search-result summary"}
+
+  # ──────────────────── BODY: PACING, INTERRUPTS, CUTS ────────────────────
+  - id: principle.but_therefore_chain
+    type: principle
+    name: But/therefore beats, not 'and then'
+    summary: "Each beat of a short should cause or complicate the next ('but…', 'so…') instead of listing events. Causal chaining keeps forward pull without adding cuts, and tells the editor which lines are removable: a beat that changes nothing can go."
+    when_to_use: "Scripting and trimming any narrative short."
+    how:
+      - "Label each sentence as setup / but / so"
+      - "Delete beats that neither complicate nor resolve"
+    parameters: {}
+    avoid_when: "Pure montage."
+    genres: [genre.talking_head, genre.vlog, genre.brand_story, genre.testimonial]
+    goals: [goal.watch_through, goal.clarity]
+    uses_capabilities: [cap.cut.trim]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: medium
+    sources:
+      - {title: "Jenny Hoyos episode", author: "Creator Science", url: "https://creatorscience.com/podcast/jenny-hoyos/", locator: "Story and Expectations"}
+      - {title: "How Jenny Hoyos actually makes viral Shorts", author: "vidIQ (via Rosetta)", url: "https://rosetta.to/u/vidiq/how-jenny-hoyos-actually-makes-viral-shorts", locator: "storytelling"}
+
+  - id: principle.pacing_rollercoaster
+    type: principle
+    name: Pacing curve — fast hook, medium body with a peak, fast end
+    summary: "Vary tempo instead of cutting uniformly fast: a quick hook, a medium-paced middle with one peak (joke, twist, reveal), back to medium, then a quick ending. Give viewers a beat to absorb dense information."
+    when_to_use: "Story and explainer shorts over ~20 s."
+    how:
+      - "Plot intended energy per second; aim for one mid peak"
+      - "After dense info, hold ~0.5–1 s (no new text)"
+      - "Compress the final 3–5 s"
+    parameters: {peak_position: "~40–60% of runtime (heuristic)"}
+    avoid_when: "Sub-15 s TikToks where density is the style."
+    genres: [genre.talking_head, genre.tutorial, genre.vlog, genre.brand_story]
+    goals: [goal.watch_through, goal.clarity]
+    uses_capabilities: [cap.cut.trim]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: low
+    sources:
+      - {title: "How Jenny Hoyos actually makes viral Shorts", author: "vidIQ (via Rosetta)", url: "https://rosetta.to/u/vidiq/how-jenny-hoyos-actually-makes-viral-shorts", locator: "structure and pacing; editing pace"}
+
+  - id: tech.edit.dual_narrative
+    type: technique
+    name: Dual narrative (voiceover and visuals carry different threads)
+    summary: "Let the voiceover tell one line of the story while the pictures show a second (context, a side gag, the process). It packs more information per second without speeding up speech."
+    when_to_use: "Vlogs, tutorials, story shorts with voiceover."
+    how:
+      - "VO carries the argument; b-roll shows the evidence or a parallel moment"
+      - "Avoid literal illustration of every word"
+    parameters: {}
+    avoid_when: "The visual thread competes with a complex spoken step (tutorials needing exact matching)."
+    genres: [genre.vlog, genre.talking_head, genre.brand_story]
+    goals: [goal.watch_through, goal.clarity]
+    uses_capabilities: [cap.audio.voiceover, cap.compositing.broll_overlay]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: low
+    sources:
+      - {title: "How Jenny Hoyos actually makes viral Shorts", author: "vidIQ (via Rosetta)", url: "https://rosetta.to/u/vidiq/how-jenny-hoyos-actually-makes-viral-shorts", locator: "storytelling — dual narrative"}
+
+  - id: tech.pattern_interrupt.purposeful_reset
+    type: technique
+    name: Purposeful pattern interrupt every few seconds
+    summary: "Break predictability with a deliberate change — angle, scale, location, music shift, text, sound — roughly every 2–4 s in short-form. Practitioners stress the change should signal that the video is moving on, not add random stimulation."
+    when_to_use: "Any body section where framing or topic has been static."
+    how:
+      - "Tie each interrupt to a new point or beat"
+      - "Rotate types: punch-in, b-roll, text, SFX, angle, location"
+      - "Never repeat the same interrupt type on consecutive changes"
+    parameters: {interval_s: "2–4 (practitioner, unvalidated)"}
+    avoid_when: "Emotional peaks and testimonials where stillness carries meaning."
+    genres: [genre.talking_head, genre.tutorial, genre.podcast_clip, genre.product]
+    goals: [goal.watch_through, goal.energy]
+    uses_capabilities: [cap.transform.punch_in, cap.compositing.broll_overlay, cap.audio.sfx]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Pattern interrupt technique for short-form video", author: "CapCut", url: "https://www.capcut.com/create/pattern-interrupt-technique-short-form-video", locator: "search-result summary"}
+      - {title: "How to use pattern breaks in short-form videos", author: "GoFaceless", url: "https://www.gofaceless.ai/blog/optimize-video-engagement-pattern-breaks", locator: "search-result summary"}
+
+  - id: tech.jumpcut.visible_vs_masked
+    type: technique
+    name: Choose visible or masked jump cuts by tone
+    summary: "Jump cuts are most visible when framing barely changes. Leave them visible (or punch in) for energetic, comedic or direct styles; mask them with b-roll, a second angle or a scale change when the tone is calm, emotional or trust-based. Adobe warns overly choppy footage becomes jarring."
+    when_to_use: "Every talking-head, testimonial or podcast edit after silence removal."
+    how:
+      - "Energetic: alternate 100%/110–120% scale (playbook rule 11)"
+      - "Calm/trust: cover cuts with b-roll or alternate camera"
+      - "Check for choppiness on a full-speed watch"
+    parameters: {}
+    avoid_when: "Single-take emotional moments — don't cut at all."
+    genres: [genre.talking_head, genre.testimonial, genre.podcast_clip, genre.brand_story]
+    goals: [goal.watch_through, goal.trust]
+    uses_capabilities: [cap.cut.jump_cut, cap.transform.punch_in, cap.compositing.broll_overlay]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "What is a jump cut", author: "Adobe", url: "https://www.adobe.com/creativecloud/video/discover/jump-cut", locator: "use and restraint"}
+      - {title: "What are jump cuts, and how do you edit them?", author: "Epidemic Sound", url: "https://www.epidemicsound.com/blog/what-are-jump-cuts/", locator: "search-result summary"}
+      - {title: "Jump cut glossary", author: "Creator Essentials", url: "https://www.creatoressentials.com/glossary/jump-cut/", locator: "when to leave the jump visible; search-result summary"}
+
+  - id: tech.jumpcut.broll_just_before_cut
+    type: technique
+    name: Start the cover b-roll just before the jump cut
+    summary: "When masking a jump cut, bring the b-roll in slightly before the edit point so the viewer's eye is on the new image when the audio skips. Choose b-roll that matches what's being said."
+    when_to_use: "Covering removed flubs or pauses in talking head, testimonial, podcast."
+    how:
+      - "Place b-roll start 3–8 frames before the cut (heuristic)"
+      - "Extend it past the cut until the next phrase"
+      - "Add a short audio crossfade at the cut (playbook rule 10)"
+    parameters: {lead_frames: "3–8 (heuristic)"}
+    avoid_when: "No relevant b-roll — use a punch-in instead of irrelevant filler."
+    genres: [genre.talking_head, genre.testimonial, genre.podcast_clip]
+    goals: [goal.watch_through, goal.trust]
+    uses_capabilities: [cap.compositing.broll_overlay, cap.audio.crossfade]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Hide jump cuts like a pro (transcript summary)", author: "SozAI", url: "https://sozai.app/transcript/hide-jump-cuts-pro/", locator: "b-roll before the cut"}
+      - {title: "What is a jump cut", author: "Adobe", url: "https://www.adobe.com/creativecloud/video/discover/jump-cut", locator: "cut to B-roll to hide pauses"}
+
+  - id: tech.jumpcut.keep_breaths_between_ideas
+    type: technique
+    name: Keep a breath between separate ideas
+    summary: "Silence removal should tighten within an idea but keep a short breath between distinct ideas; cutting every gap to zero makes delivery sound rushed and harms comprehension. Complements playbook rule 9's silence thresholds."
+    when_to_use: "After auto silence-removal on any spoken genre."
+    how:
+      - "Detect idea boundaries (sentence end + topic shift)"
+      - "Keep 150–300 ms there (heuristic); tighten elsewhere"
+    parameters: {idea_gap_ms: "150–300 (heuristic)"}
+    avoid_when: "Comedic rapid-fire delivery by design."
+    genres: [genre.talking_head, genre.tutorial, genre.podcast_clip, genre.testimonial]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.analysis.silence_detect, cap.cut.jump_cut]
+    conflicts_with: [anti.jumpcut.zero_gap]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Jump cut glossary", author: "Creator Essentials", url: "https://www.creatoressentials.com/glossary/jump-cut/", locator: "don't remove breaths needed for comprehension; search-result summary"}
+      - {title: "How to cut the pauses and stutters out of a raw talking-head video", author: "Vizard", url: "https://agent.vizard.ai/how-to/cut-the-pauses-and-stutters-out-of-a-raw-talking-head-video.html", locator: "search-result summary"}
+
+  - id: tech.punch_in.hard_vs_eased
+    type: technique
+    name: Hard punch for energy, eased push for emotion
+    summary: "A cut-based scale jump (no keyframes) reads snappy and high-energy; a slow keyframed push with easing reads intimate or dramatic. Pick by genre and moment. Shooting 4K wide leaves crop headroom for both."
+    when_to_use: "Hard: talking head emphasis, jokes, lists. Eased: testimonial peaks, brand story, reveals."
+    how:
+      - "Hard: cut + scale 110–125% on the stressed word"
+      - "Eased: 100→108% over 2–4 s, ease-in-out"
+      - "Re-centre face within playbook rule 13 tolerance"
+    parameters: {hard_scale: "1.10–1.25", push_scale: "1.04–1.10", push_s: "2–4"}
+    avoid_when: "Source resolution is 1080p and the crop would soften the face visibly."
+    genres: [genre.talking_head, genre.testimonial, genre.brand_story, genre.podcast_clip]
+    goals: [goal.energy, goal.emotion]
+    uses_capabilities: [cap.transform.punch_in]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "How to zoom in on Premiere Pro", author: "FireCut", url: "https://firecut.ai/blog/how-to-zoom-in-on-premiere-pro-a-step-by-step-guide-for-beginners/", locator: "jump zoom vs keyframed zoom; search-result summary"}
+
+  - id: tech.broll.new_point_new_image
+    type: technique
+    name: New point, new image
+    summary: "Tie visual changes to the structure of the speech: every new point or list item arrives with a new image (b-roll, graphic, angle or scale). This makes the edit rhythm follow meaning rather than a timer."
+    when_to_use: "Talking head, tutorial, podcast, testimonial."
+    how:
+      - "Segment transcript into points"
+      - "Assign a visual change at each point start"
+      - "Fill gaps >4 s with a punch-in (playbook rule 7)"
+    parameters: {}
+    avoid_when: "One continuous emotional statement."
+    genres: [genre.talking_head, genre.tutorial, genre.podcast_clip]
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.analysis.transcribe, cap.compositing.broll_overlay]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "How to edit short-form video", author: "Descript", url: "https://descript.com/blog/article/edit-short-form-video", locator: "search-result summary"}
+
+  - id: tech.reframe.speaker_layout
+    type: technique
+    name: Speaker-aware vertical layout (fill vs stacked)
+    summary: "When reframing horizontal conversations to 9:16, use a full-frame crop on whoever is speaking and switch to a stacked/split layout when both people's reactions matter. Keep faces tracked; a face drifting out of frame reads amateur."
+    when_to_use: "Podcast, interview, panel clips."
+    how:
+      - "Diarise speakers; crop to active speaker"
+      - "Switch to stacked layout during back-and-forth or reactions"
+      - "Smooth tracking; no jitter"
+    parameters: {}
+    avoid_when: "Single-speaker monologue."
+    genres: [genre.podcast_clip, genre.interview]
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.transform.reframe, cap.compositing.split_screen]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "AI Shorts guide", author: "Captions", url: "https://captions.ai/help/guides/creators/ai-shorts.md", locator: "two-person stacked framing; search-result summary"}
+      - {title: "How to edit podcast Shorts like a pro", author: "OpusClip", url: "https://www.opus.pro/blog/how-to-edit-podcast-shorts-like-a-pro-using-opus-clip-pc-mac", locator: "fill vs split; search-result summary"}
+
+  - id: tech.beat.cut_grid
+    type: technique
+    name: Beat grid from BPM and first-beat offset
+    summary: "Compute frames per beat as (60 / BPM) × fps and anchor the grid on the first detected beat, not frame zero. Cut on 2- or 4-beat boundaries as base cadence, with short every-beat bursts; still let action and importance pick the exact frame near the beat."
+    when_to_use: "Montage, event recap, transformation reveals, music-led vlogs."
+    how:
+      - "Detect BPM + first downbeat offset; check for tempo changes"
+      - "Snap cuts to the nearest beat within ±2 frames of a natural action point"
+      - "Check alignment against kick/snare by ear"
+    parameters: {frames_per_beat: "(60/BPM)*fps; 120 BPM@30fps = 15", base_cut_every_beats: "2–4"}
+    avoid_when: "Speech-led content where phrase boundaries outrank beats."
+    genres: [genre.montage, genre.event_recap, genre.transformation]
+    goals: [goal.energy, goal.rewatch]
+    uses_capabilities: [cap.analysis.beat_detect, cap.cut.trim]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Beat sync editing skill", author: "Open Design", url: "https://open-design.ai/skills/beat-sync-editing/", locator: "first-beat offset; search-result summary"}
+      - {title: "Cut to the beat in Final Cut Pro X", author: "PremiumBeat", url: "https://www.premiumbeat.com/blog/cut-to-the-beat-tip-for-editing-to-music-in-final-cut-pro-x/", locator: "search-result summary"}
+      - {title: "Beat-sync video editing for sports highlights", author: "CapCut", url: "https://www.capcut.com/create/sports-highlight-editing-beat-synced-ai-reels", locator: "motion/content decide exact cut; search-result summary"}
+
+  - id: tech.transition.match_cut_reveal
+    type: technique
+    name: Match-cut or cover-wipe reveal
+    summary: "Bridge before and after through a shared element: same pose and position, continuing motion (a spin), or an object/hand covering the lens and moving away in the next clip. Place it on a beat or visible action."
+    when_to_use: "Transformations, outfit changes, product reveals, travel scene changes."
+    how:
+      - "Shoot both states from the same locked position"
+      - "Cover: end clip A on full occlusion, start clip B occluded and clearing"
+      - "Motion: cut mid-movement so direction continues"
+    parameters: {}
+    avoid_when: "Mismatched framing between states (anti.transform.mismatched_framing)."
+    genres: [genre.transformation, genre.vlog, genre.product]
+    goals: [goal.rewatch, goal.shares_saves]
+    uses_capabilities: [cap.transition.match_cut, cap.transition.wipe]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Instagram Reel transition trends", author: "CapCut", url: "https://www.capcut.com/create/instagram-reel-transitions-viral-edit-tips", locator: "search-result summary"}
+      - {title: "Top five Instagram Reels transitions", author: "Plann", url: "https://plannthat.com/top-five-instagram-reels-transitions", locator: "search-result summary"}
+      - {title: "Making the cut: the attentional theory of continuity", author: "Tim J. Smith", url: "https://ualresearchonline.arts.ac.uk/id/eprint/21187/", locator: "match-action cuts go unnoticed more often"}
+
+  - id: tech.transition.one_language
+    type: technique
+    name: One transition language per reel
+    summary: "Use a single transition style throughout (e.g., all whips or all cover-wipes) and reserve it for meaningful moments. Mixing many effect styles makes viewers notice the editing instead of the story. Meta notes a single interesting transition can be enough to drive rewatches."
+    when_to_use: "All genres using designed transitions."
+    how:
+      - "Pick one style per reel from the brand/genre preset"
+      - "Use hard cuts elsewhere"
+    parameters: {max_transition_styles: 1}
+    avoid_when: "Deliberate maximalist trend edits that mimic a known template."
+    genres: [genre.transformation, genre.montage, genre.vlog, genre.event_recap, genre.product]
+    goals: [goal.rewatch, goal.clarity]
+    uses_capabilities: [cap.transition.whip]
+    conflicts_with: [anti.effects.stacking]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Instagram Reel transition trends", author: "CapCut", url: "https://www.capcut.com/create/instagram-reel-transitions-viral-edit-tips", locator: "one transition language; search-result summary"}
+      - {title: "Reels best practices, tips and tricks", author: "Meta for Creators", url: "https://creators.facebook.com/reels-best-practices-tips-tricks", locator: "section 7 (transitions drive rewatches)"}
+
+  - id: tech.audio.speech_plus_music
+    type: technique
+    name: Combine speech with a music bed
+    summary: "Meta's Reels ad study associated combining speech and music with roughly 2x brand interest and purchase intent, and reinforcing the message in both audio and on-screen text with 1.8x brand interest. Duck the bed under voice per playbook rule 20."
+    when_to_use: "Product, testimonial, brand story, talking head ads."
+    how:
+      - "Add a low music bed under VO/speech"
+      - "Repeat the key message as on-screen text when spoken"
+    parameters: {}
+    avoid_when: "Raw testimonial authenticity is the hook and music feels manipulative; montage (no speech)."
+    genres: [genre.product, genre.testimonial, genre.brand_story, genre.talking_head]
+    goals: [goal.brand_recall, goal.cta_conversion]
+    uses_capabilities: [cap.audio.music_bed, cap.audio.ducking, cap.text.title]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Want Reels ads that actually work? Meta just revealed the playbook", author: "Best Media Info (reporting Meta x Toluna)", url: "https://bestmediainfo.com/insights/want-reels-ads-that-actually-work-meta-just-revealed-the-playbook-10866888", locator: "brand and DR findings"}
+
+  - id: tech.product.repeat_and_limit_branding
+    type: technique
+    name: Show the product repeatedly; keep branding under a quarter of runtime
+    summary: "For direct-response Reels, Meta's study linked showing the product more than once (2.7x), stating clear context/USPs (5.3x), a clear CTA (1.9x) and native elements like emoji (2.5x) to higher purchase intent, while brand presence under 25% of runtime was linked to 4.8x."
+    when_to_use: "Product and testimonial ads."
+    how:
+      - "Product visible in ≥2 distinct scenes"
+      - "One USP per shot, as text"
+      - "Logo/brand cards total <25% runtime"
+    parameters: {brand_presence_max: "25% of runtime", product_appearances_min: 2}
+    avoid_when: "Brand-awareness campaigns (Meta suggests repeated brand moments there)."
+    genres: [genre.product, genre.testimonial]
+    goals: [goal.cta_conversion, goal.brand_recall]
+    uses_capabilities: [cap.text.title, cap.cut.reorder]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Want Reels ads that actually work? Meta just revealed the playbook", author: "Best Media Info (reporting Meta x Toluna)", url: "https://bestmediainfo.com/insights/want-reels-ads-that-actually-work-meta-just-revealed-the-playbook-10866888", locator: "performance/DR campaigns"}
+
+  - id: tech.product.in_use_demo
+    type: technique
+    name: Show the product in use (demo, unboxing)
+    summary: "Demonstrate the product working rather than describing it. TikTok/CreatorIQ reported product-in-use footage such as unboxing raised attention about 31%, and cited a demo-led ad landing in TikTok's top 2% for retention."
+    when_to_use: "Product, testimonial, tutorial."
+    how:
+      - "Hands-on close-ups; real-time result where possible"
+      - "Sync a short natural sound (click, pour) to the action"
+    parameters: {}
+    avoid_when: "Intangible services — show the customer outcome instead."
+    genres: [genre.product, genre.testimonial, genre.tutorial]
+    goals: [goal.trust, goal.cta_conversion]
+    uses_capabilities: [cap.transform.punch_in, cap.audio.sfx]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Pay attention to me: report shares brand tips (TikTok x CreatorIQ)", author: "Marketing Brew", url: "https://www.marketingbrew.com/stories/2023/12/18/pay-attention-to-me-report-shares-brand-tips-for-catching-users-interest-on-tiktok", locator: "product demonstration; Redken example"}
+
+  - id: tech.native.lofi_slice_of_life
+    type: technique
+    name: Native, lo-fi, slice-of-life look
+    summary: "Platform ad guides favour a DIY, less polished look that blends with creator content, plus relatable everyday moments with people (Meta: 1.5x purchase intent for slice-of-life). Polish should not make the piece read as a TV ad."
+    when_to_use: "Product, testimonial, vlog; most organic content."
+    how:
+      - "Selfie-cam or handheld framing; natural light"
+      - "Native-style text and captions; avoid broadcast lower-thirds"
+    parameters: {}
+    avoid_when: "Premium brand story or cinematic montage where craft signals quality."
+    genres: [genre.product, genre.testimonial, genre.vlog]
+    goals: [goal.trust, goal.watch_through]
+    uses_capabilities: [cap.text.captions]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Creative best practices for performance ads", author: "TikTok Ads Help Center", url: "https://ads.tiktok.com/help/article/creative-best-practices?lang=en", locator: "native style"}
+      - {title: "Want Reels ads that actually work? Meta just revealed the playbook", author: "Best Media Info (reporting Meta x Toluna)", url: "https://bestmediainfo.com/insights/want-reels-ads-that-actually-work-meta-just-revealed-the-playbook-10866888", locator: "slice-of-life 1.5x"}
+
+  # ───────────────────────── OPEN LOOPS & PAYOFFS ─────────────────────────
+  - id: tech.loop.foreshadow_payoff
+    type: technique
+    name: Foreshadow the payoff in the first 3 s
+    summary: "Right after the hook, spend one or two spoken lines (≤3 s) telling viewers what the ending will deliver ('by the end I'll have…', 'three reasons…'). It converts a hook into a promise that pulls viewers to the end, and the payoff must then match it."
+    when_to_use: "Story, challenge, tutorial and list shorts."
+    how:
+      - "Write the payoff line first, then a ≤3 s foreshadow line referencing it"
+      - "Mirror the foreshadow wording in the payoff"
+    parameters: {foreshadow_s: "≤3"}
+    avoid_when: "The payoff is weak; the promise amplifies disappointment."
+    genres: [genre.talking_head, genre.tutorial, genre.vlog, genre.transformation]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.text.title]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: medium
+    sources:
+      - {title: "Jenny Hoyos episode", author: "Creator Science", url: "https://creatorscience.com/podcast/jenny-hoyos/", locator: "Structure and Pacing (foreshadowing)"}
+      - {title: "How Jenny Hoyos actually makes viral Shorts", author: "vidIQ (via Rosetta)", url: "https://rosetta.to/u/vidiq/how-jenny-hoyos-actually-makes-viral-shorts", locator: "foreshadowing"}
+
+  - id: tech.loop.nested_open_loops
+    type: technique
+    name: Nested open loops — first opened, last closed
+    summary: "Open a new question before closing the current one, and close the hook's loop last, like nested dolls. Two or three loops are a common practitioner ceiling for a short. Every loop opened must be paid off on screen."
+    when_to_use: "Story, testimonial and explainer shorts over ~20 s."
+    how:
+      - "Loop A (hook) → open loop B mid-body → close B → close A at the end"
+      - "Track loops in the edit plan; fail QA if any loop is unpaid"
+    parameters: {max_loops: "2–3 (rule of thumb)"}
+    avoid_when: "Very short clips (<15 s): one loop only."
+    genres: [genre.talking_head, genre.testimonial, genre.brand_story, genre.vlog]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.cut.reorder]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Scripting for retentive attention: the narrative open-loop strategy", author: "TokCount", url: "https://tokcount.com/blog/scripting-for-retentive-attention-using-the-narrative-open-loop-strategy", locator: "search-result summary"}
+      - {title: "Open loops and payoffs without clickbait", author: "Cursa", url: "https://cursa.app/en/page/open-loops-and-payoffs-keeping-viewers-watching-without-clickbait", locator: "search-result summary"}
+
+  - id: tech.loop.visual_withhold
+    type: technique
+    name: Visual open loop (withhold the reveal)
+    summary: "Open a loop with pictures instead of words: crop, blur or cover the thing the viewer wants to see, or show only the reaction, and reveal it at the end. Works without sound."
+    when_to_use: "Transformation, product reveal, gifting, event peak moments."
+    how:
+      - "Show partial view (back of product, covered face, blurred screen)"
+      - "Full reveal on a beat at 80–100% of runtime"
+    parameters: {reveal_at: "80–100% of runtime"}
+    avoid_when: "Platforms/audiences where showing the result first tests better (A/B with tech.hook.result_first)."
+    genres: [genre.transformation, genre.product, genre.event_recap]
+    goals: [goal.watch_through, goal.rewatch]
+    uses_capabilities: [cap.effect.blur, cap.transform.reframe]
+    conflicts_with: [tech.hook.result_first]
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Scripting for retentive attention: the narrative open-loop strategy", author: "TokCount", url: "https://tokcount.com/blog/scripting-for-retentive-attention-using-the-narrative-open-loop-strategy", locator: "loops can be opened visually; search-result summary"}
+
+  - id: tech.loop.reason_to_finish_mechanism
+    type: technique
+    name: Built-in reason to finish (countdown, circle, counter)
+    summary: "Give the structure itself a visible end point: a numbered list counting down, a progress counter, or a story that returns to its starting image. Viewers can see how far they are from the promised end."
+    when_to_use: "Lists, tutorials, challenges, transformations."
+    how:
+      - "Show 'k/N' labels or a countdown"
+      - "Or end on the opening shot to close the circle"
+    parameters: {}
+    avoid_when: "Long lists (>5) — the counter signals a long wait."
+    genres: [genre.tutorial, genre.talking_head, genre.transformation]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.graphics.progress_counter, cap.text.title]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: low
+    sources:
+      - {title: "Jenny Hoyos episode", author: "Creator Science", url: "https://creatorscience.com/podcast/jenny-hoyos/", locator: "Structure and Pacing (mechanism)"}
+
+  - id: principle.expectation_then_twist
+    type: principle
+    name: Set an expectation, then twist it
+    summary: "Popular Reels have a payoff — reveal, punchline or plot twist. A reliable way to manufacture one is to set a clear expectation early and then break it at the end, so the ending surprises while still answering the opening."
+    when_to_use: "Story-led talking head, vlog, transformation, brand story."
+    how:
+      - "State the expected outcome early"
+      - "Deliver a different but satisfying outcome"
+    parameters: {}
+    avoid_when: "Tutorials where the expected result must simply happen."
+    genres: [genre.vlog, genre.talking_head, genre.brand_story, genre.transformation]
+    goals: [goal.emotion, goal.shares_saves, goal.rewatch]
+    uses_capabilities: [cap.cut.reorder]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Reels best practices, tips and tricks", author: "Meta for Creators", url: "https://creators.facebook.com/reels-best-practices-tips-tricks", locator: "section 3 (payoff)"}
+      - {title: "Jenny Hoyos episode", author: "Creator Science", url: "https://creatorscience.com/podcast/jenny-hoyos/", locator: "Story and Expectations"}
+
+  # ───────────────────────── ENDINGS & LOOPS ─────────────────────────
+  - id: tech.ending.abrupt_after_payoff
+    type: technique
+    name: End right after the payoff
+    summary: "Cut within a beat of the payoff line or reaction; no recap, no outro, no 'thanks for watching'. Abrupt endings feel satisfying when the payoff was foreshadowed, and they push viewers into the auto-replay."
+    when_to_use: "Nearly all short-form genres."
+    how:
+      - "Find the payoff word/frame; end ≤0.5 s after (playbook rule 29)"
+      - "If a CTA is needed, put it before the payoff or overlay it"
+    parameters: {tail_s: "≤0.5"}
+    avoid_when: "Brand story that needs a mission/CTA beat (keep it under ~3 s)."
+    genres: [genre.talking_head, genre.vlog, genre.transformation, genre.tutorial, genre.podcast_clip]
+    goals: [goal.watch_through, goal.rewatch]
+    uses_capabilities: [cap.cut.trim]
+    conflicts_with: [anti.ending.outro_card]
+    requires: [tech.loop.foreshadow_payoff]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Jenny Hoyos episode", author: "Creator Science", url: "https://creatorscience.com/podcast/jenny-hoyos/", locator: "endings are abrupt"}
+
+  - id: tech.ending.trim_dead_last_second
+    type: technique
+    name: Trim the dead final second
+    summary: "Check the retention graph's last second; a cliff there means a dead tail. One creator reports that trimming one second off the end lifted a Short from 83% to 88% retention after a 25-point final-second drop. On a Short, one second is often over 1% of runtime."
+    when_to_use: "Final QA of every export; post-publish iteration."
+    how:
+      - "End on the last meaningful frame, not a fade or pose"
+      - "If analytics show a last-second cliff, re-export shorter"
+    parameters: {}
+    avoid_when: "Loop seams that need the final frames to match frame 0."
+    genres: [genre.talking_head, genre.vlog, genre.tutorial, genre.product]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.cut.trim]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: medium
+    sources:
+      - {title: "Jenny Hoyos episode", author: "Creator Science", url: "https://creatorscience.com/podcast/jenny-hoyos/", locator: "Retention and Loops"}
+
+  - id: tech.ending.seamless_visual_loop
+    type: technique
+    name: Seamless visual/audio loop seam
+    summary: "Make the last frame flow into the first so the replay goes unnoticed: match position, motion and lighting across the seam, or copy the first second to the end. Audio usually gives a loop away, so match music phase, VO and captions across the seam."
+    when_to_use: "Montage, transformation, product spins, aesthetic clips; typically 3–15 s pieces."
+    how:
+      - "Plan frame 0 and last frame together at the shoot"
+      - "Crossfade or match music so the bar restarts cleanly"
+      - "No end card, no caption hanging over the seam"
+    parameters: {typical_length_s: "3–15"}
+    avoid_when: "Narrative content where the end must clearly resolve."
+    genres: [genre.montage, genre.transformation, genre.product]
+    goals: [goal.rewatch]
+    uses_capabilities: [cap.cut.trim, cap.audio.crossfade]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Seamless loop videos: start-to-end continuity techniques", author: "CapCut", url: "https://www.capcut.com/create/seamless-loop-videos-continuity-techniques", locator: "search-result summary"}
+      - {title: "How to loop YouTube Shorts for more watch time", author: "vidIQ", url: "https://vidiq.com/blog/post/double-youtube-watch-time-looping-shorts", locator: "search-result summary"}
+
+  - id: tech.ending.sentence_split_loop
+    type: technique
+    name: Sentence that completes across the loop
+    summary: "End on the first half of a sentence whose second half is the video's opening line ('…and that's why' → 'Nobody tells you this'). The restart feels intentional and nudges a second watch. Rewatch claims are vendor-reported, not verified."
+    when_to_use: "Talking head and VO-led shorts."
+    how:
+      - "Write the opening line so it can complete the last line"
+      - "Cut audio cleanly at the seam (no breath tail)"
+    parameters: {}
+    avoid_when: "The trick would confuse a first-time viewer about where the video starts."
+    genres: [genre.talking_head, genre.vlog, genre.tutorial]
+    goals: [goal.rewatch]
+    uses_capabilities: [cap.cut.trim]
+    conflicts_with: [tech.ending.abrupt_after_payoff]
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Story loops and seamless loops", author: "Faceless", url: "https://faceless.so/blog/looping-short-videos-tutorial-story-seamless-loops", locator: "search-result summary"}
+      - {title: "Seamless loop videos: start-to-end continuity techniques", author: "CapCut", url: "https://www.capcut.com/create/seamless-loop-videos-continuity-techniques", locator: "split dialogue across seam; search-result summary"}
+
+  - id: tech.ending.narrative_loop
+    type: technique
+    name: Narrative loop (ending reframes the opening)
+    summary: "Make the ending cause, answer or reframe the opening image so a rewatch is rewarded with new meaning. Unlike a seamless seam it doesn't hide the restart; it makes the restart worth it."
+    when_to_use: "Story, brand, vlog and transformation shorts."
+    how:
+      - "Reuse the opening shot in the final beat with new context"
+      - "Or end on the event that sets up the opening"
+    parameters: {}
+    avoid_when: "Tutorials where clarity beats cleverness."
+    genres: [genre.vlog, genre.brand_story, genre.transformation, genre.talking_head]
+    goals: [goal.rewatch, goal.emotion]
+    uses_capabilities: [cap.cut.reorder]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Story loops and seamless loops", author: "Faceless", url: "https://faceless.so/blog/looping-short-videos-tutorial-story-seamless-loops", locator: "search-result summary"}
+
+  # ───────────────────────────── CTA ─────────────────────────────
+  - id: tech.cta.single_spoken_and_text
+    type: technique
+    name: One CTA, spoken and on screen
+    summary: "Ask for one action only and deliver it as both voice and text, since many viewers watch muted. Meta's DR study linked a clear shown or voiced CTA to 1.9x purchase intent; TikTok's ad guidance asks videos to close with a clear CTA."
+    when_to_use: "Any video with a conversion goal."
+    how:
+      - "Pick one: follow | comment keyword | link | save | shop"
+      - "Text CTA ≤5 words inside safe zone; spoken version ≤2 s"
+    parameters: {cta_words_text: "≤5"}
+    avoid_when: "Pure entertainment reels where any ask lowers completion."
+    genres: [genre.product, genre.testimonial, genre.tutorial, genre.brand_story]
+    goals: [goal.cta_conversion]
+    uses_capabilities: [cap.text.cta_card]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Want Reels ads that actually work? Meta just revealed the playbook", author: "Best Media Info (reporting Meta x Toluna)", url: "https://bestmediainfo.com/insights/want-reels-ads-that-actually-work-meta-just-revealed-the-playbook-10866888", locator: "clear CTA 1.9x"}
+      - {title: "TikTok Shop shoppable video content guide (report)", author: "PPC Land", url: "https://ppc.land/tiktok-shops-shoppable-video-content-guide-tells-creators-what-actually-works/", locator: "CTA spoken or as text"}
+
+  - id: tech.cta.before_dropoff
+    type: technique
+    name: Place the CTA before the biggest drop-off, not only at the end
+    summary: "Most viewers never reach the last seconds of a short. Wistia's 2023 data on hosted marketing videos showed mid-video CTAs converting 20.6% vs 17% front and 11.9% end. Transfer to feeds is unproven, so place a light CTA after the payoff begins or before the retention cliff, and test."
+    when_to_use: "Videos >25 s with a conversion goal and known retention curve."
+    how:
+      - "Find the first major drop in similar videos' retention"
+      - "Overlay a text CTA just before it, without stopping the story"
+      - "Optional short reinforcing CTA at the end"
+    parameters: {position: "40–70% of runtime (heuristic)"}
+    avoid_when: "Clips <20 s, or where a mid-roll ask breaks the narrative (Wistia data is not feed data)."
+    genres: [genre.product, genre.tutorial, genre.talking_head, genre.testimonial]
+    goals: [goal.cta_conversion]
+    uses_capabilities: [cap.text.cta_card]
+    conflicts_with: [anti.cta.end_only]
+    requires: []
+    evidence_level: study
+    confidence: low
+    sources:
+      - {title: "Middle-most message: where to put CTAs in videos (Wistia State of Video 2023)", author: "MediaPost", url: "https://www.mediapost.com/publications/article/383025/middle-most-message-where-to-put-ctas-in-videos.html", locator: "conversion by CTA position"}
+
+  - id: tech.cta.shorts_to_longform_bridge
+    type: technique
+    name: Bridge Shorts to long-form with a related-video link and a direct ask
+    summary: "YouTube's culture team advises building a clear path from a Short to a longer video using the Related Video link plus a direct spoken call to watch it. The Short should feel complete yet clearly a slice of something bigger."
+    when_to_use: "Podcast clips, tutorials and talking-head Shorts cut from long-form."
+    how:
+      - "Attach the Related Video in YouTube Studio"
+      - "Last line: specific reason to watch the full video"
+    parameters: {}
+    avoid_when: "No long-form counterpart exists."
+    genres: [genre.podcast_clip, genre.tutorial, genre.talking_head]
+    goals: [goal.cta_conversion]
+    uses_capabilities: [cap.text.cta_card]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "YouTube offers tips on working with Shorts videos", author: "Social Media Today (summarising YouTube posts)", url: "https://www.socialmediatoday.com/news/youtube-offers-tips-on-working-with-shorts-videos/", locator: "bridging to long-form"}
+
+  # ───────────────────────── PLATFORMS ─────────────────────────
+  - id: platform.youtube_shorts
+    type: platform
+    name: YouTube Shorts — editing parameters
+    summary: "Vertical/square uploads up to 3 minutes count as Shorts. The first gate is viewed-vs-swiped; Galloway's 5,400-Short sample found <60% viewed rarely performed and top Shorts sat around 70–90%, with average view duration the strongest correlate. Story-driven Shorts around 30–40 s are a creator-reported sweet spot."
+    when_to_use: "Exporting for Shorts."
+    how:
+      - "Treat the opening like a thumbnail (tech.hook.thumbnail_test)"
+      - "Default 25–45 s for story/explainers; longer only if AVD holds"
+      - "Link a related long-form video when one exists"
+    parameters: {max_length_s: 180, viewed_rate_target: "≥70% (correlational)", typical_length_s: "25–60"}
+    avoid_when: ""
+    genres: []
+    goals: [goal.retention_first_3s, goal.watch_through]
+    uses_capabilities: [cap.export.render]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Understand three-minute YouTube Shorts", author: "YouTube Help", url: "https://support.google.com/youtube/answer/15424877?hl=en", locator: "eligibility"}
+      - {title: "Shorts study thread (3.3B views, 5,400 Shorts)", author: "Paddy Galloway", url: "https://threadreaderapp.com/thread/1646898356419981315.html", locator: "VVSA and AVD findings"}
+      - {title: "Jenny Hoyos episode", author: "Creator Science", url: "https://creatorscience.com/podcast/jenny-hoyos/", locator: "Platform Differences (~34 s)"}
+
+  - id: platform.tiktok
+    type: platform
+    name: TikTok — editing parameters
+    summary: "TikTok's ad guidance: hook within 6 s, core message within 3 s, people on screen, native lo-fi look, sound on, text at 5–10 words per second. A 2021 TikTok ad analysis found 21–34 s ads had the best conversion lift. Organic length data is mixed: Buffer saw longer videos get more reach, OpusClip saw viral clips skew shorter."
+    when_to_use: "Exporting for TikTok."
+    how:
+      - "Dense, fast cut for entertainment (creator-reported 10–20 s works well)"
+      - "Ads: target 21–34 s"
+      - "Education: 30–60 s if retention holds"
+    parameters: {ad_length_s: "21–34 (2021 ads data)", organic_typical_s: "15–60", hook_window_s: "0–3 (≤6 hard)"}
+    avoid_when: ""
+    genres: []
+    goals: [goal.retention_first_3s, goal.cta_conversion]
+    uses_capabilities: [cap.export.render]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Creative best practices for performance ads", author: "TikTok Ads Help Center", url: "https://ads.tiktok.com/help/article/creative-best-practices?lang=en", locator: "structure and timing"}
+      - {title: "Triple-digit conversion lift: simple creative tips", author: "TikTok for Business blog (2021)", url: "https://ads.tiktok.com/business/en-US/blog/creative-that-drives-conversions", locator: "21–34 s finding (via search snippet; page geo-blocked)"}
+      - {title: "Longer TikToks get more views — data", author: "Buffer", url: "https://buffer.com/resources/longer-tiktoks-get-more-views-data/", locator: "1.1M videos length buckets"}
+      - {title: "Anatomy of a viral TikTok in 2026", author: "OpusClip", url: "https://www.opus.pro/blog/anatomy-of-a-viral-tiktok-2026", locator: "length (viral median 41 s vs 50 s)"}
+
+  - id: platform.instagram_reels
+    type: platform
+    name: Instagram Reels — editing parameters
+    summary: "Meta advises opening with the point, building to a payoff, using vertical 9:16, transitions for rewatch, and avoiding watermarks or low-res recycled clips. Mosseri named watch time, likes per reach and sends per reach as key signals and called the first three seconds the hook. One creator reports Reels favour visual, subtitled, shareable pieces (anecdotal)."
+    when_to_use: "Exporting for Reels."
+    how:
+      - "Subtitle everything; assume muted viewing"
+      - "Optimise for sends: a relatable or useful payoff"
+      - "Length by content; Buffer saw <90 s buckets within ±3% of baseline reach (playbook §1)"
+    parameters: {typical_length_s: "15–90", hook_window_s: "0–3"}
+    avoid_when: ""
+    genres: []
+    goals: [goal.retention_first_3s, goal.shares_saves]
+    uses_capabilities: [cap.export.render, cap.text.captions]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Reels best practices, tips and tricks", author: "Meta for Creators", url: "https://creators.facebook.com/reels-best-practices-tips-tricks", locator: "sections 3, 7, 9, 12"}
+      - {title: "Head of Instagram reveals secrets to social media success", author: "Inman", url: "https://www.inman.com/2025/03/07/head-of-instagram-reveals-secrets-to-social-media-success/", locator: "Mosseri on the first three seconds (search snippet)"}
+      - {title: "The 3 most important Instagram metrics for reach", author: "Torro", url: "https://torro.io/blog/3-most-important-instagram-metrics-for-reach", locator: "Mosseri's three signals; secondary"}
+
+  # ───────────────────────── MEASUREMENT PRINCIPLES ─────────────────────────
+  - id: principle.retention_over_length
+    type: principle
+    name: Hold time matters more than nominal length
+    summary: "Across platform datasets, longer videos correlate with more reach only when viewers keep watching; Galloway found average view duration was the strongest correlate of Shorts views, and creators report shorter clips need near-total retention. Set length by how long the content holds, then cut tighter."
+    when_to_use: "Deciding target duration for any genre."
+    how:
+      - "Draft long, then remove any segment that doesn't add information (playbook rule 26)"
+      - "Under ~30 s requires very high completion; over 60 s requires re-hooks"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.talking_head, genre.tutorial, genre.podcast_clip, genre.vlog]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.cut.trim]
+    conflicts_with: []
+    requires: []
+    evidence_level: study
+    confidence: medium
+    sources:
+      - {title: "Shorts study thread", author: "Paddy Galloway", url: "https://threadreaderapp.com/thread/1646898356419981315.html", locator: "length vs views; AVD"}
+      - {title: "Longer TikToks get more views — data", author: "Buffer", url: "https://buffer.com/resources/longer-tiktoks-get-more-views-data/", locator: "caveats (length not make-or-break)"}
+      - {title: "How long should TikTok videos be?", author: "Fanpage Karma", url: "https://www.fanpagekarma.com/insights/optimal-tiktok-video-length/", locator: "32,000 TikToks: engagement peaks 30–90 s; completion highest 0–10 s"}
+
+  - id: principle.early_continuation_metric
+    type: principle
+    name: Optimise the first 5 s as its own metric
+    summary: "Engagement research on Snapchat Spotlight defines engagement continuation rate as the share of viewers who keep watching past the first 5 seconds, separate from average watch percentage. Treat the opening as a separately scored unit in QA, alongside YouTube's 'stayed to watch'. The paper defines the metric; it does not show that optimising it causes reach."
+    when_to_use: "QA and A/B evaluation of hooks."
+    how:
+      - "Score hooks on 5 s continuation, body on watch percentage"
+      - "Diagnose: low early hold = hook problem; good hold then drop = body problem"
+    parameters: {window_s: 5}
+    avoid_when: ""
+    genres: [genre.talking_head, genre.product, genre.tutorial, genre.podcast_clip]
+    goals: [goal.retention_first_3s]
+    uses_capabilities: [cap.analysis.retention_curve]
+    conflicts_with: []
+    requires: []
+    evidence_level: study
+    confidence: medium
+    sources:
+      - {title: "Delving deep into engagement prediction of short videos (SnapUGC)", author: "Li et al., ECCV 2024", url: "https://arxiv.org/abs/2410.00289", locator: "ECR and NAWP definitions"}
+      - {title: "Shorts analytics: stayed to watch", author: "YouTube Help", url: "https://support.google.com/youtube/answer/12220281", locator: "metric definition"}
+
+  - id: principle.read_retention_graph
+    type: principle
+    name: Read the retention graph, not just the average
+    summary: "Look at where the curve drops or rises: spikes show rewatched moments (jokes, reveals), drops show where talking ran long. Iterate edits on those timestamps; on a short, every second is a visible share of retention."
+    when_to_use: "Post-publish learning loop; reference-reel analysis."
+    how:
+      - "Mark drops >5 points and map them to the edit timeline"
+      - "Note spikes as patterns to reuse"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.talking_head, genre.tutorial, genre.vlog, genre.product]
+    goals: [goal.watch_through, goal.rewatch]
+    uses_capabilities: [cap.analysis.retention_curve]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: medium
+    sources:
+      - {title: "How Jenny Hoyos actually makes viral Shorts", author: "vidIQ (via Rosetta)", url: "https://rosetta.to/u/vidiq/how-jenny-hoyos-actually-makes-viral-shorts", locator: "retention"}
+
+  - id: principle.recurring_format_buckets
+    type: principle
+    name: Recurring format buckets
+    summary: "Repeatable series with consistent framing, titles and structure help viewers binge and return. One creator keeps the same composition for every episode in a series and credits two to four such buckets for most returning viewers. For an editor this means templated openings per series."
+    when_to_use: "Channels posting regularly; series content."
+    how:
+      - "Store a per-series template: hook frame layout, text style, length"
+      - "Keep layout fixed; vary content"
+    parameters: {buckets: "2–4"}
+    avoid_when: "One-off brand pieces."
+    genres: [genre.talking_head, genre.tutorial, genre.product, genre.vlog]
+    goals: [goal.brand_recall, goal.watch_through]
+    uses_capabilities: [cap.text.title]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: low
+    sources:
+      - {title: "Jenny Hoyos episode", author: "Creator Science", url: "https://creatorscience.com/podcast/jenny-hoyos/", locator: "Hooks (recurring format)"}
+      - {title: "How Jenny Hoyos actually makes viral Shorts", author: "vidIQ (via Rosetta)", url: "https://rosetta.to/u/vidiq/how-jenny-hoyos-actually-makes-viral-shorts", locator: "returning viewers / buckets"}
+
+  - id: principle.shot_scale_matters
+    type: principle
+    name: Shot scale and on-screen text are virality predictors
+    summary: "A 400-video TikTok study found follower count the strongest virality predictor, with shot scale (close-up and medium), presence of text and point of view also among influential features. Effect direction isn't stated in the abstract, so treat close/medium framing plus text as a sensible default, not a proven lift."
+    when_to_use: "Choosing framing and whether to add text."
+    how:
+      - "Default to medium or close-up for human subjects"
+      - "Include on-screen text"
+    parameters: {}
+    avoid_when: "Wide establishing shots needed for context (keep them short)."
+    genres: [genre.talking_head, genre.vlog, genre.testimonial]
+    goals: [goal.retention_first_3s]
+    uses_capabilities: [cap.transform.reframe, cap.text.captions]
+    conflicts_with: []
+    requires: []
+    evidence_level: study
+    confidence: low
+    sources:
+      - {title: "Slapping cats, bopping heads, and Oreo shakes: indicators of virality in TikTok", author: "Ling et al., 2021", url: "https://arxiv.org/abs/2111.02452", locator: "abstract"}
+
+  # ───────────────────── INDIA / HINDI / HINGLISH CONVENTIONS ─────────────────────
+  - id: principle.india.regional_language_first
+    type: principle
+    name: Indian audiences prefer native-language content
+    summary: "Industry reports say Hindi and regional languages make up the large majority of Indian short-video consumption, most engagement comes from beyond the top metros, and most viewers say they prefer content in their own language. Pick the spoken and caption language for the target region before styling."
+    when_to_use: "Any reel aimed at Indian audiences."
+    how:
+      - "Decide audience region → spoken language → caption script"
+      - "For pan-India reach consider Hindi/Hinglish master + AI-dubbed regional variants"
+    parameters: {}
+    avoid_when: "Metro, English-first professional audiences (e.g. B2B tech). Note the ShareChat/Moj figures are platform-commissioned and the Statista/EY share is 2022 data."
+    genres: [genre.talking_head, genre.product, genre.testimonial, genre.vlog]
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.text.captions]
+    conflicts_with: []
+    requires: []
+    evidence_level: study
+    confidence: low
+    sources:
+      - {title: "Short-form videos drive over 47% of consumer choices: ShareChat and Moj report", author: "YourStory", url: "https://yourstory.com/2024/09/short-form-videos-drive-over-47-consumer-choices-sharechat-moj", locator: "regional-language preference (platform-commissioned)"}
+      - {title: "Indian short form video platforms report", author: "Redseer", url: "https://redseer.com/wp-content/uploads/2024/11/Indian-Short-Form-Video-Platforms-Report.pdf", locator: "user base beyond top metros"}
+      - {title: "India short video consumption by language", author: "Statista (EY data, 2022)", url: "https://statista.com/statistics/1317034/india-short-video-consumption-by-language", locator: "Hindi + regional ~85% share (search-result summary)"}
+
+  - id: tech.india.devanagari_text
+    type: technique
+    name: Devanagari (or Bengali-Assamese) on-screen text when audience reads it
+    summary: "Instagram's Edits app added Devanagari and Bengali-Assamese fonts for on-screen text, signalling native-script styling is a first-class option for Hindi, Marathi, Bengali and Assamese reels. Use native script for hook text when the audience reads it fluently; keep proper nouns and brand names as written."
+    when_to_use: "Hindi/Marathi/Bengali-first audiences, regional brands."
+    how:
+      - "Choose a Devanagari-capable font with bold weight"
+      - "Check conjunct/matra rendering in the renderer before export"
+      - "Keep ≤5 words in hook text, as in English"
+    parameters: {}
+    avoid_when: "Hinglish-speaking urban audiences who mostly read Romanised Hindi."
+    genres: [genre.talking_head, genre.product, genre.tutorial, genre.vlog]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.text.captions, cap.text.title]
+    conflicts_with: [tech.india.romanised_hinglish_captions]
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Instagram empowers creators to go global with local voice translations and fonts", author: "Meta Newsroom", url: "https://about.fb.com/news/2025/11/instagram-empowers-creators-to-go-global-with-local-voice-translations-and-fonts/", locator: "fonts section"}
+
+  - id: tech.india.romanised_hinglish_captions
+    type: technique
+    name: Romanised Hinglish captions for code-mixed speech
+    summary: "For speech that mixes Hindi and English, practitioner guides recommend captions in Roman script, written as spoken rather than translated. Research on Roman-script Hindi-Urdu suggests many speakers find it easier, though spellings are inconsistent; there is no sourced standard."
+    when_to_use: "Hinglish talking heads, urban Indian audiences, mixed-language podcasts."
+    how:
+      - "Transcribe as spoken; don't translate Hindi words into English"
+      - "Keep one consistent spelling per word within a video"
+      - "Highlight the English keyword or the punchline word"
+    parameters: {}
+    avoid_when: "Formal or regional audiences who read Devanagari natively."
+    genres: [genre.talking_head, genre.podcast_clip, genre.vlog, genre.testimonial]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.analysis.transcribe, cap.text.captions]
+    conflicts_with: [tech.india.devanagari_text]
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "How to create Hinglish subtitles for Instagram Reels and TikTok", author: "CapsAI", url: "https://capsai.co/blog/how-to-create-hinglish-subtitles-for-instagram-reels-and-tiktok-videos", locator: "search-result summary (vendor)"}
+      - {title: "How, when, and why Hindi-Urdu speakers use the Roman script", author: "University of Washington dissertation", url: "https://digital.lib.washington.edu/researchworks/items/988a7873-f27c-472a-a153-da0953ee301e", locator: "abstract (search-result summary)"}
+
+  - id: tech.india.ai_dub_variants
+    type: technique
+    name: Language variants via Meta AI dubbing and lip-sync
+    summary: "Meta AI can translate and dub Reels between English, Hindi and (from 2025–26) Bengali, Tamil, Telugu, Kannada and Marathi, in a voice close to the creator's, with optional lip-sync and a visible label. It handles up to two speakers, so plan clean dialogue tracks."
+    when_to_use: "Reaching other Indian language groups without reshooting."
+    how:
+      - "Keep music on a separate stem and low under speech"
+      - "Limit to ≤2 speakers; avoid overlapping talk"
+      - "Burned-in captions won't translate — export a caption-free master for dubbed variants"
+    parameters: {max_speakers: 2}
+    avoid_when: "Wordplay or Hinglish puns that won't survive translation."
+    genres: [genre.talking_head, genre.tutorial, genre.product]
+    goals: [goal.clarity, goal.brand_recall]
+    uses_capabilities: [cap.audio.stems, cap.export.variants]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Meta adds Hindi and Portuguese support for its AI translation feature for Reels", author: "TechCrunch", url: "https://techcrunch.com/2025/10/09/meta-adds-hindi-and-portuguese-support-for-its-ai-translation-feature-for-reels", locator: "feature details"}
+      - {title: "Instagram empowers creators to go global with local voice translations and fonts", author: "Meta Newsroom", url: "https://about.fb.com/news/2025/11/instagram-empowers-creators-to-go-global-with-local-voice-translations-and-fonts/", locator: "five new Indian languages"}
+
+  - id: tech.india.local_meme_sound_adaptation
+    type: technique
+    name: Localise global memes and sounds; lean on visual comedy
+    summary: "YouTube's India trend reviews describe creators localising global memes and sound-driven visual challenges; trend coverage also reports gesture- and music-led skits reaching national audiences with little speech. For multilingual India, visual storytelling travels across language groups."
+    when_to_use: "Entertainment and trend-led reels for pan-India audiences."
+    how:
+      - "Make the joke readable from visuals and sound cues alone"
+      - "Use original or licensed audio; avoid re-uploaded film clips"
+    parameters: {}
+    avoid_when: "Information-dense content that needs speech."
+    genres: [genre.vlog, genre.montage, genre.talking_head]
+    goals: [goal.shares_saves, goal.energy]
+    uses_capabilities: [cap.audio.sfx, cap.audio.music_bed]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: low
+    sources:
+      - {title: "2025's biggest trends on YouTube that gave India a new shared vernacular", author: "Google India blog", url: "https://blog.google/intl/en-in/products/platforms/2025s-biggest-trends-on-youtube-that-gave-india-a-new-shared-vernacular/", locator: "meme localisation, sound-driven challenges (search-result summary)"}
+      - {title: "Meta Reels India announcement (Ipsos study)", author: "Meta", url: "https://about.fb.com/news/2025/09/five-years-on-reels-reigns-as-indias-top-short-form-video-platform/", locator: "popular Reels formats in India"}
+
+  # ───────────────────────────── ANTI-PATTERNS ─────────────────────────────
+  - id: anti.hook.slow_intro
+    type: anti_pattern
+    name: Slow intro (greeting, name, 'today we'll…', logo sting)
+    summary: "Opening with a greeting, self-introduction, agenda or logo animation wastes the window where viewers decide to stay. Guides advise a bold statement, striking visual or question instead of a lengthy introduction; story-setup openers ranked lowest in OpusClip's hook data."
+    when_to_use: "Detect during QA: first spoken words are a greeting or no content before 2 s."
+    how:
+      - "Cut to the first sentence that carries meaning"
+      - "Move intros/branding to the end or drop them"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.talking_head, genre.tutorial, genre.podcast_clip, genre.brand_story, genre.vlog]
+    goals: [goal.retention_first_3s]
+    uses_capabilities: [cap.cut.trim]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Longer TikToks get more views — data", author: "Buffer", url: "https://buffer.com/resources/longer-tiktoks-get-more-views-data/", locator: "hook advice"}
+      - {title: "Anatomy of a viral TikTok in 2026", author: "OpusClip", url: "https://www.opus.pro/blog/anatomy-of-a-viral-tiktok-2026", locator: "story-setup openers worst"}
+      - {title: "Reels best practices, tips and tricks", author: "Meta for Creators", url: "https://creators.facebook.com/reels-best-practices-tips-tricks", locator: "section 3 (start by stating the point)"}
+
+  - id: anti.brand.heavy_promo_early
+    type: anti_pattern
+    name: Heavy promotion at the start
+    summary: "Opening with a hard sell, packshot or brand card reads as an ad and invites a swipe; TikTok's research advises avoiding heavy promotion early. Distinct from a light brand mention by 5 s (tech.hook.brand_message_within_5s), which Meta found helpful for branded ads."
+    when_to_use: "QA check for product/brand videos."
+    how:
+      - "Open on person, problem or outcome; integrate brand naturally"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.product, genre.brand_story, genre.testimonial]
+    goals: [goal.retention_first_3s]
+    uses_capabilities: [cap.cut.reorder]
+    conflicts_with: [tech.hook.brand_message_within_5s]
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Pay attention to me: report shares brand tips (TikTok x CreatorIQ)", author: "Marketing Brew", url: "https://www.marketingbrew.com/stories/2023/12/18/pay-attention-to-me-report-shares-brand-tips-for-catching-users-interest-on-tiktok", locator: "avoid heavy promotion early"}
+
+  - id: anti.cta.hard_sell_early
+    type: anti_pattern
+    name: Blunt 'link in bio, buy now' before the payoff
+    summary: "Dropping a hard purchase ask early in organic TikToks is reported by practitioners to tank completion. Ask after value is delivered, or keep early mentions soft and integrated."
+    when_to_use: "QA for organic product and creator content."
+    how:
+      - "Move the hard ask after the payoff or into a text overlay near the end"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.product, genre.talking_head, genre.tutorial]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.cut.reorder]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "TikTok CTA conversion guide", author: "Socialkit", url: "https://socialk.it/en/blog/tiktok-cta-conversion-guide", locator: "search-result summary"}
+
+  - id: anti.cta.end_only
+    type: anti_pattern
+    name: CTA only after the video has effectively ended
+    summary: "Parking the only CTA in the final seconds reaches just the minority who finish, and a separate end card adds a dead tail. Wistia's data showed end-placed CTAs converting worst of three positions."
+    when_to_use: "QA for conversion-goal videos."
+    how:
+      - "Add an earlier light CTA (tech.cta.before_dropoff) or overlay the final CTA on the payoff"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.product, genre.tutorial, genre.testimonial]
+    goals: [goal.cta_conversion]
+    uses_capabilities: [cap.text.cta_card]
+    conflicts_with: [tech.cta.before_dropoff]
+    requires: []
+    evidence_level: study
+    confidence: low
+    sources:
+      - {title: "Middle-most message: where to put CTAs in videos", author: "MediaPost", url: "https://www.mediapost.com/publications/article/383025/middle-most-message-where-to-put-ctas-in-videos.html", locator: "end 11.9%"}
+
+  - id: anti.ending.outro_card
+    type: anti_pattern
+    name: Outro card / 'thanks for watching' tail
+    summary: "Logo outros, subscribe cards and sign-offs after the payoff give viewers a reason to swipe before the loop and create a last-second retention cliff."
+    when_to_use: "QA: anything after the last meaningful frame."
+    how:
+      - "Delete; if branding is required, overlay it during the payoff"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.talking_head, genre.brand_story, genre.product, genre.event_recap]
+    goals: [goal.watch_through, goal.rewatch]
+    uses_capabilities: [cap.cut.trim]
+    conflicts_with: [tech.ending.abrupt_after_payoff]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Jenny Hoyos episode", author: "Creator Science", url: "https://creatorscience.com/podcast/jenny-hoyos/", locator: "one-second trim example"}
+
+  - id: anti.effects.stacking
+    type: anti_pattern
+    name: Effect and transition overload
+    summary: "Stacking many transitions, filters and effects is one of the most-cited beginner mistakes: it clutters the frame and pulls attention to the editing. Use one transition language and reserve effects for meaningful moments."
+    when_to_use: "QA check: >1 transition style or effects on most cuts."
+    how:
+      - "Default to hard cuts; one designed transition style per reel"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.vlog, genre.montage, genre.event_recap, genre.transformation, genre.product]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.transition.whip]
+    conflicts_with: [tech.transition.one_language]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "9 beginner video editing mistakes and how to avoid them", author: "VEED", url: "https://www.veed.io/learn/video-editing-mistakes", locator: "search-result summary"}
+      - {title: "6 novice video editing mistakes", author: "SlashGear", url: "https://www.slashgear.com/1661306/beginner-editing-mistakes-how-to-avoid-them", locator: "search-result summary"}
+
+  - id: anti.jumpcut.zero_gap
+    type: anti_pattern
+    name: Every pause cut to zero
+    summary: "Removing every breath produces an unnaturally rushed, breathless delivery and hurts comprehension, and overly choppy talking heads become jarring."
+    when_to_use: "QA after silence removal."
+    how:
+      - "Restore short gaps at idea boundaries (tech.jumpcut.keep_breaths_between_ideas)"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.talking_head, genre.testimonial, genre.podcast_clip]
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.analysis.silence_detect]
+    conflicts_with: [tech.jumpcut.keep_breaths_between_ideas]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "What is a jump cut", author: "Adobe", url: "https://www.adobe.com/creativecloud/video/discover/jump-cut", locator: "don't overdo it"}
+      - {title: "Jump cut glossary", author: "Creator Essentials", url: "https://www.creatoressentials.com/glossary/jump-cut/", locator: "search-result summary"}
+
+  - id: anti.loop.unpaid_or_oversold
+    type: anti_pattern
+    name: Hook the clip doesn't pay off
+    summary: "A sensational hook or open loop that the clip never resolves breaks trust and drives swipe-aways and negative feedback. Podcast clippers explicitly warn against hooks the excerpt doesn't support."
+    when_to_use: "QA: compare hook promise with payoff content."
+    how:
+      - "Rewrite the hook to match what the clip actually delivers"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.podcast_clip, genre.talking_head, genre.product, genre.transformation]
+    goals: [goal.trust, goal.watch_through]
+    uses_capabilities: [cap.text.title]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "AI Shorts guide", author: "Captions", url: "https://captions.ai/help/guides/creators/ai-shorts.md", locator: "search-result summary"}
+      - {title: "Reels best practices, tips and tricks", author: "Meta for Creators", url: "https://creators.facebook.com/reels-best-practices-tips-tricks", locator: "section 3 (payoff)"}
+
+  - id: anti.loop.wait_till_end_overuse
+    type: anti_pattern
+    name: "'Wait till the end' in every video"
+    summary: "Repeating the same 'wait till the end' tease trains the audience to ignore it. Rotate loop types: preview loops, curiosity gaps, list counters, visual withholds."
+    when_to_use: "Series-level QA across a creator's recent videos."
+    how:
+      - "Track loop type per video; avoid the same type twice in a row"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.talking_head, genre.vlog, genre.transformation]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.text.title]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "YouTube Shorts hooks and curiosity loops", author: "Social Media Examiner", url: "https://www.socialmediaexaminer.com/youtube-shorts-hooks-and-curiosity-loops-that-explode-your-views/", locator: "search-result summary"}
+
+  - id: anti.podcast.context_dependent_clip
+    type: anti_pattern
+    name: Clip that needs the episode for context
+    summary: "Excerpts that start mid-thought, reference earlier discussion ('like he said') or stop before the point confuse cold viewers. Clips should be complete ideas a newcomer understands."
+    when_to_use: "Clip selection QA."
+    how:
+      - "Reject clips with unresolved pronouns/references in the first 5 s"
+      - "Add a ≤6-word context title if one fact is missing"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.podcast_clip]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.analysis.transcribe]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "How to repurpose podcast into Shorts", author: "Choppity", url: "https://www.choppity.com/blog/how-to-repurpose-podcast-into-shorts/", locator: "search-result summary"}
+      - {title: "How to clip a podcast for Reels", author: "Soundstripe", url: "https://www.soundstripe.com/blogs/how-to-clip-a-podcast", locator: "search-result summary"}
+
+  - id: anti.reframe.face_drift
+    type: anti_pattern
+    name: Faces drifting out of the vertical crop
+    summary: "Auto-reframed horizontal footage where the speaker slides to the edge or out of frame looks unprofessional and breaks attention; cropping wide footage too tight can also cut what viewers need to see."
+    when_to_use: "QA on any 16:9 → 9:16 conversion."
+    how:
+      - "Track faces; keep eyes in upper third inside safe zone (playbook rule 17)"
+      - "Switch to stacked layout when two subjects can't fit"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.podcast_clip, genre.event_recap, genre.interview]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.transform.reframe]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "How to edit podcast Shorts like a pro", author: "OpusClip", url: "https://www.opus.pro/blog/how-to-edit-podcast-shorts-like-a-pro-using-opus-clip-pc-mac", locator: "search-result summary"}
+      - {title: "Common beginner mistakes editing soccer highlights", author: "CapCut", url: "https://www.capcut.com/create/capcut-soccer-editing-mistakes-fixes", locator: "over-tight vertical crop; search-result summary"}
+
+  - id: anti.beat.overcutting
+    type: anti_pattern
+    name: Cutting on every beat throughout
+    summary: "Cutting on every beat for the whole track exhausts viewers and flattens dynamics; every-beat cutting works as a short burst into a peak, not as the base rhythm. Cuts under ~1 s throughout also read as chaotic in vlogs."
+    when_to_use: "QA on music-led edits."
+    how:
+      - "Base cadence 2–4 beats; bursts ≤8 beats"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.montage, genre.event_recap, genre.vlog]
+    goals: [goal.energy]
+    uses_capabilities: [cap.analysis.beat_detect]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Beat-sync montage", author: "Cardboard", url: "https://learn.usecardboard.com/ai-editing/beat-sync-montage.md", locator: "search-result summary"}
+      - {title: "Mastering travel vlog pacing for Instagram Reels", author: "Splice", url: "https://spliceapp.com/blog/mastering-travel-vlog-pacing-for-instagram-reels-in-2026/", locator: "too many sub-1 s cuts; search-result summary"}
+
+  - id: anti.transform.mismatched_framing
+    type: anti_pattern
+    name: Before and after shot from different positions
+    summary: "If the before and after differ in angle, distance or lighting, the comparison is unconvincing and the match-cut reveal fails."
+    when_to_use: "Shoot planning and footage QA for transformations."
+    how:
+      - "Mark tripod position; replicate framing and light"
+      - "If mismatched, use a side-by-side split instead of a match cut"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.transformation]
+    goals: [goal.trust, goal.rewatch]
+    uses_capabilities: [cap.compositing.split_screen]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "5 easy Reels or TikTok transitions for beginners", author: "Planoly", url: "https://planoly.com/blog/easy-reels-tiktok-transitions", locator: "search-result summary"}
+
+  - id: anti.testimonial.scripted_ad_tone
+    type: anti_pattern
+    name: Testimonial that sounds like an ad
+    summary: "Over-scripted, feature-listing testimonials lose the credibility that makes the genre work. Practitioners stress natural language that sounds like a review; platform guides favour DIY native styles over polished ad looks."
+    when_to_use: "Take selection for testimonials."
+    how:
+      - "Prefer unscripted takes with specific personal details"
+      - "Keep imperfections that signal authenticity; cut only dead air"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.testimonial]
+    goals: [goal.trust]
+    uses_capabilities: [cap.analysis.transcribe]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "How to write UGC ad scripts", author: "Motion", url: "https://motionapp.com/blog/how-to-write-ugc-ad-scripts", locator: "search-result summary"}
+      - {title: "Creative best practices for performance ads", author: "TikTok Ads Help Center", url: "https://ads.tiktok.com/help/article/creative-best-practices?lang=en", locator: "native style"}
+
+  - id: anti.vlog.every_task
+    type: anti_pattern
+    name: Vlog that logs every task
+    summary: "Including every routine task with long holds makes day-in-the-life edits drag. Vendor guides advise filming moments that show change and avoiding shots held longer than about 5 s."
+    when_to_use: "Vlog assembly QA."
+    how:
+      - "Keep only clips that change place, mood or outcome"
+      - "Cap holds at ~4–5 s unless the moment is the payoff"
+    parameters: {max_hold_s: "4–5"}
+    avoid_when: ""
+    genres: [genre.vlog]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.cut.trim]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "How to create a compelling daily routine video", author: "FlexClip", url: "https://www.flexclip.com/learn/daily-routine-video.html", locator: "search-result summary"}
+
+  - id: anti.recycled_lowres_watermarked
+    type: anti_pattern
+    name: Recycled, watermarked or low-resolution footage
+    summary: "Meta lists clearly reposted clips from other apps, third-party watermarks, and blurry or low-resolution footage as things to avoid in Reels; horizontal video also looks poor in a vertical feed."
+    when_to_use: "Ingest QA and export checks."
+    how:
+      - "Reject sources with foreign watermarks"
+      - "Export 1080×1920; avoid upscaled sub-720p sources"
+      - "Reframe or rebuild horizontal footage, don't letterbox"
+    parameters: {min_height_px: 720}
+    avoid_when: ""
+    genres: [genre.montage, genre.event_recap, genre.podcast_clip, genre.vlog]
+    goals: [goal.watch_through, goal.trust]
+    uses_capabilities: [cap.export.render, cap.transform.reframe]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: high
+    sources:
+      - {title: "Reels best practices, tips and tricks", author: "Meta for Creators", url: "https://creators.facebook.com/reels-best-practices-tips-tricks", locator: "sections 9 and 12"}
+
+  # ───────────────────────────── EXAMPLES ─────────────────────────────
+  - id: example.one_second_trim_retention
+    type: example
+    name: One-second trim lifts retention 83% → 88%
+    summary: "A creator's Short had a 25-point drop in its final second; trimming that second raised average retention from 83% to 88%. Illustrates why endings must stop on the last meaningful frame."
+    when_to_use: "Justifying aggressive end trims to users."
+    how:
+      - "Compare retention graph before/after trimming"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.talking_head]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.cut.trim]
+    conflicts_with: []
+    requires: [tech.ending.trim_dead_last_second]
+    evidence_level: single_opinion
+    confidence: medium
+    sources:
+      - {title: "Jenny Hoyos episode", author: "Creator Science", url: "https://creatorscience.com/podcast/jenny-hoyos/", locator: "Retention and Loops"}
+
+  - id: example.series_fixed_framing
+    type: example
+    name: Fixed-layout series (fast-food remake format)
+    summary: "A recurring Shorts series keeps the same composition every episode (logo centred, item and price on screen) so viewers recognise and binge it. Demonstrates templated openings per series."
+    when_to_use: "Designing series templates."
+    how:
+      - "Freeze layout, text slots and length; vary subject"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.product, genre.tutorial]
+    goals: [goal.brand_recall, goal.retention_first_3s]
+    uses_capabilities: [cap.text.title]
+    conflicts_with: []
+    requires: [principle.recurring_format_buckets]
+    evidence_level: single_opinion
+    confidence: medium
+    sources:
+      - {title: "Jenny Hoyos episode", author: "Creator Science", url: "https://creatorscience.com/podcast/jenny-hoyos/", locator: "Hooks (recurring format)"}
+
+  - id: example.redken_demo_ad
+    type: example
+    name: Demo-led beauty ad in TikTok's top 2% for retention
+    summary: "TikTok/CreatorIQ reporting cites a Redken ad that demonstrated the product and ranked in the top 2% of TikTok ads for retention and top 6% for conversions — a case for in-use demonstration over claims."
+    when_to_use: "Illustrating product-demo structure."
+    how:
+      - "Product shown in use from the hook onward"
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.product]
+    goals: [goal.watch_through, goal.cta_conversion]
+    uses_capabilities: [cap.transform.punch_in]
+    conflicts_with: []
+    requires: [tech.product.in_use_demo]
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Pay attention to me: report shares brand tips (TikTok x CreatorIQ)", author: "Marketing Brew", url: "https://www.marketingbrew.com/stories/2023/12/18/pay-attention-to-me-report-shares-brand-tips-for-catching-users-interest-on-tiktok", locator: "product demonstration"}
+
+  # ───────────────────── HOOK CONSTRUCTION (added) ─────────────────────
+  - id: tech.hook.three_channel_stack
+    type: technique
+    name: Three-channel hook stack (visual + spoken + text)
+    summary: "Build every hook on three aligned channels at once: a striking or moving first frame, a 5–8 word spoken line, and 3–5 words of on-screen text by ~0.3 s, all making the same promise. TikTok asks for the core message within 3 s; 58% of large creators' videos showed text on the 0.3 s frame."
+    when_to_use: "All genres with speech or text; montage uses visual + one text line."
+    how:
+      - "Visual: subject centred, motion or change on frame 0"
+      - "Spoken: first word ≤0.3 s, 5–8 words (playbook rules 1–2)"
+      - "Text: 3–5 words paraphrasing (not transcribing) the spoken line"
+      - "Check it reads muted and makes sense audio-only"
+    parameters: {spoken_words: "5–8", text_words: "3–5", text_on_by_s: "0.3", message_by_s: "3"}
+    avoid_when: "Text duplicates speech word-for-word on top of full captions (visual clutter) — let captions carry speech and keep hook text distinct."
+    genres: [genre.talking_head, genre.product, genre.tutorial, genre.testimonial, genre.podcast_clip, genre.vlog]
+    goals: [goal.retention_first_3s, goal.clarity]
+    uses_capabilities: [cap.text.title, cap.cut.reorder]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Video hooks: how to write a scroll-stopping opening", author: "Captions", url: "https://captions.ai/blog/video-hooks-how-to-write-a-scroll-stopping-opening", locator: "visual/verbal/written channels (via craft-playbook §2)"}
+      - {title: "Best video hooks", author: "Vidico", url: "https://vidico.com/news/best-video-hooks/", locator: "via craft-playbook §2"}
+      - {title: "Short-form video hook study 2026", author: "shortformkit", url: "https://github.com/shortformkit/short-form-video-hook-study-2026", locator: "text on 0.3 s frame"}
+      - {title: "Creative best practices for performance ads", author: "TikTok Ads Help Center", url: "https://ads.tiktok.com/help/article/creative-best-practices?lang=en", locator: "core message within 3 s"}
+
+  - id: tech.hook.question_or_claim
+    type: technique
+    name: Specific question or bold/contrarian claim hook
+    summary: "Open with a specific, non yes/no question the viewer wants answered, or a bold or contrarian statement the video then backs up quickly. Both create a curiosity gap; the claim version must be substantiated within the body or it becomes an unpaid loop."
+    when_to_use: "Talking head, podcast clips, explainers, brand story openers."
+    how:
+      - "Question: name the viewer's situation + an open 'why/how/what'"
+      - "Claim: state the counter-intuitive takeaway in ≤10 words"
+      - "Back the claim with proof by mid-video"
+    parameters: {words: "≤10"}
+    avoid_when: "The answer is obvious or the claim can't be supported (anti.loop.unpaid_or_oversold)."
+    genres: [genre.talking_head, genre.podcast_clip, genre.brand_story, genre.tutorial]
+    goals: [goal.retention_first_3s]
+    uses_capabilities: [cap.text.title]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Video hooks: how to write a scroll-stopping opening", author: "Captions", url: "https://captions.ai/blog/video-hooks-how-to-write-a-scroll-stopping-opening", locator: "hook types (via craft-playbook §2)"}
+      - {title: "Longer TikToks get more views — data", author: "Buffer", url: "https://buffer.com/resources/longer-tiktoks-get-more-views-data/", locator: "hook advice: bold statement or curiosity question"}
+
+  - id: tech.hook.stat_pain_or_promise
+    type: technique
+    name: Statistic, pain-point or value-promise hook
+    summary: "Open with a surprising number, the viewer's exact pain, or an explicit promise of what they'll get ('3 edits that fix…'). Pain points suit testimonial and product ads; statistics suit explainers; value promises suit tutorials and lists."
+    when_to_use: "Tutorial, product, testimonial, explainer talking heads."
+    how:
+      - "Stat: one number, on screen large, sourced in the body"
+      - "Pain: describe the moment of frustration in the viewer's words"
+      - "Promise: count + outcome + timeframe"
+    parameters: {}
+    avoid_when: "Entertainment montages; stats the video can't source."
+    genres: [genre.tutorial, genre.product, genre.testimonial, genre.talking_head]
+    goals: [goal.retention_first_3s, goal.clarity]
+    uses_capabilities: [cap.text.title]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Best video hooks", author: "Vidico", url: "https://vidico.com/news/best-video-hooks/", locator: "hook types (via craft-playbook §2)"}
+      - {title: "How to write UGC ad scripts", author: "Motion", url: "https://motionapp.com/blog/how-to-write-ugc-ad-scripts", locator: "problem/benefit hooks; search-result summary"}

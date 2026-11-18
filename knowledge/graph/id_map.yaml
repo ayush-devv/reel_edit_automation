@@ -1,0 +1,103 @@
+# Old id → new id. nodes: draft graph ids merged into a canonical node.
+# capabilities: guessed cap ids used in graph drafts → catalog id(s) in knowledge/capabilities.yaml.
+nodes: {anti.beat.overcutting: anti.music.cut_every_beat, anti.cta.hard_sell_early: anti.brand.heavy_promo_early, anti.loop.unpaid_or_oversold: anti.story.unclosed_loop,
+  example.bathroom.kinetic_beside_face: example.testimonial.dearma_wortham, example.bathroom.long_shot_text_driven: example.testimonial.dearma_wortham,
+  example.bathroom.text_over_broll: example.testimonial.dearma_wortham, example.bathroom.two_tone_grade: example.testimonial.dearma_wortham, tech.beat.cut_grid: tech.music.beat_synced_cuts,
+  tech.cut.jump_cut_punch_in: tech.transition.zoom_punch, tech.silence.linger_after_peak: tech.story.emotional_beat_hold, tech.split.j_cut_audio_lead: tech.audio.j_cut,
+  tech.split.l_cut_audio_tail: tech.audio.l_cut, tech.story.loop_ending_to_open: tech.ending.narrative_loop, tech.transition.graphic_match: tech.transition.match_cut,
+  tech.type.hinglish_roman_script: tech.india.romanised_hinglish_captions, tech.type.safe_zone_reels: tech.type.safe_zone, tech.type.safe_zone_tiktok_shorts: tech.type.safe_zone}
+capabilities:
+  cap.analysis.beat_detect: cap.analysis.beat_detection
+  cap.analysis.blink_detection: cap.analysis.blink_detection
+  cap.analysis.color_analysis: cap.analysis.palette_extraction
+  cap.analysis.contrast_check: cap.analysis.contrast_check
+  cap.analysis.diarization: cap.analysis.speaker_diarization
+  cap.analysis.face_detect: cap.analysis.face_detection
+  cap.analysis.face_expression: cap.analysis.face_expression
+  cap.analysis.face_tracking: cap.analysis.subject_tracking
+  cap.analysis.flash_check: cap.analysis.photosensitivity
+  cap.analysis.gaze_detection: cap.analysis.gaze_estimation
+  cap.analysis.loudness_measure: cap.analysis.loudness_measurement
+  cap.analysis.mono_check: cap.analysis.mono_compatibility
+  cap.analysis.motion_detection: cap.analysis.motion_estimation
+  cap.analysis.preview_render: cap.analysis.contact_sheet
+  cap.analysis.probe_metadata: cap.analysis.probe_metadata
+  cap.analysis.retention_curve: cap.analysis.retention_analytics
+  cap.analysis.saliency: cap.analysis.subject_tracking
+  cap.analysis.shape_matching: cap.analysis.visual_search
+  cap.analysis.shot_detection: cap.analysis.scene_detection
+  cap.analysis.silence_detect: cap.analysis.silence_detection
+  cap.analysis.speech_transcript: cap.analysis.transcription
+  cap.analysis.transcribe: cap.analysis.transcription
+  cap.audio.breath_reduce: cap.audio.breath_attenuation
+  cap.audio.compress: cap.audio.compression
+  cap.audio.declick: cap.audio.declick
+  cap.audio.declip: cap.audio.declip
+  cap.audio.deess: cap.audio.de_ess
+  cap.audio.dehum: cap.audio.dehum
+  cap.audio.denoise: cap.audio.noise_reduction
+  cap.audio.dereverb: cap.audio.de_reverb
+  cap.audio.duck_sidechain: cap.audio.ducking
+  cap.audio.dynamic_eq: cap.audio.dynamic_eq
+  cap.audio.expand: cap.audio.expander
+  cap.audio.highpass: cap.audio.high_pass
+  cap.audio.mix: cap.audio.mix
+  cap.audio.music_beat_sync: cap.cut.cut_to_beat
+  cap.audio.music_ducking: cap.audio.ducking
+  cap.audio.music_select: cap.audio.music_library_select
+  cap.audio.pan: cap.audio.pan
+  cap.audio.reverb: cap.audio.reverb
+  cap.audio.room_tone_fill: cap.audio.room_tone
+  cap.audio.sfx: cap.audio.sfx_add
+  cap.audio.sfx_place: cap.audio.sfx_add
+  cap.audio.slip: cap.trim.slip
+  cap.audio.split_edit: [cap.cut.j_cut, cap.cut.l_cut]
+  cap.audio.stem_separate: cap.audio.stem_separation
+  cap.audio.stems: cap.audio.stem_separation
+  cap.audio.true_peak_limit: cap.audio.limiter
+  cap.audio.voiceover: cap.audio.voiceover
+  cap.audio.volume_keyframe: cap.audio.volume_automation
+  cap.color.chart_match: cap.color.shot_match
+  cap.color.color_space_transform: cap.color.technical_lut
+  cap.color.curves: cap.color.rgb_curves
+  cap.color.grade_match: cap.color.shot_match
+  cap.color.group_grade: cap.compositing.adjustment_layer
+  cap.color.hue_vs_hue: cap.color.hue_sat_curves
+  cap.color.lut_apply: cap.color.creative_lut
+  cap.color.primary_balance: [cap.color.white_balance, cap.color.color_wheels]
+  cap.color.saturation: cap.color.saturation_vibrance
+  cap.color.secondary_qualifier: cap.color.hsl_qualifier
+  cap.color.split_tone: cap.color.color_wheels
+  cap.color.tone_map_hdr_sdr: cap.color.hdr_tonemap
+  cap.compositing.broll_overlay: cap.cut.b_roll_cutaway
+  cap.compositing.overlay_broll: cap.cut.b_roll_cutaway
+  cap.cut.snap_to_marker: cap.cut.cut_to_beat
+  cap.cut.split_edit: [cap.cut.j_cut, cap.cut.l_cut]
+  cap.cut.trim: cap.trim.trim_in_out
+  cap.effect.blur: cap.effect.gaussian_blur
+  cap.export.color_tag: cap.export.color_tagging
+  cap.export.render: cap.export.h264_mp4
+  cap.export.variants: cap.export.multi_version
+  cap.graphics.animate_in: cap.text.animation_preset
+  cap.graphics.animate_out: cap.text.animation_preset
+  cap.graphics.ease_curve: cap.graphics.motion_easing
+  cap.graphics.logo: cap.graphics.logo_watermark
+  cap.graphics.overshoot_spring: cap.graphics.motion_easing
+  cap.graphics.progress_counter: cap.graphics.progress_bar
+  cap.graphics.split_screen: cap.compositing.split_screen
+  cap.graphics.stagger: cap.graphics.motion_easing
+  cap.text.backing_box: cap.text.background_box
+  cap.text.caption_phrase: cap.text.auto_captions
+  cap.text.caption_word: cap.text.word_highlight
+  cap.text.captions: cap.text.auto_captions
+  cap.text.cta_card: cap.graphics.cta_card
+  cap.text.font_select: cap.text.caption_style
+  cap.text.highlight_word: cap.text.keyword_emphasis
+  cap.text.safe_zone_layout: cap.text.safe_zone
+  cap.text.speaker_color: cap.text.caption_style
+  cap.text.stroke_shadow: cap.text.caption_style
+  cap.transform.flip_horizontal: cap.transform.flip_mirror
+  cap.transform.reframe: cap.transform.auto_reframe
+  cap.transition.crossfade: cap.transition.cross_dissolve
+  cap.transition.match_cut: cap.cut.hard_cut
+  cap.transition.whip: cap.transition.whip_pan

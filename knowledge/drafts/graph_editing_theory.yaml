@@ -1,0 +1,1274 @@
+# Core film/video editing theory, adapted to vertical short-form (Reels / Shorts / TikTok).
+# Paraphrased from cited sources; no copied passages. Book claims are via publisher pages,
+# reviews and film-school summaries unless noted. Reel-specific numbers derived by the
+# researcher (not stated in the source) are marked with lower confidence.
+nodes:
+
+  # ───────────────────────── Murch: Rule of Six & blink theory ─────────────────────────
+  - id: principle.cut.emotion_first
+    type: principle
+    name: Cut for emotion first
+    summary: "The best cut is the one that preserves how the viewer should feel at that moment. Murch ranks emotion above story, rhythm, eye-trace and spatial continuity, weighting it at roughly half of a cut's value, so a technically imperfect cut that keeps the feeling beats a clean one that loses it."
+    when_to_use: "Every cut decision; especially choosing between takes in testimonials, interviews and brand stories where sincerity matters more than polish."
+    how: ["For each candidate cut point ask what the viewer should feel right after it", "Prefer the take/moment with the truest expression even if framing or continuity is slightly off", "When two cuts tie on emotion, break the tie with story, then rhythm"]
+    parameters: {murch_weights_pct: "emotion 51, story 23, rhythm 10, eye_trace 7, 2D plane 5, 3D space 4 (rhetorical weights, not measurements)"}
+    avoid_when: "Never fully; but in purely informational tutorials clarity (story) may dominate."
+    genres: [genre.testimonial, genre.interview, genre.brand_story, genre.talking_head, genre.vlog, genre.podcast_clip]
+    goals: [goal.emotion, goal.trust, goal.watch_through]
+    uses_capabilities: [cap.cut.trim, cap.analysis.speech_transcript, cap.analysis.face_expression]
+    conflicts_with: [anti.cut.continuity_over_emotion]
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "6 'Rules' for Good Cutting According to Oscar-Winning Editor Walter Murch", author: "No Film School", url: "https://nofilmschool.com/2016/11/6-rules-good-cutting-according-oscar-winning-editor-walter-murch", locator: "Rule of Six; emotion section"}
+      - {title: "The Walter Murch-opedia", author: "Jonny Elwyn", url: "https://jonnyelwyn.co.uk/film-and-video-editing/the-walter-murch-opedia/", locator: "More on the Rule of Six"}
+
+  - id: principle.cut.rule_of_six_priority
+    type: principle
+    name: Rule of Six sacrifice order
+    summary: "Murch's six cut criteria (emotion, story, rhythm, eye-trace, 2D screen plane, 3D space) form a priority list. When a cut cannot satisfy all six, give up criteria from the bottom of the list upward, and never trade emotion or story for spatial or planar correctness."
+    when_to_use: "Resolving trade-offs when the agent scores alternative cut points or takes."
+    how: ["Score each candidate cut on all six criteria", "Discard candidates that fail emotion or story", "Among survivors prefer rhythm, then eye-trace, then 2D/3D continuity", "Use this as the agent's tie-break ordering"]
+    parameters: {sacrifice_order: "3D space → 2D plane → eye-trace → rhythm → story → emotion (last)"}
+    avoid_when: "Do not treat the percentages as a literal scoring formula; they express priority, not measured effect sizes."
+    genres: [genre.talking_head, genre.testimonial, genre.interview, genre.vlog, genre.montage, genre.brand_story]
+    goals: [goal.emotion, goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.cut.trim, cap.analysis.shot_detection]
+    conflicts_with: []
+    requires: [principle.cut.emotion_first]
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "6 'Rules' for Good Cutting According to Oscar-Winning Editor Walter Murch", author: "No Film School", url: "https://nofilmschool.com/2016/11/6-rules-good-cutting-according-oscar-winning-editor-walter-murch", locator: "what to sacrifice first"}
+      - {title: "Walter Murch rule of six", author: "StudioBinder", url: "https://www.studiobinder.com/blog/walter-murch-rule-of-six/", locator: "full article"}
+
+  - id: principle.cut.eye_trace
+    type: principle
+    name: Eye-trace continuity
+    summary: "Track where the viewer is looking just before a cut and place the next shot's point of interest near that spot, so the eye does not hunt. On a small vertical phone screen with very short shots, eye-trace arguably matters more than Murch's low ranking implies."
+    when_to_use: "Fast montages, punch-ins, B-roll overlays, any cut sequence under ~1.5 s per shot; reframed 16:9→9:16 footage."
+    how: ["Detect the salient point (face/eyes/hands/product) at the out-frame", "Reframe or pick the next shot so its salient point lands within the same screen region", "Keep faces in the upper third of a 9:16 frame consistently across cuts", "If the focus must move, lead it with motion or a caption"]
+    parameters: {max_focus_jump: "≈ ⅓ of frame width between consecutive shots (derived, low confidence)"}
+    avoid_when: "Deliberate disorientation or a jarring reveal is the intent."
+    genres: [genre.montage, genre.product, genre.event_recap, genre.talking_head, genre.vlog]
+    goals: [goal.clarity, goal.watch_through, goal.retention_first_3s]
+    uses_capabilities: [cap.analysis.face_tracking, cap.analysis.saliency, cap.transform.reframe, cap.transform.punch_in]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "The Walter Murch-opedia", author: "Jonny Elwyn", url: "https://jonnyelwyn.co.uk/film-and-video-editing/the-walter-murch-opedia/", locator: "Rule of Six (eye-trace)"}
+      - {title: "Editing with an Eye-trace in Mind: Is the Rule of Six Incorrect?", author: "Piotr Toczyński, No Film School", url: "https://nofilmschool.com/2018/08/editing-eye-trace-mind-rule-six-incorrect", locator: "argument on small screens and short shots"}
+
+  - id: principle.perception.blink_punctuation
+    type: principle
+    name: Cuts as blinks (thought punctuation)
+    summary: "Murch proposes that blinks mark the end of a thought, so a cut placed where a viewer or performer would naturally blink feels like punctuation. Lab studies show viewer blinks cluster at low-information moments (end of an action, character exits) but were not tied directly to scene breaks, so treat this as a guiding metaphor."
+    when_to_use: "Choosing exact cut frames in talking-head and interview material: end of a sentence/idea, after the speaker blinks or exhales."
+    how: ["Cut at the end of a complete thought rather than mid-idea", "Use speaker blinks or breaths near phrase ends as candidate out-points", "Avoid cutting while key information is still on screen"]
+    parameters: {cut_offset_after_phrase_end: "0–4 frames @30fps (derived, low confidence)"}
+    avoid_when: "Comedic or energetic edits that intentionally cut mid-thought; music-led montages."
+    genres: [genre.talking_head, genre.interview, genre.podcast_clip, genre.testimonial]
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.analysis.blink_detection, cap.analysis.speech_transcript, cap.cut.trim]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: low
+    sources:
+      - {title: "The Walter Murch-opedia", author: "Jonny Elwyn", url: "https://jonnyelwyn.co.uk/film-and-video-editing/the-walter-murch-opedia/", locator: "blink theory summary"}
+      - {title: "Synchronization of spontaneous eyeblinks while viewing video stories", author: "Nakano et al. (2009), Proc. R. Soc. B", url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC2817301", locator: "abstract; results"}
+      - {title: "Nakano & Kitazawa (2010), eyeblink entrainment study", author: "Nakano & Kitazawa (2010), Exp. Brain Res.", url: "https://link.springer.com/doi/10.1007/s00221-010-2387-z", locator: "abstract"}
+
+  # ───────────────────────── Dmytryk: rules of cutting ─────────────────────────
+  - id: principle.cut.positive_reason
+    type: principle
+    name: Never cut without a positive reason
+    summary: "Dmytryk's first rule: every cut must be motivated by something the audience needs (new information, a reaction, a change of energy). Cutting only because a shot feels long, or for activity's sake, weakens the film."
+    when_to_use: "All genres; auditing an agent-generated edit list for unnecessary cuts."
+    how: ["Attach a reason code to every cut (info, reaction, emphasis, rhythm, compression)", "Remove cuts with no reason code", "In reels, 'compression of dead air' is a valid reason"]
+    parameters: {}
+    avoid_when: "Never ignore; but in beat-driven montage the music phrase itself can be the reason."
+    genres: [genre.talking_head, genre.testimonial, genre.interview, genre.tutorial, genre.vlog, genre.brand_story, genre.montage]
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.cut.hard_cut]
+    conflicts_with: [anti.cut.unmotivated_cut]
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "What You Can Learn from Edward Dmytryk's 7 Rules of Cutting", author: "New York Film Academy", url: "https://www.nyfa.edu/student-resources/what-you-can-learn-from-edward-dmytryks-7-rules-of-cutting/", locator: "rule 1"}
+      - {title: "Seven rules for film and video editors", author: "ProVideo Coalition", url: "https://www.provideocoalition.com/seven_rules_for_film_and_video_editors/", locator: "rule list"}
+
+  - id: principle.cut.cut_long_when_unsure
+    type: principle
+    name: When unsure, cut long rather than short
+    summary: "Dmytryk advises erring toward a slightly longer shot when the exact frame is uncertain, because extra frames can be trimmed later but a too-short cut loses meaning. Reels invert the default (tight is expected), so apply this to the rough cut and to emotional holds, not to final pacing of dead air."
+    when_to_use: "First assembly; reaction holds and emotional beats in testimonials; any moment where the payoff needs time to register."
+    how: ["Leave 4–8 frame handles in the assembly", "Tighten in a second pass driven by rhythm checks", "Keep longer holds only on emotional peaks or payoff frames"]
+    parameters: {assembly_handle_frames: "4–8 @30fps (derived, low confidence)"}
+    avoid_when: "Final pass on talking-head dead air, filler words, or pre-hook setup in the first 3 s."
+    genres: [genre.testimonial, genre.interview, genre.brand_story, genre.talking_head]
+    goals: [goal.emotion, goal.clarity]
+    uses_capabilities: [cap.cut.trim]
+    conflicts_with: [tech.cut.jump_cut_talking_head]
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "What You Can Learn from Edward Dmytryk's 7 Rules of Cutting", author: "New York Film Academy", url: "https://www.nyfa.edu/student-resources/what-you-can-learn-from-edward-dmytryks-7-rules-of-cutting/", locator: "rule 2"}
+      - {title: "On Film Editing (Routledge reissue)", author: "Edward Dmytryk", url: "https://www.routledge.com/products/9780429506086", locator: "publisher description"}
+
+  - id: principle.cut.fresh_over_stale
+    type: principle
+    name: Fresh is preferable to stale
+    summary: "Dmytryk favours showing the viewer something new over repeating what they've already absorbed. In reels, every shot or angle change should add new visual information; reusing the same framing for long stretches makes attention decay."
+    when_to_use: "Talking heads longer than ~5 s, tutorials with repeated steps, vlogs."
+    how: ["Introduce a new angle, scale, B-roll or graphic when the current image has been fully read", "Do not reuse the same B-roll clip twice unless as a deliberate callback", "Prefer showing a new location before the subject arrives"]
+    parameters: {max_static_hold_s: "≈ 3–5 s on an unchanged frame in talking-head reels (derived, low confidence)"}
+    avoid_when: "A long take is itself the point (one-shot performance, authenticity-led testimonial)."
+    genres: [genre.talking_head, genre.tutorial, genre.vlog, genre.podcast_clip]
+    goals: [goal.watch_through, goal.energy]
+    uses_capabilities: [cap.transform.punch_in, cap.compositing.overlay_broll, cap.cut.hard_cut]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "What You Can Learn from Edward Dmytryk's 7 Rules of Cutting", author: "New York Film Academy", url: "https://www.nyfa.edu/student-resources/what-you-can-learn-from-edward-dmytryks-7-rules-of-cutting/", locator: "rule 4"}
+
+  - id: principle.cut.values_over_matches
+    type: principle
+    name: Proper values over proper matches
+    summary: "Dmytryk ranks dramatic value above perfect continuity: a small mismatch is acceptable if the shot plays better. Viewers rarely notice mismatches when engaged in the content."
+    when_to_use: "Choosing between a well-matched but flat take and a stronger but mismatched one; hand position, cup level or lighting drift in interviews."
+    how: ["Prefer the stronger performance", "Hide visible mismatches with motion at the cut, a punch-in, or a cutaway", "Only fix mismatches that change meaning (e.g., text on screen, product state)"]
+    parameters: {}
+    avoid_when: "Product/tutorial shots where the mismatch misinforms (wrong step order, wrong product variant)."
+    genres: [genre.testimonial, genre.interview, genre.brand_story, genre.talking_head]
+    goals: [goal.emotion, goal.trust]
+    uses_capabilities: [cap.cut.trim, cap.transform.punch_in, cap.compositing.overlay_broll]
+    conflicts_with: [anti.cut.continuity_over_emotion]
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "What You Can Learn from Edward Dmytryk's 7 Rules of Cutting", author: "New York Film Academy", url: "https://www.nyfa.edu/student-resources/what-you-can-learn-from-edward-dmytryks-7-rules-of-cutting/", locator: "rule 6 (Murder, My Sweet example)"}
+      - {title: "Edit Blindness: The relationship between attention and global change blindness in dynamic scenes", author: "Smith & Henderson (2008), Journal of Eye Movement Research 2(2)", url: "https://bop.unibe.ch/JEMR/article/view/2264", locator: "abstract"}
+
+  - id: tech.cut.begin_end_on_action
+    type: technique
+    name: Enter and exit on continuing action
+    summary: "Dmytryk advises starting and ending scenes while something is already moving. For reels this means starting mid-action or mid-sentence (no wind-up, no 'hey guys') and leaving a segment before motion fully stops."
+    when_to_use: "Opening frame of any reel; segment boundaries in vlogs and montages."
+    how: ["Trim the first frames to where motion or speech is already under way", "Cut out of a segment while the action is still resolving, not after it fully stops", "Avoid static first frames"]
+    parameters: {first_frame_motion: "speech or visible motion within 0–5 frames of start (derived, low confidence)"}
+    avoid_when: "A deliberate still, held opening is the hook (e.g., a striking composed image with text)."
+    genres: [genre.vlog, genre.montage, genre.event_recap, genre.talking_head, genre.product]
+    goals: [goal.retention_first_3s, goal.energy]
+    uses_capabilities: [cap.cut.trim, cap.analysis.motion_detection, cap.analysis.speech_transcript]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "What You Can Learn from Edward Dmytryk's 7 Rules of Cutting", author: "New York Film Academy", url: "https://www.nyfa.edu/student-resources/what-you-can-learn-from-edward-dmytryks-7-rules-of-cutting/", locator: "rule 5"}
+      - {title: "Dmytryk's rules of editing (course notes)", author: "Chicago Media Works", url: "https://www.chicagomediaworks.com/2instructworks/3editing_doc/3editing_docdymytryk.html", locator: "rule list"}
+
+  - id: principle.cut.substance_before_form
+    type: principle
+    name: Substance before form
+    summary: "Dmytryk's closing rule puts content ahead of stylistic flourish. Effects, transitions and clever cuts are justified only when they serve what's being said; the audience should feel the piece, not notice the technique."
+    when_to_use: "Deciding whether to add transitions, glitch effects, speed ramps or graphics."
+    how: ["Add a stylistic device only if it clarifies, emphasises, or sets tone", "Default to the hard cut", "Remove effects that compete with the speaker or product"]
+    parameters: {}
+    avoid_when: "Style itself is the content (edit-showcase reels, music-video aesthetics)."
+    genres: [genre.talking_head, genre.testimonial, genre.tutorial, genre.brand_story, genre.interview]
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.cut.hard_cut, cap.transition.crossfade]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Dmytryk's rules of editing (course notes)", author: "Chicago Media Works", url: "https://www.chicagomediaworks.com/2instructworks/3editing_doc/3editing_docdymytryk.html", locator: "rule 7"}
+      - {title: "Seven rules for film and video editors", author: "ProVideo Coalition", url: "https://www.provideocoalition.com/seven_rules_for_film_and_video_editors/", locator: "rule list"}
+
+  # ───────────────────────── Bowen: Grammar of the Edit ─────────────────────────
+  - id: principle.cut.information_and_motivation
+    type: principle
+    name: Each cut needs new information and a motivation
+    summary: "Bowen's grammar lists the factors that justify a cut: new information, a motivating event (look, sound, movement), suitable composition, a sufficiently different camera angle, continuity, and sound. Information and motivation come first: a new shot should tell the viewer something, and something should prompt the change."
+    when_to_use: "Building cut lists from transcripts and B-roll; checking whether an inserted shot earns its place."
+    how: ["Identify the motivator (word, glance, gesture, sound) that triggers each cut", "Ensure the incoming shot adds information (detail, reaction, context)", "Check composition and angle differ enough to read as a deliberate change"]
+    parameters: {bowen_factors: "information, motivation, composition, camera angle, continuity, sound"}
+    avoid_when: "Never fully; montage may rely on rhythm as motivation."
+    genres: [genre.talking_head, genre.interview, genre.tutorial, genre.product, genre.testimonial]
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.cut.hard_cut, cap.analysis.speech_transcript, cap.compositing.overlay_broll]
+    conflicts_with: [anti.cut.unmotivated_cut]
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "Grammar of the Edit, 4th Edition", author: "Christopher J. Bowen", url: "https://www.oreilly.com/library/view/grammar-of-the/9781351803540/", locator: "book (factors per CineMontage review; TOC not consulted)"}
+      - {title: "Learn the Craft, But Don't Overlook the Art (review of Grammar of the Edit)", author: "CineMontage", url: "https://cinemontage.org/?p=25145", locator: "review"}
+
+  - id: tech.cut.shot_size_progression
+    type: technique
+    name: Shot-size variety and progression
+    summary: "Varying shot size (wide, medium, close, detail) controls intimacy and information. Classical grammar moves from context to detail and tightens toward emotional peaks; in vertical reels the 'wide' is often a medium, and digital punch-ins supply most of the variety."
+    when_to_use: "Talking heads, tutorials, product demos, interviews with a single camera."
+    how: ["Assign scale per beat: medium for setup, close-up for emphasis or emotion, detail/insert for objects", "Tighten as tension rises; release by widening", "Avoid two consecutive shots of identical scale and angle of the same subject"]
+    parameters: {scale_steps_for_punch_in: "100% / 115–130% / 150%+ (derived; source resolution permitting)"}
+    avoid_when: "Low-resolution source where punch-ins degrade the image below acceptable sharpness."
+    genres: [genre.talking_head, genre.tutorial, genre.product, genre.interview, genre.podcast_clip]
+    goals: [goal.watch_through, goal.emotion, goal.clarity]
+    uses_capabilities: [cap.transform.punch_in, cap.transform.reframe, cap.cut.hard_cut]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Grammar of the Edit, 4th Edition", author: "Christopher J. Bowen", url: "https://www.oreilly.com/library/view/grammar-of-the/9781351803540/", locator: "book (shot types/composition; TOC not consulted)"}
+      - {title: "Continuity: Shoot and Edit so your Movie Makes Sense", author: "Learn About Film", url: "https://learnaboutfilm.com/film-language/sequence/", locator: "changing position and shot size"}
+
+  # ───────────────────────── Pearlman: rhythm ─────────────────────────
+  - id: principle.rhythm.timing_pacing_trajectory
+    type: principle
+    name: Timing, pacing and trajectory phrasing
+    summary: "Pearlman splits rhythm into timing (which frame you cut on and how long a shot holds), pacing (the rate of cutting and of movement within shots), and trajectory phrasing (shaping the path and energy of movement across cuts so it links smoothly or collides). Together they shape tension and release."
+    when_to_use: "Any rhythm decision: choosing cut frames, setting overall cut rate, and deciding whether consecutive shots flow or clash."
+    how: ["Timing: pick the frame where the movement or thought peaks or completes", "Pacing: set cut rate to the intended energy, considering motion inside shots too", "Trajectory: match motion direction/energy across a cut for flow, or oppose it for impact"]
+    parameters: {}
+    avoid_when: "Never; it is a lens, not a rule."
+    genres: [genre.montage, genre.event_recap, genre.vlog, genre.brand_story, genre.talking_head]
+    goals: [goal.energy, goal.watch_through, goal.emotion]
+    uses_capabilities: [cap.cut.trim, cap.analysis.motion_detection, cap.analysis.beat_detection]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "Cutting Rhythms, Ch. 3: Timing, Pacing, and Trajectory Phrasing", author: "Karen Pearlman", url: "https://www.oreilly.com/library/view/cutting-rhythms/9780240810140/10_ch03.xhtml", locator: "Chapter 3"}
+      - {title: "Feeling the Screen Story's Pulse (review of Cutting Rhythms, 3rd ed.)", author: "Mark Seton, Senses of Cinema", url: "https://www.sensesofcinema.com/2026/book-reviews/feeling-the-screen-storys-pulse-karen-peralmans-cutting-rhythms-creative-film-editing/", locator: "Ch. 3–4 discussion"}
+
+  - id: principle.rhythm.tension_release
+    type: principle
+    name: Cycles of tension and release
+    summary: "Pearlman frames the purpose of editing rhythm as shaping cycles of tension and release. A reel is a compressed version: build (tighter cuts, rising stakes) then release (a held payoff, laugh, or reveal), possibly repeated in micro-cycles every few seconds."
+    when_to_use: "Structuring any reel over ~10 s; placing the payoff and the CTA."
+    how: ["Map the reel into tension segments and release moments", "Compress shot length and add motion during tension", "Give the release a longer hold and cleaner audio", "In 30–60 s reels plan 2–4 micro-cycles (derived)"]
+    parameters: {micro_cycle_s: "5–15 (derived, low confidence)"}
+    avoid_when: "Calm ASMR/ambient content where steady state is the goal."
+    genres: [genre.montage, genre.transformation, genre.brand_story, genre.vlog, genre.event_recap, genre.tutorial]
+    goals: [goal.watch_through, goal.emotion, goal.rewatch]
+    uses_capabilities: [cap.cut.trim, cap.speed.ramp, cap.audio.music_beat_sync]
+    conflicts_with: [anti.rhythm.metronomic_cutting]
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "Cutting Rhythms: Creative Film Editing, 3rd ed.", author: "Karen Pearlman (Routledge)", url: "https://www.routledge.com/Cutting-Rhythms-Creative-Film-Editing/Pearlman/p/book/9781041024088", locator: "publisher description"}
+      - {title: "Cutting Rhythms 3rd ed. — Preface", author: "Karen Pearlman", url: "https://www.oreilly.com/library/view/cutting-rhythms-3rd/9781040351369/xhtml/Preface.xhtml", locator: "Preface"}
+
+  - id: principle.rhythm.physical_rhythm
+    type: principle
+    name: Physical rhythm
+    summary: "Physical rhythm is the movement inside images and sound: gestures, camera moves, objects, sound energy. The editor re-choreographs it, emphasising the most dynamic moments and keeping viewers oriented."
+    when_to_use: "Action-heavy B-roll, sports, dance, product handling, event recaps."
+    how: ["Locate movement peaks in each clip", "Cut so peaks land on strong beats or on the cut itself", "Remove the slack before and after movement"]
+    parameters: {}
+    avoid_when: "Static talking heads with no movement to choreograph (rely on emotional rhythm instead)."
+    genres: [genre.montage, genre.event_recap, genre.product, genre.vlog]
+    goals: [goal.energy, goal.watch_through]
+    uses_capabilities: [cap.analysis.motion_detection, cap.cut.trim, cap.audio.music_beat_sync]
+    conflicts_with: []
+    requires: [principle.rhythm.timing_pacing_trajectory]
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Feeling the Screen Story's Pulse (review of Cutting Rhythms, 3rd ed.)", author: "Mark Seton, Senses of Cinema", url: "https://www.sensesofcinema.com/2026/book-reviews/feeling-the-screen-storys-pulse-karen-peralmans-cutting-rhythms-creative-film-editing/", locator: "Ch. 7 Physical rhythm"}
+
+  - id: principle.rhythm.emotional_rhythm
+    type: principle
+    name: Emotional rhythm
+    summary: "Emotional rhythm is how feeling passes from shot to shot in a cause-and-effect chain. The editor's questions are which shot, where, and for how long, so each emotional beat lands and hands off to the next."
+    when_to_use: "Testimonials, interviews, brand stories, any reel whose goal is emotion or trust."
+    how: ["Mark emotional beats in the transcript (shift in feeling, admission, laugh)", "Hold each beat until the feeling registers, then cut on the shift", "Use reaction shots or silence to let a beat breathe"]
+    parameters: {}
+    avoid_when: "Pure information delivery where emotion is incidental."
+    genres: [genre.testimonial, genre.interview, genre.brand_story, genre.podcast_clip]
+    goals: [goal.emotion, goal.trust]
+    uses_capabilities: [cap.analysis.speech_transcript, cap.analysis.face_expression, cap.cut.trim]
+    conflicts_with: []
+    requires: [principle.cut.emotion_first]
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Feeling the Screen Story's Pulse (review of Cutting Rhythms, 3rd ed.)", author: "Mark Seton, Senses of Cinema", url: "https://www.sensesofcinema.com/2026/book-reviews/feeling-the-screen-storys-pulse-karen-peralmans-cutting-rhythms-creative-film-editing/", locator: "Ch. 8 Emotional rhythm"}
+
+  - id: principle.rhythm.event_rhythm
+    type: principle
+    name: Event rhythm (story structure)
+    summary: "Event rhythm is the pacing of story events: the opening establishes stakes and later dramatic questions raise them, building tension and release at the structural level. In a reel the stakes must be established in the first seconds."
+    when_to_use: "Ordering segments; deciding what to cut entirely; placing the hook and payoff."
+    how: ["State or imply the stakes in the opening 1–3 s", "Order beats so each raises or answers a question", "Cut any segment that neither raises nor resolves a question"]
+    parameters: {stakes_by_s: "≤ 3 (reel adaptation, derived)"}
+    avoid_when: "Never fully; ambient/aesthetic reels have weaker event rhythm by design."
+    genres: [genre.brand_story, genre.vlog, genre.transformation, genre.tutorial, genre.testimonial]
+    goals: [goal.retention_first_3s, goal.watch_through]
+    uses_capabilities: [cap.cut.reorder, cap.analysis.speech_transcript]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Feeling the Screen Story's Pulse (review of Cutting Rhythms, 3rd ed.)", author: "Mark Seton, Senses of Cinema", url: "https://www.sensesofcinema.com/2026/book-reviews/feeling-the-screen-storys-pulse-karen-peralmans-cutting-rhythms-creative-film-editing/", locator: "Ch. 9 Event rhythm"}
+
+  - id: principle.rhythm.editor_as_first_audience
+    type: principle
+    name: Editor as first audience
+    summary: "Pearlman treats editing intuition as trained, embodied skill and the editor as the film's first audience. For an autonomous editor this means simulating a viewer's attention and feeling on each pass rather than applying rules mechanically."
+    when_to_use: "Review passes; deciding whether a rule-compliant cut actually works."
+    how: ["After assembling, run a 'first-viewer' review pass that scores attention dips and confusion points", "Prefer revisions that fix felt problems over rule violations no one would notice", "Iterate: sense, hypothesise, adjust"]
+    parameters: {}
+    avoid_when: "Never."
+    genres: [genre.talking_head, genre.testimonial, genre.montage, genre.vlog, genre.brand_story, genre.tutorial]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.analysis.preview_render]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Feeling the Screen Story's Pulse (review of Cutting Rhythms, 3rd ed.)", author: "Mark Seton, Senses of Cinema", url: "https://www.sensesofcinema.com/2026/book-reviews/feeling-the-screen-storys-pulse-karen-peralmans-cutting-rhythms-creative-film-editing/", locator: "Ch. 1–2 and Ch. 12"}
+
+  - id: principle.style.linkage_vs_collision
+    type: principle
+    name: Linkage vs collision (invisible vs expressive editing)
+    summary: "Editing styles sit on two spectrums: continuity to thematic montage, and linkage (shots flow into each other) to collision (shots clash for effect). Pearlman rejects the idea that good editing must be invisible; the choice should fit the material's intent."
+    when_to_use: "Choosing an overall cutting style per reel: smooth/trustworthy (linkage) vs punchy/energetic (collision)."
+    how: ["Pick a position on each spectrum per reel and keep it consistent", "Testimonials and brand trust pieces lean linkage", "Hype, montage and comedy lean collision"]
+    parameters: {}
+    avoid_when: "Mixing both styles randomly within one short reel."
+    genres: [genre.montage, genre.brand_story, genre.testimonial, genre.event_recap, genre.vlog]
+    goals: [goal.energy, goal.trust, goal.emotion]
+    uses_capabilities: [cap.cut.hard_cut, cap.transition.match_cut, cap.transition.whip_pan]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Feeling the Screen Story's Pulse (review of Cutting Rhythms, 3rd ed.)", author: "Mark Seton, Senses of Cinema", url: "https://www.sensesofcinema.com/2026/book-reviews/feeling-the-screen-storys-pulse-karen-peralmans-cutting-rhythms-creative-film-editing/", locator: "Ch. 6 and Ch. 10"}
+
+  # ───────────────────────── Empirical film cognition ─────────────────────────
+  - id: principle.rhythm.shot_length_variation
+    type: principle
+    name: Vary shot lengths (1/f-like patterning)
+    summary: "Analyses of popular films found that shot-length sequences increasingly vary in a 1/f-like pattern resembling fluctuations in human attention, and that this patterning is independent of average shot length. The authors present the attention link as a suggestion; the lesson for reels is to vary durations rather than cut at a fixed interval."
+    when_to_use: "Setting durations for montages, B-roll sequences and multi-cut talking heads."
+    how: ["Mix short, medium and occasional long shots instead of a constant duration", "Cluster short shots in tension passages and lengthen around payoffs", "Check that no run of more than ~4 shots shares the same length (derived)"]
+    parameters: {duration_cv_target: "≥ 0.3 coefficient of variation across a sequence (derived, low confidence)"}
+    avoid_when: "A deliberately metronomic effect (strict metric montage, beat-synced trend formats) is the point."
+    genres: [genre.montage, genre.event_recap, genre.vlog, genre.brand_story, genre.talking_head]
+    goals: [goal.watch_through, goal.energy]
+    uses_capabilities: [cap.cut.trim, cap.analysis.shot_detection]
+    conflicts_with: [anti.rhythm.metronomic_cutting, principle.montage.metric]
+    requires: []
+    evidence_level: study
+    confidence: medium
+    sources:
+      - {title: "Pattern in movies mimics that found in our brain (on Cutting, DeLong & Nothelfer 2010, Psychological Science)", author: "Cornell Chronicle", url: "https://news.cornell.edu/node/271563", locator: "news summary"}
+      - {title: "Quicker, faster, darker: Changes in Hollywood film over 75 years", author: "Cutting, Brunick, DeLong, Iricinschi & Candan (2011), i-Perception 2(6)", url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC3485803", locator: "results on 1/f and shot-length fluctuation"}
+
+  - id: principle.rhythm.motion_matches_shot_length
+    type: principle
+    name: Shorter shots carry more motion
+    summary: "In recent Hollywood films, shorter shots tend to contain more motion and longer shots less, an amplifying pairing the authors suggest heightens engagement (strongest in action, weak in drama). Average shot length also fell from about 10 s in the 1930s–40s to under 4 s after 2000."
+    when_to_use: "Assigning durations: high-motion B-roll can be cut short; static shots need either more time to read or should be avoided in fast sections."
+    how: ["Measure motion energy per clip", "Give high-motion clips short durations in fast sections", "Give low-motion clips longer holds or punch-in movement", "Do not use static frames in rapid sequences"]
+    parameters: {fast_section_shot_s: "0.4–1.2 for high-motion B-roll (derived, low confidence)", static_shot_min_s: "≈ 1.5–2.5 to be read (derived, low confidence)"}
+    avoid_when: "Dramatic/emotional passages where the coupling is weaker and holds matter more."
+    genres: [genre.montage, genre.event_recap, genre.product, genre.vlog]
+    goals: [goal.energy, goal.watch_through]
+    uses_capabilities: [cap.analysis.motion_detection, cap.cut.trim, cap.transform.punch_in]
+    conflicts_with: []
+    requires: []
+    evidence_level: study
+    confidence: medium
+    sources:
+      - {title: "Quicker, faster, darker: Changes in Hollywood film over 75 years", author: "Cutting, Brunick, DeLong, Iricinschi & Candan (2011), i-Perception 2(6)", url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC3485803", locator: "results on shot length vs motion"}
+
+  - id: principle.perception.edit_blindness
+    type: principle
+    name: Edit blindness from continuity cuts
+    summary: "Viewers searching for cuts missed match-action cuts about a third of the time versus under a tenth for cuts between unrelated scenes; cuts following continuity rules were hidden best. Most misses were attributed to attention captured by the narrative, not to blinks or saccades."
+    when_to_use: "Whenever a cut should feel invisible: trims inside an answer, compressions of action, multi-angle interviews."
+    how: ["Cut during motion that continues across the cut", "Keep subject position and screen direction consistent", "Let audio continue across the cut"]
+    parameters: {missed_match_action_pct: "≈ 32 (study)", missed_unrelated_scene_pct: "≈ 9 (study)"}
+    avoid_when: "You want the cut to be noticed (jump-cut energy, comedic beat, scene change)."
+    genres: [genre.interview, genre.testimonial, genre.vlog, genre.tutorial, genre.brand_story]
+    goals: [goal.watch_through, goal.trust]
+    uses_capabilities: [cap.cut.hard_cut, cap.analysis.motion_detection]
+    conflicts_with: []
+    requires: []
+    evidence_level: study
+    confidence: high
+    sources:
+      - {title: "Edit Blindness: The relationship between attention and global change blindness in dynamic scenes", author: "Smith & Henderson (2008), Journal of Eye Movement Research 2(2)", url: "https://bop.unibe.ch/JEMR/article/view/2264", locator: "abstract; results"}
+
+  - id: principle.perception.audio_hides_cuts
+    type: principle
+    name: Continuous audio hides cuts
+    summary: "In a follow-up study, edit blindness at match-action cuts mostly disappeared when the soundtrack was removed. Continuous sound across a cut is a major reason cuts go unnoticed, which is the empirical basis for carrying dialogue, room tone or music across picture cuts."
+    when_to_use: "Every picture cut that should feel seamless, especially jump cuts in talking heads and B-roll overlays."
+    how: ["Never let room tone drop to silence at a cut", "Apply 1–3 frame audio crossfades on dialogue edits", "Run music or ambience continuously under picture changes", "Use J/L offsets to stagger audio and picture edits"]
+    parameters: {dialogue_crossfade_frames: "1–3 @30fps (practitioner convention, derived)"}
+    avoid_when: "A hard sonic break is wanted (shock cut, silence for emphasis)."
+    genres: [genre.talking_head, genre.interview, genre.testimonial, genre.podcast_clip, genre.vlog, genre.tutorial]
+    goals: [goal.watch_through, goal.trust, goal.clarity]
+    uses_capabilities: [cap.audio.crossfade, cap.audio.room_tone_fill, cap.audio.split_edit]
+    conflicts_with: [anti.audio.hard_audio_seams]
+    requires: []
+    evidence_level: study
+    confidence: high
+    sources:
+      - {title: "Match-action: the role of motion and audio in creating global change blindness in film", author: "Smith & Martin-Portugues Santacreu (2017), Media Psychology 20(2)", url: "https://core.ac.uk/display/42135575", locator: "abstract"}
+      - {title: "Match-action (repository record)", author: "Birkbeck BIROn", url: "https://eprints.bbk.ac.uk/14904/", locator: "abstract"}
+
+  - id: principle.perception.post_cut_motion
+    type: principle
+    name: Motion after the cut matters most
+    summary: "The same study found removing motion after a match-action cut made cuts easier to detect, while removing motion before the cut had little effect, contrary to editing lore. The incoming shot should open on movement for the cut to feel seamless."
+    when_to_use: "Choosing in-points for incoming shots in seamless sequences."
+    how: ["Start the incoming shot during movement, not before it", "If the incoming shot is static, add a subtle push-in or start on a gesture", "Pre-cut motion is less critical; prioritise post-cut motion"]
+    parameters: {}
+    avoid_when: "A static, held composition is the intended reveal."
+    genres: [genre.montage, genre.vlog, genre.event_recap, genre.product, genre.brand_story]
+    goals: [goal.watch_through, goal.energy]
+    uses_capabilities: [cap.analysis.motion_detection, cap.cut.trim, cap.transform.punch_in]
+    conflicts_with: []
+    requires: []
+    evidence_level: study
+    confidence: medium
+    sources:
+      - {title: "Match-action: the role of motion and audio in creating global change blindness in film", author: "Smith & Martin-Portugues Santacreu (2017), Media Psychology 20(2)", url: "https://core.ac.uk/display/42135575", locator: "abstract"}
+
+  - id: principle.perception.kuleshov_effect
+    type: principle
+    name: Kuleshov effect (context assigns meaning)
+    summary: "The same neutral face reads as sad, happy or hungry depending on the shot placed next to it. Replications are mixed (an early null result; later fMRI and behavioural studies found an effect), but current research agrees that surrounding context shifts how faces are interpreted."
+    when_to_use: "Testimonials, brand stories, reaction-driven reels; deciding what B-roll sits next to a face."
+    how: ["Decide the intended reading of a face before choosing its neighbour shot", "Place emotionally congruent B-roll or context before/after neutral expressions", "Audit for accidental meanings (e.g., neutral face after a product = indifference)"]
+    parameters: {}
+    avoid_when: "Juxtapositions that misrepresent a real person's reaction (ethics and trust)."
+    genres: [genre.testimonial, genre.interview, genre.brand_story, genre.podcast_clip, genre.vlog]
+    goals: [goal.emotion, goal.trust]
+    uses_capabilities: [cap.cut.reorder, cap.compositing.overlay_broll]
+    conflicts_with: []
+    requires: []
+    evidence_level: study
+    confidence: medium
+    sources:
+      - {title: "Does the Kuleshov Effect Really Exist? Revisiting a Classic Film Experiment on Facial Expressions and Emotional Contexts", author: "Barratt et al. (2016)", url: "https://research.cbs.dk/en/publications/does-the-kuleshov-effect-really-exist-revisiting-a-classic-film-e-2/", locator: "abstract"}
+      - {title: "Kuleshov effect", author: "Wikipedia", url: "https://en.wikipedia.org/wiki/Kuleshov_effect", locator: "replications (Prince & Hensley 1992; Mobbs et al. 2006)"}
+      - {title: "How context influences our perception of emotional faces (Kuleshov effect behavioural study)", author: "Frontiers in Psychology (2017)", url: "https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2017.01684/full", locator: "introduction; results"}
+
+  - id: tech.montage.kuleshov_juxtaposition
+    type: technique
+    name: Context juxtaposition for faces
+    summary: "Applied Kuleshov: place a shot of what the speaker is talking about (or a story-relevant image) right before or after a pause on their face, so the face inherits the meaning. Turns a flat reaction into an emotional beat."
+    when_to_use: "Testimonials (before/after product), brand stories, emotional vlogs, podcast clips with listener reactions."
+    how: ["Find a neutral/held face moment of 0.5–1.5 s", "Precede it with the subject of the emotion (memory image, product, result)", "Keep audio continuous across the pair"]
+    parameters: {face_hold_s: "0.5–1.5 (derived, low confidence)"}
+    avoid_when: "It would imply a reaction the person did not have (misleading testimonial)."
+    genres: [genre.testimonial, genre.brand_story, genre.vlog, genre.podcast_clip]
+    goals: [goal.emotion, goal.trust]
+    uses_capabilities: [cap.cut.reorder, cap.compositing.overlay_broll, cap.audio.split_edit]
+    conflicts_with: []
+    requires: [principle.perception.kuleshov_effect]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Kuleshov effect", author: "Wikipedia", url: "https://en.wikipedia.org/wiki/Kuleshov_effect", locator: "original experiment description"}
+      - {title: "Does the Kuleshov Effect Really Exist? Revisiting a Classic Film Experiment on Facial Expressions and Emotional Contexts", author: "Barratt et al. (2016)", url: "https://research.cbs.dk/en/publications/does-the-kuleshov-effect-really-exist-revisiting-a-classic-film-e-2/", locator: "abstract"}
+
+  # ───────────────────────── Eisenstein: methods of montage ─────────────────────────
+  - id: principle.montage.metric
+    type: principle
+    name: Metric montage
+    summary: "Eisenstein's simplest method: cut by absolute shot length, like musical measures, regardless of content. Shortening the measure raises intensity. In reels this is strict beat-locked cutting."
+    when_to_use: "Beat-synced trend edits, hype intros, short bursts (2–6 s) of montage."
+    how: ["Detect the music tempo", "Cut every N beats (1, 2 or 4)", "Shorten N toward the climax", "Limit to bursts; then switch to rhythmic montage"]
+    parameters: {cut_every_beats: "1, 2 or 4", burst_length_s: "2–6 (derived, low confidence)"}
+    avoid_when: "Content inside shots fights the grid (a gesture cut mid-way), or for long stretches (feels mechanical)."
+    genres: [genre.montage, genre.event_recap, genre.product]
+    goals: [goal.energy]
+    uses_capabilities: [cap.analysis.beat_detection, cap.audio.music_beat_sync, cap.cut.hard_cut]
+    conflicts_with: [principle.rhythm.shot_length_variation]
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Eisenstein's methods of montage (course notes)", author: "Chicago Media Works", url: "https://chicagomediaworks.com/2instructworks/3editing_doc/3editingeisenstein.html", locator: "metric montage"}
+      - {title: "Soviet montage theory types", author: "PremiumBeat", url: "https://www.premiumbeat.com/blog/soviet-montage-theory-types", locator: "metric"}
+
+  - id: principle.montage.rhythmic
+    type: principle
+    name: Rhythmic montage
+    summary: "Shot length is set by both the measure and the movement inside the frame, so cuts land with on-screen action. This is the best default for beat-driven reels: cut near the beat but on the frame where motion peaks or completes."
+    when_to_use: "Music-driven montages, event recaps, product B-roll sequences."
+    how: ["Snap candidate cuts to beats", "Slide each cut a few frames to the nearest motion peak", "Let movement direction carry across the cut"]
+    parameters: {beat_snap_tolerance_frames: "±2–4 @30fps (derived, low confidence)"}
+    avoid_when: "Dialogue-led sections where speech, not music, sets rhythm."
+    genres: [genre.montage, genre.event_recap, genre.product, genre.vlog]
+    goals: [goal.energy, goal.watch_through]
+    uses_capabilities: [cap.analysis.beat_detection, cap.analysis.motion_detection, cap.audio.music_beat_sync]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Eisenstein's methods of montage (course notes)", author: "Chicago Media Works", url: "https://chicagomediaworks.com/2instructworks/3editing_doc/3editingeisenstein.html", locator: "rhythmic montage"}
+      - {title: "Sergei Eisenstein: The man, the method, the montage", author: "Videomaker", url: "https://www.videomaker.com/how-to/directing/film-history/sergei-eisenstein-the-man-the-method-the-montage/", locator: "five methods"}
+
+  - id: principle.montage.tonal
+    type: principle
+    name: Tonal montage
+    summary: "Shots are selected and ordered by their dominant emotional tone (light, colour, mood, softness) rather than length. In reels, it governs grouping B-roll by mood and colour so a sequence holds one feeling."
+    when_to_use: "Brand stories, mood montages, travel/vlog sequences."
+    how: ["Tag clips by mood, brightness and dominant colour", "Build sequences from clips sharing a tone", "Change tone deliberately at a story turn"]
+    parameters: {}
+    avoid_when: "The goal is contrast (use intellectual montage instead)."
+    genres: [genre.brand_story, genre.montage, genre.vlog, genre.event_recap]
+    goals: [goal.emotion, goal.brand_recall]
+    uses_capabilities: [cap.analysis.color_analysis, cap.cut.reorder, cap.color.grade_match]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Eisenstein's methods of montage (course notes)", author: "Chicago Media Works", url: "https://chicagomediaworks.com/2instructworks/3editing_doc/3editingeisenstein.html", locator: "tonal montage"}
+
+  - id: principle.montage.overtonal
+    type: principle
+    name: Overtonal montage
+    summary: "A combination of metric, rhythmic and tonal considerations, weighing all of a shot's appeals at once. Sources differ on details; practically it means good sequences balance length, motion and mood together."
+    when_to_use: "Final polish of montage sequences after a rhythmic/tonal pass."
+    how: ["Re-check each cut for beat fit, motion fit and mood fit together", "Fix the weakest dimension per cut"]
+    parameters: {}
+    avoid_when: "Never; it is an integrative lens."
+    genres: [genre.montage, genre.brand_story, genre.event_recap]
+    goals: [goal.emotion, goal.energy]
+    uses_capabilities: [cap.analysis.beat_detection, cap.analysis.motion_detection, cap.analysis.color_analysis]
+    conflicts_with: []
+    requires: [principle.montage.metric, principle.montage.rhythmic, principle.montage.tonal]
+    evidence_level: theory
+    confidence: low
+    sources:
+      - {title: "Montage Methods in Sergei Eisenstein's Article", author: "The New School portfolio", url: "https://portfolio.newschool.edu/lune/2016/11/03/montage-methods-in-sergei-eisensteins-article", locator: "overtonal"}
+      - {title: "Soviet montage theory types", author: "PremiumBeat", url: "https://www.premiumbeat.com/blog/soviet-montage-theory-types", locator: "overtonal"}
+
+  - id: principle.montage.intellectual
+    type: principle
+    name: Intellectual montage (collision of ideas)
+    summary: "Two shots juxtaposed produce an idea neither contains alone (A + B = C). In reels: before/after, expectation vs reality, claim vs proof, or contrast cuts that make an argument without narration."
+    when_to_use: "Transformations, comparison reels, satire, brand stories with a thesis, product problem/solution."
+    how: ["Pair shots that conflict on one clear dimension", "Keep framing similar so the difference is the message", "Hold each half long enough to be read (≥ ~1 s)"]
+    parameters: {min_hold_each_s: "≈ 1 (derived, low confidence)"}
+    avoid_when: "The audience lacks the context to decode the juxtaposition."
+    genres: [genre.transformation, genre.product, genre.brand_story, genre.montage]
+    goals: [goal.clarity, goal.shares_saves, goal.brand_recall]
+    uses_capabilities: [cap.cut.reorder, cap.graphics.split_screen, cap.transition.match_cut]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Eisenstein's methods of montage (course notes)", author: "Chicago Media Works", url: "https://chicagomediaworks.com/2instructworks/3editing_doc/3editingeisenstein.html", locator: "intellectual montage"}
+      - {title: "Sergei Eisenstein: The man, the method, the montage", author: "Videomaker", url: "https://www.videomaker.com/how-to/directing/film-history/sergei-eisenstein-the-man-the-method-the-montage/", locator: "intellectual montage"}
+
+  # ───────────────────────── Continuity editing ─────────────────────────
+  - id: principle.continuity.axis_180
+    type: principle
+    name: 180° rule (axis of action)
+    summary: "Keep cameras on one side of the imaginary line between subjects so left/right relationships and movement direction stay consistent. Crossing it makes people seem to swap sides or reverse direction. Matters in reels for two-camera interviews, podcasts and reaction setups."
+    when_to_use: "Multi-camera interviews and podcasts; walking/driving vlogs; any shot-reverse-shot."
+    how: ["Detect which side of frame each speaker faces in each angle", "Never cut between angles that flip a speaker's facing direction without a neutral bridge", "When reframing 16:9 to 9:16, keep each speaker's look direction consistent"]
+    parameters: {}
+    avoid_when: "Deliberate disorientation; single-person direct-to-camera talking heads (no axis issue)."
+    genres: [genre.interview, genre.podcast_clip, genre.vlog]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.analysis.face_tracking, cap.analysis.gaze_detection, cap.transform.flip_horizontal]
+    conflicts_with: [anti.continuity.axis_flip]
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "Axis of Action (180-Degree Rule)", author: "How To Film School", url: "https://howtofilmschool.com/dictionary/axis-of-action-180-degree-rule/", locator: "definition"}
+      - {title: "What is continuity editing in film?", author: "Adobe", url: "https://www.adobe.com/creativecloud/video/hub/ideas/what-is-continuity-editing-in-film", locator: "180-degree rule"}
+
+  - id: principle.continuity.thirty_degree_rule
+    type: principle
+    name: 30° rule (sufficient change between shots)
+    summary: "Cutting between two shots of the same subject needs a clear change of angle (≈30°+) or shot size, otherwise it reads as a jump cut. In single-camera reels the usual substitute is a scale change via punch-in."
+    when_to_use: "Cutting within continuous footage of one subject when the cut should feel deliberate rather than jumpy."
+    how: ["If angle differs by < ~30°, also change scale noticeably", "Alternate punch-in levels across successive trims", "Or accept the jump cut deliberately as style"]
+    parameters: {min_angle_change_deg: "≈ 30", min_scale_change: "≈ 1.15–1.3x (derived, low confidence)"}
+    avoid_when: "The jump cut is wanted as a stylistic device (vlog/talking-head grammar)."
+    genres: [genre.talking_head, genre.interview, genre.tutorial, genre.podcast_clip]
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.transform.punch_in, cap.cut.hard_cut]
+    conflicts_with: [tech.cut.jump_cut_talking_head]
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "30-degree rule", author: "Wikipedia", url: "https://en.wikipedia.org/wiki/30-degree_rule", locator: "definition (article flags limited citations)"}
+      - {title: "Continuity: Shoot and Edit so your Movie Makes Sense", author: "Learn About Film", url: "https://learnaboutfilm.com/film-language/sequence/", locator: "changing position and shot size"}
+
+  - id: principle.continuity.eyeline_match
+    type: principle
+    name: Eyeline match
+    summary: "When a person looks off-screen, the next shot should show what they look at, positioned where their gaze points. It links a look to its object and powers POV and reaction structures."
+    when_to_use: "Vlogs and product reels where a person looks at something; interviews intercutting host and guest; reaction reels."
+    how: ["Detect gaze direction at the out-point", "Cut to the object/person the gaze implies", "Place the object on the side of frame the gaze points toward"]
+    parameters: {}
+    avoid_when: "Direct-to-camera address (gaze is at the viewer)."
+    genres: [genre.vlog, genre.product, genre.interview, genre.podcast_clip]
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.analysis.gaze_detection, cap.cut.hard_cut, cap.transform.reframe]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "What is continuity editing in film?", author: "Adobe", url: "https://www.adobe.com/creativecloud/video/hub/ideas/what-is-continuity-editing-in-film", locator: "eyeline match"}
+      - {title: "Continuity: Shoot and Edit so your Movie Makes Sense", author: "Learn About Film", url: "https://learnaboutfilm.com/film-language/sequence/", locator: "eyeline"}
+
+  - id: tech.cut.match_on_action
+    type: technique
+    name: Match on action
+    summary: "Cut from one shot to another in the middle of a continuous movement so the action appears to flow across the cut. It is the most reliably invisible cut and also bridges small continuity flaws."
+    when_to_use: "Multi-angle B-roll of a single action (pouring, opening a box, a jump), tutorials, product unboxings, vlogs."
+    how: ["Find the same action in both shots", "Cut a few frames into the movement in shot A", "Start shot B at the matching phase of the action, slightly overlapping rather than missing frames", "Keep audio continuous"]
+    parameters: {cut_point: "≈ ⅓ into the motion (practitioner convention, low confidence)", overlap_frames: "0–2 @30fps (derived)"}
+    avoid_when: "The two angles show visibly different action states (reads as an error)."
+    genres: [genre.product, genre.tutorial, genre.vlog, genre.event_recap, genre.montage]
+    goals: [goal.watch_through, goal.clarity]
+    uses_capabilities: [cap.analysis.motion_detection, cap.cut.hard_cut, cap.cut.trim]
+    conflicts_with: []
+    requires: [principle.perception.edit_blindness]
+    evidence_level: study
+    confidence: high
+    sources:
+      - {title: "Edit Blindness: The relationship between attention and global change blindness in dynamic scenes", author: "Smith & Henderson (2008), Journal of Eye Movement Research 2(2)", url: "https://bop.unibe.ch/JEMR/article/view/2264", locator: "results on match-action cuts"}
+      - {title: "What is continuity editing in film?", author: "Adobe", url: "https://www.adobe.com/creativecloud/video/hub/ideas/what-is-continuity-editing-in-film", locator: "match on action"}
+
+  - id: tech.cut.cut_in_movement
+    type: technique
+    name: Cut in movement
+    summary: "Dmytryk's rule to cut while something is moving: a gesture, head turn, camera move or object motion. Movement masks the cut and keeps energy up. In talking heads, cut on a hand gesture, nod or head turn rather than on a frozen face."
+    when_to_use: "Talking-head trims, B-roll transitions, whip/motion-led transitions, montages."
+    how: ["Detect motion peaks near candidate cut points", "Prefer cut points during gestures or camera moves", "For transitions, match movement direction between outgoing and incoming shots"]
+    parameters: {search_window_frames: "±6 around the speech-based cut point @30fps (derived, low confidence)"}
+    avoid_when: "The movement is the payoff and must be seen whole."
+    genres: [genre.talking_head, genre.vlog, genre.montage, genre.event_recap, genre.product]
+    goals: [goal.energy, goal.watch_through]
+    uses_capabilities: [cap.analysis.motion_detection, cap.cut.trim, cap.transition.whip_pan]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "What You Can Learn from Edward Dmytryk's 7 Rules of Cutting", author: "New York Film Academy", url: "https://www.nyfa.edu/student-resources/what-you-can-learn-from-edward-dmytryks-7-rules-of-cutting/", locator: "rule 3"}
+      - {title: "Match-action: the role of motion and audio in creating global change blindness in film", author: "Smith & Martin-Portugues Santacreu (2017)", url: "https://core.ac.uk/display/42135575", locator: "abstract"}
+
+  # ───────────────────────── Jump cuts ─────────────────────────
+  - id: tech.cut.jump_cut_talking_head
+    type: technique
+    name: Jump cut for compression (talking head)
+    summary: "Remove pauses, filler words and retakes from a single continuous shot, letting the subject visibly skip. Once a classical error, it is now the native grammar of YouTube and short-form talking heads because it compresses time and raises energy."
+    when_to_use: "Single-camera talking heads, tutorials, podcast clips, vlogs to camera."
+    how: ["Transcribe and mark fillers, false starts, long pauses", "Cut them out, keeping breaths only where needed for natural cadence", "Crossfade audio 1–3 frames at each cut", "Vary the look of successive jumps (punch-in, B-roll) so they don't all feel identical"]
+    parameters: {max_pause_kept_ms: "150–300 (practitioner convention, derived)", audio_crossfade_frames: "1–3 @30fps"}
+    avoid_when: "Emotional testimonial moments where pauses carry meaning; trust-led brand pieces needing calm."
+    genres: [genre.talking_head, genre.tutorial, genre.podcast_clip, genre.vlog]
+    goals: [goal.watch_through, goal.energy, goal.retention_first_3s]
+    uses_capabilities: [cap.cut.ripple_delete, cap.analysis.silence_detection, cap.analysis.speech_transcript, cap.audio.crossfade]
+    conflicts_with: [principle.continuity.thirty_degree_rule, principle.cut.cut_long_when_unsure]
+    requires: []
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Jump cut", author: "Wikipedia", url: "https://en.wikipedia.org/wiki/Jump_cut", locator: "definition; history"}
+      - {title: "Everything you need to know about the jump cut", author: "Videomaker", url: "https://www.videomaker.com/how-to/shooting/visual-storytelling/everything-you-need-to-know-about-the-jump-cut/", locator: "vlog usage; overuse warning"}
+
+  - id: tech.cut.jump_cut_punch_in
+    type: technique
+    name: Punch-in to soften jump cuts
+    summary: "Alternate digital zoom levels across successive jump cuts so each cut also changes shot size, partially satisfying the 30° rule and adding emphasis. A practitioner convention derived from shot-size grammar, not a rule from the classic texts."
+    when_to_use: "Single-camera 4K-or-better talking heads where many jump cuts are needed."
+    how: ["Alternate between base framing and a tighter punch-in on successive segments", "Use the tightest punch for punchlines or key claims", "Keep eyes at a consistent screen height across scales"]
+    parameters: {punch_scale: "1.10–1.30x typical (derived, low confidence)", min_source_res_for_1_3x: "≥ 1440p for 1080x1920 output (derived)"}
+    avoid_when: "Low-resolution or noisy source; every single cut (becomes a tic)."
+    genres: [genre.talking_head, genre.tutorial, genre.podcast_clip]
+    goals: [goal.watch_through, goal.energy]
+    uses_capabilities: [cap.transform.punch_in, cap.analysis.face_tracking]
+    conflicts_with: []
+    requires: [tech.cut.jump_cut_talking_head]
+    evidence_level: single_opinion
+    confidence: low
+    sources:
+      - {title: "30-degree rule", author: "Wikipedia", url: "https://en.wikipedia.org/wiki/30-degree_rule", locator: "shot size change as alternative"}
+      - {title: "Continuity: Shoot and Edit so your Movie Makes Sense", author: "Learn About Film", url: "https://learnaboutfilm.com/film-language/sequence/", locator: "change position and shot size"}
+
+  - id: tech.cut.jump_cut_ellipsis
+    type: technique
+    name: Expressive jump cut (time ellipsis)
+    summary: "Use deliberate jumps within one setup to show time passing or restlessness (a person in different positions in the same frame, a process sped through). Popularised by Breathless, where jarring discontinuity was a stylistic choice."
+    when_to_use: "Vlogs, day-in-the-life, process/transformation reels, waiting/boredom gags."
+    how: ["Lock framing (tripod or stabilised)", "Pick moments where position or state changed clearly", "Cut on a rhythm (beats or regular intervals) so the jumps read as intentional"]
+    parameters: {}
+    avoid_when: "The audience needs to follow continuous action."
+    genres: [genre.vlog, genre.transformation, genre.montage, genre.tutorial]
+    goals: [goal.energy, goal.watch_through]
+    uses_capabilities: [cap.cut.hard_cut, cap.analysis.beat_detection]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Jump cut", author: "Wikipedia", url: "https://en.wikipedia.org/wiki/Jump_cut", locator: "temporal vs spatial jump cuts; Breathless"}
+      - {title: "60 Years of Jean-Luc Godard's Breathless", author: "Film Companion", url: "https://www.filmcompanion.in/60-years-of-jean-luc-godards-breathless-why-the-film-was-ahead-of-its-time", locator: "editing discussion"}
+
+  # ───────────────────────── Split edits (J/L) ─────────────────────────
+  - id: tech.audio.j_cut
+    type: technique
+    name: J-cut (audio leads picture)
+    summary: "The incoming shot's audio starts before its picture, pulling the viewer forward into the next shot. Smooths transitions, introduces a new speaker or scene, and hides picture cuts behind continuous sound."
+    when_to_use: "Introducing a new speaker in interviews/podcasts; entering a new scene in vlogs; leading into B-roll from narration."
+    how: ["Offset the audio edit earlier than the picture edit", "Start with 6–12 frames for quick dialogue lines and adjust by feel", "Use longer leads (0.5–2 s) for scene changes with ambience or music"]
+    parameters: {audio_lead_frames_dialogue: "6–12 @30fps (CapCut guidance; others cite 1–10 or 3–12)", audio_lead_scene_change_s: "0.5–2 (derived, low confidence)"}
+    avoid_when: "The audio of the incoming shot would confuse context (two speakers overlapping unintelligibly)."
+    genres: [genre.interview, genre.podcast_clip, genre.vlog, genre.brand_story, genre.testimonial]
+    goals: [goal.watch_through, goal.clarity]
+    uses_capabilities: [cap.audio.split_edit, cap.audio.crossfade]
+    conflicts_with: []
+    requires: [principle.perception.audio_hides_cuts]
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "What Is a J-Cut and L-Cut? Audio Transition Techniques for Natural Dialogue Flow", author: "CapCut", url: "https://www.capcut.com/create/j-cuts-and-l-cuts-dialogue-edits", locator: "frame guidance"}
+      - {title: "What are J-cuts and L-cuts, and how do they work in video editing?", author: "Epidemic Sound", url: "https://www.epidemicsound.com/blog/j-cuts-and-l-cuts/", locator: "split edits"}
+
+  - id: tech.audio.l_cut
+    type: technique
+    name: L-cut (audio trails picture)
+    summary: "The outgoing shot's audio continues after the picture changes. Lets the viewer see a reaction, B-roll or detail while the speaker keeps talking; the core move for covering talking-head edits and showing reactions."
+    when_to_use: "Laying B-roll over narration; showing a listener's reaction in interviews/podcasts; lingering on a line's emotional weight."
+    how: ["Cut picture to the reaction/B-roll before the sentence ends", "Keep the speaker's audio running until the thought completes", "Return to the speaker on the next sentence start or a new motivation"]
+    parameters: {audio_trail_frames: "6–12 @30fps for dialogue (practitioner range)", broll_over_dialogue_s: "1.5–3 (derived, low confidence)"}
+    avoid_when: "Lip-sync proof matters (the viewer must see the speaker say a key claim, e.g., testimonial endorsements)."
+    genres: [genre.interview, genre.podcast_clip, genre.testimonial, genre.talking_head, genre.brand_story]
+    goals: [goal.watch_through, goal.emotion]
+    uses_capabilities: [cap.audio.split_edit, cap.compositing.overlay_broll]
+    conflicts_with: []
+    requires: [principle.perception.audio_hides_cuts]
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "A video editor's guide to J cuts and L cuts", author: "Soundstripe", url: "https://www.soundstripe.com/blogs/a-video-editors-guide-to-j-cuts-and-l-cuts", locator: "L-cut section"}
+      - {title: "What are J-Cuts and L-Cuts? Professional Dialogue Editing Explained", author: "SpotlightFX", url: "https://spotlightfx.com/blog/what-are-j-cuts-and-l-cuts-professional-dialogue-editing-explained", locator: "reactions"}
+      - {title: "What Is a J-Cut and L-Cut?", author: "CapCut", url: "https://www.capcut.com/create/j-cuts-and-l-cuts-dialogue-edits", locator: "frame guidance"}
+
+  # ───────────────────────── Cutaways, inserts, reactions ─────────────────────────
+  - id: tech.cut.cutaway_cover
+    type: technique
+    name: Cutaway to cover an edit
+    summary: "Briefly leave the main shot for a related image (B-roll, context, another person) while the main audio continues. The standard way to hide trims inside an interview answer and to compress time without a visible jump."
+    when_to_use: "Interviews and testimonials where a jump cut would feel unpolished; talking heads that need illustration."
+    how: ["Place the cutaway over the edit point so the trim is hidden", "Keep the underlying interview audio running", "Choose imagery that illustrates the words being said", "Return to the speaker for key claims and emotional lines"]
+    parameters: {cutaway_len_s: "≈ 1.5–3 (practitioner guidance cites ~2 s inside interviews)"}
+    avoid_when: "The imagery is unrelated filler; the speaker's face is the proof (endorsements)."
+    genres: [genre.interview, genre.testimonial, genre.talking_head, genre.brand_story, genre.podcast_clip]
+    goals: [goal.watch_through, goal.clarity, goal.trust]
+    uses_capabilities: [cap.compositing.overlay_broll, cap.audio.split_edit, cap.cut.ripple_delete]
+    conflicts_with: [anti.cut.broll_wallpaper]
+    requires: [tech.audio.l_cut]
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "What is a cutaway shot", author: "StudioBinder", url: "https://www.studiobinder.com/blog/cutaway-shot/", locator: "definition and uses"}
+      - {title: "Use cutaways", author: "SSW Rules", url: "https://www.ssw.com.au/rules/use-cutaways", locator: "interview guidance"}
+      - {title: "How to add cutaway shots and inserts to your videos", author: "Soundstripe", url: "https://www.soundstripe.com/blogs/how-to-add-cutaway-shots-and-inserts-to-your-videos", locator: "cutaway vs insert"}
+
+  - id: tech.cut.insert_detail
+    type: technique
+    name: Insert (detail close-up)
+    summary: "A tight shot of something inside the scene (hands, screen, product label, ingredient) that shows a detail the main shot cannot. Unlike a cutaway it stays in the same time and place. Essential in vertical tutorials and product reels where small details must be legible on a phone."
+    when_to_use: "Tutorials, product demos, unboxings, recipes, any step whose key detail is small."
+    how: ["Cut to the insert when the speaker references the detail", "Hold long enough to read any text (≥ ~1 s plus reading time)", "Match action into and out of the insert when possible"]
+    parameters: {min_hold_s: "≈ 1–2 depending on text to read (derived, low confidence)"}
+    avoid_when: "The detail is already legible in the main shot."
+    genres: [genre.tutorial, genre.product, genre.vlog]
+    goals: [goal.clarity, goal.shares_saves]
+    uses_capabilities: [cap.cut.hard_cut, cap.transform.punch_in, cap.compositing.overlay_broll]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Insert Shot in Film: Definition and Insert vs Cutaway Shot", author: "FilmDaft", url: "https://filmdaft.com/?p=32368", locator: "insert vs cutaway"}
+      - {title: "How to add cutaway shots and inserts to your videos", author: "Soundstripe", url: "https://www.soundstripe.com/blogs/how-to-add-cutaway-shots-and-inserts-to-your-videos", locator: "inserts"}
+
+  - id: tech.cut.reaction_shot
+    type: technique
+    name: Reaction shot
+    summary: "Cut to a listener or audience reacting to what is said or shown. The reaction tells viewers how to feel, gives emotional beats room to land, and hides edits in the speaker's track."
+    when_to_use: "Podcast clips, interviews, pranks/reveals, event recaps, testimonials with an interviewer or family member present."
+    how: ["Find genuine reactions near the line they respond to", "L-cut the speaker's audio over the reaction", "Hold the reaction until the feeling registers, then cut on its shift"]
+    parameters: {reaction_hold_s: "0.7–2 (derived, low confidence)"}
+    avoid_when: "The reaction was captured at a different moment and would misrepresent the response."
+    genres: [genre.podcast_clip, genre.interview, genre.event_recap, genre.testimonial, genre.vlog]
+    goals: [goal.emotion, goal.shares_saves]
+    uses_capabilities: [cap.cut.hard_cut, cap.audio.split_edit, cap.analysis.face_expression]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "What are J-Cuts and L-Cuts? Professional Dialogue Editing Explained", author: "SpotlightFX", url: "https://spotlightfx.com/blog/what-are-j-cuts-and-l-cuts-professional-dialogue-editing-explained", locator: "L-cuts for reactions"}
+      - {title: "Feeling the Screen Story's Pulse (review of Cutting Rhythms, 3rd ed.)", author: "Mark Seton, Senses of Cinema", url: "https://www.sensesofcinema.com/2026/book-reviews/feeling-the-screen-storys-pulse-karen-peralmans-cutting-rhythms-creative-film-editing/", locator: "Ch. 8 Emotional rhythm"}
+
+  - id: tech.cut.shot_reverse_shot
+    type: technique
+    name: Shot / reverse shot
+    summary: "Alternate between two people facing each other, each framed from the other's side of the axis, with matching eyelines. The default grammar for two-person conversations; in vertical reels each speaker usually gets their own reframed 9:16 crop."
+    when_to_use: "Two-person interviews, podcasts, debates, conversational skits."
+    how: ["Reframe each speaker so they face toward the other's implied position", "Cut on speaker change or a strong reaction, using J-cuts to lead the new voice", "Keep eye height consistent across both crops"]
+    parameters: {}
+    avoid_when: "Rapid crosstalk where a split-screen or two-shot is clearer."
+    genres: [genre.interview, genre.podcast_clip]
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.transform.reframe, cap.analysis.speaker_diarization, cap.audio.split_edit, cap.graphics.split_screen]
+    conflicts_with: []
+    requires: [principle.continuity.axis_180, principle.continuity.eyeline_match]
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "What is continuity editing in film?", author: "Adobe", url: "https://www.adobe.com/creativecloud/video/hub/ideas/what-is-continuity-editing-in-film", locator: "shot-reverse-shot and eyeline"}
+      - {title: "Axis of Action (180-Degree Rule)", author: "How To Film School", url: "https://howtofilmschool.com/dictionary/axis-of-action-180-degree-rule/", locator: "definition"}
+
+  # ───────────────────────── Parallel editing, match cuts, pacing ─────────────────────────
+  - id: tech.cut.cross_cutting
+    type: technique
+    name: Cross-cutting / parallel editing
+    summary: "Alternate between two or more lines of action, building suspense by leaving each briefly unresolved or creating meaning through contrast. Terminology is inconsistent across sources (which term means simultaneous action vs multi-storyline structure), so the graph treats them as one technique."
+    when_to_use: "Before/after or two-perspective stories, process vs result, 'meanwhile' event recaps, brand stories contrasting problem and solution."
+    how: ["Define two threads with a clear relation (race, contrast, convergence)", "Alternate with shrinking segment lengths toward the convergence", "Resolve both threads at the payoff, ideally in one shot or a match cut"]
+    parameters: {segment_shrink_ratio: "≈ 0.6–0.8 per alternation toward climax (derived, low confidence)"}
+    avoid_when: "Under ~15 s total, where two threads can't be established; viewers can't tell the threads apart visually."
+    genres: [genre.brand_story, genre.transformation, genre.event_recap, genre.vlog]
+    goals: [goal.watch_through, goal.emotion]
+    uses_capabilities: [cap.cut.reorder, cap.cut.hard_cut, cap.graphics.split_screen]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Cross-cutting explained", author: "MasterClass", url: "https://www.masterclass.com/articles/cross-cutting-explained", locator: "definition; suspense"}
+      - {title: "Parallel editing and Griffith (CineD article)", author: "CineD", url: "https://www.cined.com/?p=443157", locator: "Griffith shot-shortening"}
+
+  - id: tech.rhythm.accelerating_cut_rate
+    type: technique
+    name: Accelerate cut rate toward the climax
+    summary: "Progressively shorten shots as a sequence nears its peak, as Griffith did in his rescue cross-cuts and as Eisenstein's metric montage prescribes. Then release with a longer hold on the payoff."
+    when_to_use: "Build-ups before reveals, transformations, product launches, event recaps."
+    how: ["Plan a build segment of 3–8 s before the payoff (derived)", "Shorten each successive shot", "Cut to the payoff on a strong beat and hold it 1.5–3 s (derived)"]
+    parameters: {build_s: "3–8 (derived, low confidence)", payoff_hold_s: "1.5–3 (derived, low confidence)"}
+    avoid_when: "Calm, trust-building content; reels already cutting near the minimum readable shot length."
+    genres: [genre.transformation, genre.montage, genre.event_recap, genre.product, genre.brand_story]
+    goals: [goal.energy, goal.emotion, goal.watch_through]
+    uses_capabilities: [cap.cut.trim, cap.analysis.beat_detection, cap.speed.ramp]
+    conflicts_with: []
+    requires: [principle.rhythm.tension_release]
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Parallel editing and Griffith (CineD article)", author: "CineD", url: "https://www.cined.com/?p=443157", locator: "shortening shots toward the deadline"}
+      - {title: "Eisenstein's methods of montage (course notes)", author: "Chicago Media Works", url: "https://chicagomediaworks.com/2instructworks/3editing_doc/3editingeisenstein.html", locator: "metric montage"}
+
+  - id: tech.transition.graphic_match
+    type: technique
+    name: Graphic match cut
+    summary: "Cut between two shots that share shape, colour, composition or movement, so the image appears to transform. Usually noticeable on purpose, it implies a link or metaphor between the two subjects. Popular in reels as seamless 'transition' cuts."
+    when_to_use: "Transformations, travel montages, brand stories linking product to lifestyle, outfit/room changes."
+    how: ["Find or shoot shots with a shared dominant shape or position", "Align the matching element to the same screen position and scale", "Cut on the beat or during motion for extra smoothness"]
+    parameters: {position_alignment_tolerance: "≈ 5% of frame (derived, low confidence)"}
+    avoid_when: "The visual link would imply a false or awkward metaphor; overused as a gimmick every shot."
+    genres: [genre.transformation, genre.montage, genre.brand_story, genre.vlog, genre.product]
+    goals: [goal.rewatch, goal.shares_saves, goal.brand_recall]
+    uses_capabilities: [cap.transition.match_cut, cap.transform.reframe, cap.analysis.shape_matching]
+    conflicts_with: []
+    requires: [principle.cut.eye_trace]
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "Match cut", author: "Wikipedia", url: "https://en.wikipedia.org/wiki/Match_cut", locator: "graphic match"}
+      - {title: "Match cut", author: "StudioBinder", url: "https://www.studiobinder.com/blog/match-cut/", locator: "graphic match cuts as visual metaphor"}
+
+  # ───────────────────────── Story structure ─────────────────────────
+  - id: principle.story.setup_payoff
+    type: principle
+    name: Setup and payoff
+    summary: "Plant a detail early that becomes significant later. Unpaid setups disappoint; payoffs without setups feel cheap. Spacing matters: too close feels obvious, too far is forgotten. Short-form compresses this to seconds."
+    when_to_use: "Any reel with a reveal, punchline, transformation or twist."
+    how: ["Identify the payoff first, then find or create its setup", "Plant the setup in the first 1–3 s (often the hook)", "Pay it off visibly and close to the end", "Cut any planted element that has no payoff"]
+    parameters: {setup_by_s: "≤ 3 for 15–60 s reels (derived)"}
+    avoid_when: "Pure list/tips content without a narrative arc."
+    genres: [genre.transformation, genre.brand_story, genre.vlog, genre.tutorial, genre.product]
+    goals: [goal.watch_through, goal.rewatch, goal.emotion]
+    uses_capabilities: [cap.cut.reorder, cap.text.title]
+    conflicts_with: [anti.story.unclosed_loop, anti.story.unearned_payoff]
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "How to Put Setups and Payoffs in Your Scripts", author: "Final Draft", url: "https://www.finaldraft.com/blog/how-to-put-setups-and-payoffs-in-your-scripts", locator: "full article"}
+      - {title: "Setup and Payoff", author: "dsebastien concepts", url: "https://concepts.dsebastien.net/concept/setup-and-payoff/", locator: "spacing and pitfalls"}
+      - {title: "Chekhov's gun", author: "StudioBinder", url: "https://www.studiobinder.com/blog/chekhovs-gun/", locator: "definition"}
+
+  - id: principle.story.open_loop
+    type: principle
+    name: Open loops (curiosity gap)
+    summary: "Curiosity rises when people notice a gap between what they know and want to know, provided the gap seems closable (Loewenstein's information-gap theory). Reels apply it by posing a question early and withholding the answer. The link to the Zeigarnik effect is an applied-design claim, not directly tested."
+    when_to_use: "Hooks, mid-reel re-hooks, tutorials and stories where the answer can be delayed."
+    how: ["Pose a specific question or show an unexplained result in the hook", "Delay the answer, but show progress toward it", "Close the loop before the end; optionally open a smaller one at the close"]
+    parameters: {loop_open_by_s: "≤ 2 (derived)", loop_close_before_end_s: "≥ 1 before CTA (derived, low confidence)"}
+    avoid_when: "The answer is trivial or never delivered (clickbait damages trust)."
+    genres: [genre.tutorial, genre.transformation, genre.vlog, genre.talking_head, genre.product, genre.brand_story]
+    goals: [goal.retention_first_3s, goal.watch_through]
+    uses_capabilities: [cap.cut.reorder, cap.text.title]
+    conflicts_with: [anti.story.unclosed_loop]
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Information Gap Theory (summary of Loewenstein 1994, Psychological Bulletin)", author: "dsebastien concepts", url: "https://concepts.dsebastien.net/concept/information-gap-theory/", locator: "definition and criticisms"}
+
+  - id: principle.story.suspense_vs_surprise
+    type: principle
+    name: Suspense vs surprise
+    summary: "Hitchcock contrasted a bomb exploding unannounced (a brief surprise) with an audience who knows about the bomb (sustained suspense). Telling viewers more than the subject knows converts seconds of shock into a stretch of tension. Bordwell notes the formulation is ambiguous and not wholly original."
+    when_to_use: "Pranks, reveals, challenges, before/after reels: show the viewer what is coming, then make them wait."
+    how: ["Reveal the 'bomb' (the stakes or the coming event) early", "Cut back to it periodically during the wait", "Deliver the payoff with the subject's reaction"]
+    parameters: {}
+    avoid_when: "The content's only value is the surprise itself (save it for the end, but plant a hint)."
+    genres: [genre.vlog, genre.transformation, genre.brand_story, genre.event_recap]
+    goals: [goal.watch_through, goal.emotion]
+    uses_capabilities: [cap.cut.reorder, cap.cut.hard_cut]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Alfred Hitchcock and Francois Truffaut explain surprise vs suspense", author: "No Film School", url: "https://nofilmschool.com/alfred-hitchcock-and-francois-truffaut-explain-surprise-vs-suspense", locator: "bomb example"}
+
+  - id: tech.story.emotional_beat_hold
+    type: technique
+    name: Hold the emotional beat
+    summary: "When a feeling peaks (a confession, a reveal, a laugh), let the shot breathe briefly instead of cutting on schedule; then cut on the shift to the next feeling. It's the one place in short-form where a deliberately longer shot wins."
+    when_to_use: "Testimonials, brand stories, transformation reveals, emotional vlogs."
+    how: ["Detect emotional peaks (voice, face, words)", "Keep 0.5–1.5 s after the line before cutting (derived)", "Duck music or remove it momentarily to emphasise"]
+    parameters: {post_line_hold_s: "0.5–1.5 (derived, low confidence)"}
+    avoid_when: "High-energy hype edits where momentum matters more than feeling."
+    genres: [genre.testimonial, genre.brand_story, genre.transformation, genre.interview]
+    goals: [goal.emotion, goal.trust]
+    uses_capabilities: [cap.cut.trim, cap.audio.music_ducking, cap.analysis.face_expression]
+    conflicts_with: [anti.rhythm.metronomic_cutting]
+    requires: [principle.rhythm.emotional_rhythm]
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "6 'Rules' for Good Cutting According to Oscar-Winning Editor Walter Murch", author: "No Film School", url: "https://nofilmschool.com/2016/11/6-rules-good-cutting-according-oscar-winning-editor-walter-murch", locator: "emotion"}
+      - {title: "Feeling the Screen Story's Pulse (review of Cutting Rhythms, 3rd ed.)", author: "Mark Seton, Senses of Cinema", url: "https://www.sensesofcinema.com/2026/book-reviews/feeling-the-screen-storys-pulse-karen-peralmans-cutting-rhythms-creative-film-editing/", locator: "Ch. 8"}
+
+  - id: tech.story.loop_ending_to_open
+    type: technique
+    name: End that pays off the opening (loop)
+    summary: "Make the final shot resolve or echo the first one so the reel closes its own setup and, where possible, flows seamlessly back into the start on autoplay. A reel-specific application of setup/payoff."
+    when_to_use: "Short reels (≤ 20 s) on autoplaying platforms; transformations; satisfying-process content."
+    how: ["Plan first and last shots together", "Match composition and audio across the loop seam", "Avoid end cards that break the loop"]
+    parameters: {}
+    avoid_when: "A CTA end card is required; story needs a clear ending."
+    genres: [genre.transformation, genre.montage, genre.product, genre.vlog]
+    goals: [goal.rewatch, goal.watch_through]
+    uses_capabilities: [cap.cut.reorder, cap.transition.match_cut, cap.audio.crossfade]
+    conflicts_with: []
+    requires: [principle.story.setup_payoff]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Setup and Payoff", author: "dsebastien concepts", url: "https://concepts.dsebastien.net/concept/setup-and-payoff/", locator: "payoffs that recontextualise the setup"}
+
+  # ───────────────────────── Anti-patterns ─────────────────────────
+  - id: anti.cut.unmotivated_cut
+    type: anti_pattern
+    name: Unmotivated cut
+    summary: "Cutting because a timer says so, or to look busy, with no new information, reaction or rhythm reason. Fragments attention and weakens trust in the edit."
+    when_to_use: "Detect in review: any cut without a reason code."
+    how: ["Remove or merge the cut", "Or give it a motivation (gesture, word, beat)"]
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.talking_head, genre.testimonial, genre.interview, genre.tutorial, genre.brand_story]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.cut.hard_cut]
+    conflicts_with: [principle.cut.positive_reason, principle.cut.information_and_motivation]
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "What You Can Learn from Edward Dmytryk's 7 Rules of Cutting", author: "New York Film Academy", url: "https://www.nyfa.edu/student-resources/what-you-can-learn-from-edward-dmytryks-7-rules-of-cutting/", locator: "rule 1"}
+
+  - id: anti.rhythm.metronomic_cutting
+    type: anti_pattern
+    name: Metronomic cutting
+    summary: "Every shot the same length (e.g., a cut every beat for 30 s). It removes tension/release, ignores content and motion, and contradicts the varied shot-length patterns found in engaging films."
+    when_to_use: "Detect: low variance in shot durations across a sequence longer than ~6 s."
+    how: ["Vary durations; switch metric bursts to rhythmic cutting", "Insert longer holds at payoffs"]
+    parameters: {flag_if_duration_cv_below: "0.15 over ≥ 8 shots (derived, low confidence)"}
+    avoid_when: "Deliberate trend formats explicitly built on a fixed beat grid, kept short."
+    genres: [genre.montage, genre.event_recap, genre.product]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.analysis.shot_detection]
+    conflicts_with: [principle.rhythm.shot_length_variation, principle.rhythm.tension_release]
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Quicker, faster, darker: Changes in Hollywood film over 75 years", author: "Cutting et al. (2011), i-Perception", url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC3485803", locator: "shot-length fluctuation"}
+      - {title: "Cutting Rhythms, Ch. 3: Timing, Pacing, and Trajectory Phrasing", author: "Karen Pearlman", url: "https://www.oreilly.com/library/view/cutting-rhythms/9780240810140/10_ch03.xhtml", locator: "Chapter 3"}
+
+  - id: anti.continuity.axis_flip
+    type: anti_pattern
+    name: Accidental axis flip
+    summary: "Cutting between camera angles (or mirrored/reframed crops) that put a speaker facing the opposite direction, making people seem to swap places. Common when auto-reframing multi-cam podcasts to 9:16 or mirroring selfie footage."
+    when_to_use: "Detect: a speaker's facing direction changes across a cut with no bridge shot."
+    how: ["Pick the angle that keeps facing consistent", "Insert a neutral/frontal shot as a bridge", "Undo unintended horizontal flips"]
+    parameters: {}
+    avoid_when: "Deliberate disorientation."
+    genres: [genre.interview, genre.podcast_clip, genre.vlog]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.analysis.gaze_detection, cap.transform.flip_horizontal]
+    conflicts_with: [principle.continuity.axis_180]
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "Axis of Action (180-Degree Rule)", author: "How To Film School", url: "https://howtofilmschool.com/dictionary/axis-of-action-180-degree-rule/", locator: "crossing the line"}
+
+  - id: anti.cut.jump_cut_fatigue
+    type: anti_pattern
+    name: Jump-cut fatigue
+    summary: "Jump cuts after every phrase with identical framing and no other variation. Each jolt is small, but the constant jarring makes the piece feel choppy and pulls attention off the message."
+    when_to_use: "Detect: more than ~3 consecutive same-framing jump cuts in under ~6 s (derived)."
+    how: ["Alternate punch-in levels", "Cover some edits with B-roll or inserts", "Keep a few natural pauses for breathing room"]
+    parameters: {flag_if_same_frame_jumps: "> 3 within 6 s (derived, low confidence)"}
+    avoid_when: ""
+    genres: [genre.talking_head, genre.tutorial, genre.podcast_clip, genre.vlog]
+    goals: [goal.watch_through, goal.trust]
+    uses_capabilities: [cap.transform.punch_in, cap.compositing.overlay_broll]
+    conflicts_with: [principle.cut.fresh_over_stale]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Everything you need to know about the jump cut", author: "Videomaker", url: "https://www.videomaker.com/how-to/shooting/visual-storytelling/everything-you-need-to-know-about-the-jump-cut/", locator: "overuse warning"}
+
+  - id: anti.cut.eye_trace_whiplash
+    type: anti_pattern
+    name: Eye-trace whiplash
+    summary: "Consecutive short shots whose subjects sit in opposite parts of the frame, forcing the eye to search on every cut. Viewers lose the subject and the montage feels noisy, especially on a small vertical screen."
+    when_to_use: "Detect: salient point jumps by more than ~half the frame across sub-1.5 s shots (derived)."
+    how: ["Reframe to align subjects", "Reorder shots so subject positions progress gradually", "Lengthen shots that require a big eye move"]
+    parameters: {}
+    avoid_when: "Intentional chaos (fight, glitch aesthetic)."
+    genres: [genre.montage, genre.event_recap, genre.product]
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.analysis.saliency, cap.transform.reframe]
+    conflicts_with: [principle.cut.eye_trace]
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Editing with an Eye-trace in Mind: Is the Rule of Six Incorrect?", author: "Piotr Toczyński, No Film School", url: "https://nofilmschool.com/2018/08/editing-eye-trace-mind-rule-six-incorrect", locator: "fast-paced video"}
+
+  - id: anti.story.unclosed_loop
+    type: anti_pattern
+    name: Unclosed loop (unfired gun)
+    summary: "Opening a question or planting a setup and never paying it off. The viewer feels cheated; repeated, it reads as clickbait and erodes trust and follow-through."
+    when_to_use: "Detect: any hook promise or planted element with no resolution before the end."
+    how: ["Add the payoff or cut the setup", "Make the hook promise exactly what the reel delivers"]
+    parameters: {}
+    avoid_when: "Intentional part-1 cliffhangers in a series (still pay off something)."
+    genres: [genre.tutorial, genre.vlog, genre.transformation, genre.talking_head, genre.brand_story]
+    goals: [goal.trust, goal.watch_through]
+    uses_capabilities: [cap.cut.reorder]
+    conflicts_with: [principle.story.setup_payoff, principle.story.open_loop]
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "What is Chekhov's gun", author: "Scribophile", url: "https://www.scribophile.com/academy/what-is-chekhovs-gun", locator: "unfired gun"}
+
+  - id: anti.story.unearned_payoff
+    type: anti_pattern
+    name: Unearned payoff
+    summary: "A reveal or punchline with no prior setup, so it lands as random. In reels this is a surprise ending the viewer had no reason to care about."
+    when_to_use: "Detect: payoff elements with no earlier reference."
+    how: ["Plant a hint earlier (visual, line, caption)", "Or move the payoff to the hook"]
+    parameters: {}
+    avoid_when: "Pure absurdist humour that relies on non-sequitur."
+    genres: [genre.brand_story, genre.transformation, genre.vlog]
+    goals: [goal.emotion, goal.watch_through]
+    uses_capabilities: [cap.cut.reorder]
+    conflicts_with: [principle.story.setup_payoff]
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "What is Chekhov's gun", author: "Scribophile", url: "https://www.scribophile.com/academy/what-is-chekhovs-gun", locator: "deus ex machina"}
+
+  - id: anti.audio.hard_audio_seams
+    type: anti_pattern
+    name: Hard audio seams
+    summary: "Audio that clicks, drops room tone, or changes level at every picture cut. Because continuous sound is a main reason cuts go unnoticed, audio seams expose every edit and make jump cuts feel harsher."
+    when_to_use: "Detect: silence gaps, level jumps or clicks at edit points."
+    how: ["Add short crossfades", "Fill gaps with room tone", "Run music/ambience continuously under cuts"]
+    parameters: {}
+    avoid_when: "A deliberate hard stop for comedic or dramatic emphasis."
+    genres: [genre.talking_head, genre.interview, genre.podcast_clip, genre.testimonial, genre.tutorial]
+    goals: [goal.watch_through, goal.trust]
+    uses_capabilities: [cap.audio.crossfade, cap.audio.room_tone_fill]
+    conflicts_with: [principle.perception.audio_hides_cuts]
+    requires: []
+    evidence_level: study
+    confidence: medium
+    sources:
+      - {title: "Match-action: the role of motion and audio in creating global change blindness in film", author: "Smith & Martin-Portugues Santacreu (2017)", url: "https://core.ac.uk/display/42135575", locator: "abstract (audio finding)"}
+
+  - id: anti.cut.continuity_over_emotion
+    type: anti_pattern
+    name: Choosing continuity over emotion
+    summary: "Picking the cleaner, better-matched take or cut point over the one with truer emotion. Murch and Dmytryk both rank drama above matching, and viewers absorbed in content rarely notice small mismatches."
+    when_to_use: "Detect in take selection: a weaker performance chosen only for match quality."
+    how: ["Pick the stronger take", "Disguise mismatches with motion, a punch-in or a cutaway"]
+    parameters: {}
+    avoid_when: "The mismatch misinforms (product, tutorial step)."
+    genres: [genre.testimonial, genre.interview, genre.brand_story]
+    goals: [goal.emotion, goal.trust]
+    uses_capabilities: [cap.cut.trim]
+    conflicts_with: [principle.cut.emotion_first, principle.cut.values_over_matches]
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "6 'Rules' for Good Cutting According to Oscar-Winning Editor Walter Murch", author: "No Film School", url: "https://nofilmschool.com/2016/11/6-rules-good-cutting-according-oscar-winning-editor-walter-murch", locator: "emotion over continuity"}
+      - {title: "What You Can Learn from Edward Dmytryk's 7 Rules of Cutting", author: "New York Film Academy", url: "https://www.nyfa.edu/student-resources/what-you-can-learn-from-edward-dmytryks-7-rules-of-cutting/", locator: "rule 6"}
+
+  - id: anti.cut.broll_wallpaper
+    type: anti_pattern
+    name: B-roll wallpaper
+    summary: "Generic or loosely related B-roll laid over speech just to hide cuts or fill time. It adds no information, can contradict the words, and through the Kuleshov effect may assign unintended meaning to the speaker."
+    when_to_use: "Detect: B-roll with low semantic relevance to the concurrent transcript."
+    how: ["Match B-roll to specific nouns/actions in the line", "Prefer inserts of the real subject over stock", "Use a punch-in instead if no relevant B-roll exists"]
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.talking_head, genre.interview, genre.testimonial, genre.brand_story]
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.compositing.overlay_broll, cap.analysis.speech_transcript]
+    conflicts_with: [tech.cut.cutaway_cover]
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Grammar of the Edit, 4th Edition", author: "Christopher J. Bowen", url: "https://www.oreilly.com/library/view/grammar-of-the/9781351803540/", locator: "book (information factor per CineMontage review; TOC not consulted)"}
+      - {title: "What is a cutaway shot", author: "StudioBinder", url: "https://www.studiobinder.com/blog/cutaway-shot/", locator: "uses"}
+
+  # ───────────────────────── Canonical examples ─────────────────────────
+  - id: example.match_cut.2001_bone_to_satellite
+    type: example
+    name: 2001 bone-to-spacecraft match cut
+    summary: "In 2001: A Space Odyssey a bone thrown into the air cuts to an orbiting spacecraft of similar shape, jumping millennia in one graphic match. The canonical film-school example of a match cut that carries an idea."
+    when_to_use: "Reference for graphic match and intellectual montage."
+    how: []
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.transformation, genre.brand_story]
+    goals: [goal.rewatch]
+    uses_capabilities: [cap.transition.match_cut]
+    conflicts_with: []
+    requires: [tech.transition.graphic_match]
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "Match cut", author: "Wikipedia", url: "https://en.wikipedia.org/wiki/Match_cut", locator: "2001 example"}
+
+  - id: example.jump_cut.breathless
+    type: example
+    name: Breathless (1960) jump cuts
+    summary: "Godard's Breathless cut within continuous shots (notably a car ride with Jean Seberg) so the discontinuity is obvious and deliberate. Accounts of his motive differ (runtime reduction, experimentation). It established the jump cut as style rather than error."
+    when_to_use: "Reference for expressive jump cuts."
+    how: []
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.vlog, genre.talking_head]
+    goals: [goal.energy]
+    uses_capabilities: [cap.cut.hard_cut]
+    conflicts_with: []
+    requires: [tech.cut.jump_cut_ellipsis]
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "Jump cut", author: "Wikipedia", url: "https://en.wikipedia.org/wiki/Jump_cut", locator: "Breathless"}
+      - {title: "60 Years of Jean-Luc Godard's Breathless", author: "Film Companion", url: "https://www.filmcompanion.in/60-years-of-jean-luc-godards-breathless-why-the-film-was-ahead-of-its-time", locator: "editing"}
+
+  - id: example.cross_cutting.griffith_lonely_villa
+    type: example
+    name: Griffith's The Lonely Villa (1909)
+    summary: "Griffith alternates between a threatened family and their rescuer, shortening each shot as the threads converge, a template for cross-cut tension and accelerating cut rate."
+    when_to_use: "Reference for cross-cutting and accelerating pace."
+    how: []
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.brand_story]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.cut.reorder]
+    conflicts_with: []
+    requires: [tech.cut.cross_cutting, tech.rhythm.accelerating_cut_rate]
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Parallel editing and Griffith (CineD article)", author: "CineD", url: "https://www.cined.com/?p=443157", locator: "The Lonely Villa"}
+
+  - id: example.suspense.hitchcock_bomb
+    type: example
+    name: Hitchcock's bomb under the table
+    summary: "Hitchcock's illustration: an unannounced bomb gives seconds of surprise; showing the audience the bomb first gives minutes of suspense, intercut with the oblivious characters. Versions of the quote vary in exact durations."
+    when_to_use: "Reference for suspense vs surprise structuring."
+    how: []
+    parameters: {}
+    avoid_when: ""
+    genres: [genre.vlog, genre.brand_story]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.cut.reorder]
+    conflicts_with: []
+    requires: [principle.story.suspense_vs_surprise]
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "Alfred Hitchcock and Francois Truffaut explain surprise vs suspense", author: "No Film School", url: "https://nofilmschool.com/alfred-hitchcock-and-francois-truffaut-explain-surprise-vs-suspense", locator: "bomb example"}

@@ -1,0 +1,1532 @@
+# Knowledge graph draft: colour grading, typography/captions, motion graphics.
+# Schema: knowledge/SCHEMA.md section 2. All text paraphrased; sources cited.
+# Locator notes: "via search summary" means the primary page could not be fetched
+# (403/404/503) and the figure was taken from search-engine summaries of it;
+# confidence for those is capped at medium.
+
+nodes:
+
+  # ===================================================================
+  # COLOUR — workflow principles
+  # ===================================================================
+
+  - id: principle.color.correct_before_grade
+    type: principle
+    name: Correct first, then grade
+    summary: "Normalise every clip to a neutral, technically correct baseline (input transform, exposure, white balance, contrast) before adding any creative look. A look built on unbalanced footage amplifies the errors and makes shots impossible to match."
+    when_to_use: "Every reel with more than one clip or source; always before applying a LUT or stylised look."
+    how: ["Apply input/colour-space transform for the source", "Set exposure on the waveform", "Neutralise white balance on the parade", "Only then add the look on a later node/layer"]
+    parameters: {node_order: "input transform -> exposure/balance -> contrast -> secondaries -> look -> output transform"}
+    avoid_when: "Never skipped; a single already-graded clip may only need a light trim."
+    genres: [genre.talking_head, genre.testimonial, genre.product, genre.tutorial, genre.vlog, genre.montage, genre.interview, genre.brand_story]
+    goals: [goal.trust, goal.brand_recall]
+    uses_capabilities: [cap.color.color_space_transform, cap.color.primary_balance, cap.color.lut_apply]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "5 Tips for Getting Perfect Skin Tones in DaVinci Resolve", author: "Frame.io Insider", url: "https://blog.frame.io/2020/10/05/skin-tones-in-davinci-resolve/", locator: "Tip 3: broadest tools first; colour-managed workflow"}
+      - {title: "4 Things To Know About Working With LUTs", author: "Mixing Light", url: "https://mixinglight.com/color-tutorial/4-things-to-know-about-working-with-luts", locator: "technical vs creative LUT order (via search summary)"}
+
+  - id: tech.color.scope_roles
+    type: technique
+    name: Use the right scope for each decision
+    summary: "Read exposure on the waveform, channel balance on the RGB parade, hue and saturation on the vectorscope, and gamut excursions on a CIE plot. Scopes are a reality check; most attention should stay on the image itself."
+    when_to_use: "Any automated or manual correction pass; essential for an agent that cannot 'eyeball' a calibrated display."
+    how: ["Waveform: place blacks, mids, highlights", "Parade: align R/G/B in neutral areas", "Vectorscope: check skin line and saturation extent", "Re-check the picture, not only the trace"]
+    parameters: {resolve_10bit_legal_range: "64-940 (0-1023 scale)", scope_time_share: "~5-10% of grading attention (practitioner rule of thumb)"}
+    avoid_when: "Judging moire or stylised looks, which scopes do not reflect."
+    genres: [genre.talking_head, genre.product, genre.interview, genre.tutorial]
+    goals: [goal.trust]
+    uses_capabilities: [cap.analysis.scopes]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Grading by Numbers: When to Use Color Scopes (and When Not To)", author: "Frame.io Insider", url: "https://blog.frame.io/2023/09/18/when-to-use-color-scopes-and-when-not-to/", locator: "Waveform, Parade, Vectorscope, CIE sections"}
+
+  - id: tech.color.exposure_on_waveform
+    type: technique
+    name: Set exposure and contrast on the waveform
+    summary: "Place black point just above legal minimum, keep specular highlights below legal maximum, and let faces sit in the upper-middle of the range. Set contrast before saturation, because saturation perception rises with contrast."
+    when_to_use: "First primary adjustment on every clip."
+    how: ["Lift/lower shadows until darkest detail sits just above floor", "Set gain so highlights stop short of clipping", "Adjust gamma/mids for face brightness", "Then add contrast via curve"]
+    parameters: {legal_range_10bit: "64-940", legal_range_8bit: "16-235", face_luma_ire: "~50-70 IRE typical (practitioner convention, not from the cited page)"}
+    avoid_when: "Deliberately crushed or high-key stylised looks (still keep legal range on export)."
+    genres: [genre.talking_head, genre.interview, genre.testimonial, genre.product]
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.color.exposure, cap.color.curves, cap.analysis.scopes]
+    conflicts_with: []
+    requires: [tech.color.scope_roles]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Grading by Numbers: When to Use Color Scopes (and When Not To)", author: "Frame.io Insider", url: "https://blog.frame.io/2023/09/18/when-to-use-color-scopes-and-when-not-to/", locator: "Waveform; broadcast-safe range 64-940"}
+
+  - id: tech.color.white_balance_parade
+    type: technique
+    name: Neutralise white balance on the RGB parade
+    summary: "Find something that should be neutral (white wall, grey shirt, paper) and adjust offset/gain until the red, green and blue traces line up there. Balance shadows and highlights separately when lighting is mixed."
+    when_to_use: "Phone footage under mixed indoor light, clips from different devices, any visible colour cast."
+    how: ["Sample a neutral area", "Align R/G/B traces in that zone", "Fix shadow cast with lift, highlight cast with gain", "Confirm the neutral sits at the vectorscope centre"]
+    parameters: {target: "neutral patch at vectorscope centre; parade traces aligned"}
+    avoid_when: "Warm/cool cast is an intentional mood (e.g. golden-hour b-roll) — keep it, but keep skin plausible."
+    genres: [genre.talking_head, genre.vlog, genre.interview, genre.product]
+    goals: [goal.trust]
+    uses_capabilities: [cap.color.white_balance, cap.color.primary_balance, cap.analysis.scopes]
+    conflicts_with: []
+    requires: [tech.color.scope_roles]
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Grading by Numbers: When to Use Color Scopes (and When Not To)", author: "Frame.io Insider", url: "https://blog.frame.io/2023/09/18/when-to-use-color-scopes-and-when-not-to/", locator: "Parade view"}
+      - {title: "5 Tips for Getting Perfect Skin Tones in DaVinci Resolve", author: "Frame.io Insider", url: "https://blog.frame.io/2020/10/05/skin-tones-in-davinci-resolve/", locator: "Tip 2: neutral patch / skin line"}
+
+  - id: tech.color.skin_tone_line
+    type: technique
+    name: Check skin hue against the vectorscope skin-tone line
+    summary: "Isolate a clean, well-lit skin patch (forehead or cheek) and check that its vectorscope trace lies on or near the skin-tone indicator. The line is a hue guide for all complexions, not a saturation or brightness target."
+    when_to_use: "Any shot with a face, after global balance."
+    how: ["Draw a small window on lit skin and use highlight/solo view", "Read the trace angle vs the skin line", "Nudge hue globally or on a skin-only node until near the line", "Leave saturation to taste"]
+    parameters: {tolerance: "small deviation is fine; large left/right swings read as sick (green/yellow) or flushed (magenta/red)"}
+    avoid_when: "Stylised looks where skin is intentionally shifted; do not force every face exactly onto the line."
+    genres: [genre.talking_head, genre.testimonial, genre.interview, genre.podcast_clip, genre.vlog]
+    goals: [goal.trust, goal.emotion]
+    uses_capabilities: [cap.analysis.scopes, cap.color.power_window, cap.color.secondary_qualifier]
+    conflicts_with: []
+    requires: [tech.color.white_balance_parade]
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "5 Tips for Getting Perfect Skin Tones in DaVinci Resolve", author: "Frame.io Insider", url: "https://blog.frame.io/2020/10/05/skin-tones-in-davinci-resolve/", locator: "Tip 2: scopes / skin tone indicator"}
+      - {title: "Grading by Numbers: When to Use Color Scopes (and When Not To)", author: "Frame.io Insider", url: "https://blog.frame.io/2023/09/18/when-to-use-color-scopes-and-when-not-to/", locator: "Vectorscope; don't force every skin tone onto the line"}
+
+  - id: tech.color.broadest_tool_first
+    type: technique
+    name: Broadest tool first, narrowest last
+    summary: "Fix problems with the widest-acting control that works — primaries, then curves, then hue-vs-hue curves, then an HSL qualifier or window. Narrow secondaries are fragile, flicker on moving footage and are easy to overdo."
+    when_to_use: "Whenever a correction is needed on skin, sky or a product colour."
+    how: ["Try primaries", "Then custom curves", "Then hue-vs-hue/sat curves", "Qualifier last: start from luminance, set ranges manually, use as few keys as possible"]
+    parameters: {order: "primaries -> curves -> hue curves -> qualifier/window"}
+    avoid_when: "A specific object (logo/product) must hit an exact brand colour — a targeted secondary is justified."
+    genres: [genre.talking_head, genre.product, genre.brand_story]
+    goals: [goal.trust]
+    uses_capabilities: [cap.color.primary_balance, cap.color.curves, cap.color.hue_vs_hue, cap.color.secondary_qualifier]
+    conflicts_with: []
+    requires: [principle.color.correct_before_grade]
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "5 Tips for Getting Perfect Skin Tones in DaVinci Resolve", author: "Frame.io Insider", url: "https://blog.frame.io/2020/10/05/skin-tones-in-davinci-resolve/", locator: "Tip 3: use the broadest tools first"}
+
+  - id: tech.color.skin_hue_compression
+    type: technique
+    name: Compress hues around skin
+    summary: "Use a hue-vs-hue curve to pull neighbouring orange-yellow and orange hues slightly toward the skin hue, creating a 'bumper' that makes complexions more uniform across shots without a qualifier."
+    when_to_use: "Mixed lighting producing blotchy or inconsistent skin; multi-camera interviews."
+    how: ["Add points around skin hue on hue-vs-hue", "Move orange-yellow down a few degrees and orange up a few", "Check on a colour chart or skin patch"]
+    parameters: {shift_deg: "~5-8 degrees each side (example values from source)"}
+    avoid_when: "Scenes where orange props/products must keep exact colour."
+    genres: [genre.talking_head, genre.interview, genre.testimonial]
+    goals: [goal.trust]
+    uses_capabilities: [cap.color.hue_vs_hue]
+    conflicts_with: []
+    requires: [tech.color.skin_tone_line]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "5 Tips for Getting Perfect Skin Tones in DaVinci Resolve", author: "Frame.io Insider", url: "https://blog.frame.io/2020/10/05/skin-tones-in-davinci-resolve/", locator: "Tip 5: compress nearby hues"}
+
+  - id: tech.color.split_tone_warm_cool
+    type: technique
+    name: Split-tone warm highlights, cool shadows
+    summary: "Push highlights slightly warm along the skin-tone axis and shadows slightly cool (blue-green). This flatters skin, which lives in the mids and upper range, and adds colour separation without heavy saturation."
+    when_to_use: "Talking heads, testimonials and lifestyle reels that need a polished but natural look."
+    how: ["Warm push in highlights/gain", "Cool push in shadows/lift", "Keep mids near neutral", "Verify on a greyscale ramp that the transition is smooth"]
+    parameters: {strength: "subtle; neutrals should still read near-neutral on the vectorscope"}
+    avoid_when: "Product shots requiring true colour; very dark-skinned subjects where cool shadows can grey the skin."
+    genres: [genre.talking_head, genre.testimonial, genre.vlog, genre.brand_story]
+    goals: [goal.emotion, goal.brand_recall]
+    uses_capabilities: [cap.color.split_tone, cap.color.primary_balance]
+    conflicts_with: []
+    requires: [principle.color.correct_before_grade]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "5 Tips for Getting Perfect Skin Tones in DaVinci Resolve", author: "Frame.io Insider", url: "https://blog.frame.io/2020/10/05/skin-tones-in-davinci-resolve/", locator: "Tip 4: split-toning"}
+
+  - id: tech.color.input_transform_first
+    type: technique
+    name: Identify the source transfer and apply the matching input transform
+    summary: "Determine whether each clip is Rec.709 SDR, HLG HDR, Dolby Vision, Apple Log or another log profile, and apply the specific technical transform for it first. The container or codec does not reveal this; read metadata."
+    when_to_use: "Every ingest, especially iPhone footage (default HDR HLG/Dolby Vision on recent models) mixed with SDR clips."
+    how: ["Probe colour primaries/transfer metadata (e.g. ffprobe color_transfer arib-std-b67 = HLG)", "Map each source to the working space with its own transform", "Never reuse an HLG transform on Apple Log"]
+    parameters: {hlg_flag: "color_transfer=arib-std-b67", pq_flag: "color_transfer=smpte2084", sdr_flag: "bt709"}
+    avoid_when: "Never skipped for mixed-source projects."
+    genres: [genre.vlog, genre.talking_head, genre.montage, genre.event_recap]
+    goals: [goal.trust]
+    uses_capabilities: [cap.color.color_space_transform, cap.analysis.probe_metadata]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "iPhone HDR to SDR in DaVinci Resolve", author: "DaVinci Resolve Club", url: "https://davinciresolveclub.com/iphone-hdr-to-sdr-davinci-resolve/", locator: "Identify the source first (via search summary)"}
+
+  - id: tech.color.hdr_to_sdr_tonemap
+    type: technique
+    name: Tone-map HDR phone footage to Rec.709 SDR for social
+    summary: "Convert HLG/PQ phone clips to Rec.709 with a colour-space transform that includes tone mapping and gamut mapping, then grade in SDR. Untreated HDR clips look washed out or clipped next to SDR clips and render inconsistently across apps."
+    when_to_use: "Any reel mixing iPhone HDR clips with SDR sources, or delivering SDR to Reels/Shorts/TikTok."
+    how: ["CST Rec.2100 HLG (or PQ) -> Rec.709 gamma 2.4 with tone mapping enabled", "Enable saturation/gamut mapping", "Re-balance exposure after conversion", "Export tagged bt709 8-bit"]
+    parameters: {output: "Rec.709 / BT.1886, 8-bit, tagged bt709", tone_mapping: "on (e.g. DaVinci tone mapping)"}
+    avoid_when: "Deliberately delivering HDR to a platform/player that supports it end-to-end and all sources are HDR."
+    genres: [genre.vlog, genre.montage, genre.event_recap, genre.talking_head]
+    goals: [goal.trust]
+    uses_capabilities: [cap.color.tone_map_hdr_sdr, cap.color.color_space_transform, cap.export.color_tag]
+    conflicts_with: []
+    requires: [tech.color.input_transform_first]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "iPhone HDR to SDR in DaVinci Resolve", author: "DaVinci Resolve Club", url: "https://davinciresolveclub.com/iphone-hdr-to-sdr-davinci-resolve/", locator: "Color Management route; CST route (via search summary)"}
+      - {title: "HDR iPhone 14 footage washed out (forum thread)", author: "Adobe Community", url: "https://community.adobe.com/t5/premiere-pro-discussions/hdr-iphone-14-footage-washed-out-exhausted-all-solutions/m-p/13982055", locator: "user reports (anecdotal)"}
+
+  - id: tech.color.web_gamma_target
+    type: technique
+    name: Account for gamma 2.2 phone/web viewing
+    summary: "Rec.709 masters are usually graded at gamma 2.4 for dark rooms, but phones and web viewing in bright rooms behave closer to 2.2, which lifts shadows and softens contrast. Grade or trim with that in mind and verify on a phone."
+    when_to_use: "Final delivery to social platforms viewed on phones."
+    how: ["Grade at 2.4 then preview at 2.2, or grade at 2.2 directly", "If export looks washed out on phone, deepen shadows slightly / add contrast in a trim pass", "Check on at least one real phone at mid brightness"]
+    parameters: {grading_gamma_dark_room: "2.4", web_mobile_gamma: "~2.2"}
+    avoid_when: "Broadcast/TV deliverables."
+    genres: [genre.talking_head, genre.product, genre.vlog, genre.brand_story]
+    goals: [goal.trust]
+    uses_capabilities: [cap.color.curves, cap.export.color_tag]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "How to choose between Gamma 2.2 and Gamma 2.4 when color correcting?", author: "Mixing Light", url: "https://mixinglight.com/color-tutorial/gamma-2-2-vs-gamma-2-4-davinci-resolve", locator: "web deliverables (via search summary)"}
+      - {title: "FAQ: How to choose 'viewing gamma' in Premiere's preferences", author: "Adobe Community", url: "https://community.adobe.com/t5/premiere-pro-discussions/faq-how-to-choose-quot-viewing-gamma-quot-in-premiere-s-preferences/td-p/14575159", locator: "2.4 dark room vs 2.2 web (via search summary)"}
+      - {title: "Grading for Mixed Delivery: Cinema, Home, and Every Screen in Between", author: "Frame.io Insider", url: "https://blog.frame.io/2019/10/14/grading-mixed-delivery/", locator: "multi-screen delivery (via search summary)"}
+
+  - id: tech.color.mobile_contrast_saturation
+    type: technique
+    name: Slightly richer contrast and controlled saturation for phone screens
+    summary: "Small, bright phone screens viewed in daylight reward a little extra midtone contrast and moderate saturation, but bright saturated reds/oranges are the first things to clip or bleed after platform compression. Push contrast before saturation and watch the vectorscope extent."
+    when_to_use: "Final look pass for vertical social delivery."
+    how: ["Add gentle S-curve", "Raise saturation modestly; prefer vibrance-style boosts that spare skin", "Check red/orange extent on vectorscope and gamut on CIE", "Preview after a test platform upload"]
+    parameters: {saturation_boost: "~+5-15% over neutral correction (practitioner heuristic, unsourced)"}
+    avoid_when: "Documentary/serious tone where a muted look is intended."
+    genres: [genre.product, genre.vlog, genre.montage, genre.event_recap]
+    goals: [goal.energy, goal.retention_first_3s]
+    uses_capabilities: [cap.color.curves, cap.color.saturation, cap.analysis.scopes]
+    conflicts_with: [tech.color.look_desaturated_serious]
+    requires: [principle.color.correct_before_grade]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Grading by Numbers: When to Use Color Scopes (and When Not To)", author: "Frame.io Insider", url: "https://blog.frame.io/2023/09/18/when-to-use-color-scopes-and-when-not-to/", locator: "bright saturated reds/oranges as QC failures; CIE gamut"}
+      - {title: "How to choose between Gamma 2.2 and Gamma 2.4 when color correcting?", author: "Mixing Light", url: "https://mixinglight.com/color-tutorial/gamma-2-2-vs-gamma-2-4-davinci-resolve", locator: "brighter viewing reduces perceived contrast (via search summary)"}
+
+  - id: tech.color.creative_lut_reduced_intensity
+    type: technique
+    name: Apply creative LUTs after normalisation at reduced strength
+    summary: "A creative LUT expects normalised Rec.709 input, so place it after correction and blend it back — commonly around half strength — rather than at 100%. Adjust exposure/balance before the LUT, not after, because LUTs clip what they receive."
+    when_to_use: "Fast stylised looks across many clips."
+    how: ["Normalise (technical transform + balance) first", "Apply creative LUT on its own node/layer", "Lower node opacity / Lumetri intensity until skin looks natural", "Re-check skin line and highlights"]
+    parameters: {lut_intensity: "~40-70% typical starting range (rule of thumb; no authoritative figure)", placement: "after balance, before output transform"}
+    avoid_when: "Footage is still log or HDR untransformed."
+    genres: [genre.vlog, genre.montage, genre.brand_story, genre.event_recap]
+    goals: [goal.brand_recall, goal.emotion]
+    uses_capabilities: [cap.color.lut_apply]
+    conflicts_with: [anti.color.creative_lut_on_log]
+    requires: [principle.color.correct_before_grade, tech.color.input_transform_first]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "What is a LUT? What You Need to Know About Color Grading", author: "Adorama Learning Center", url: "https://www.adorama.com/alc/what-is-lut-color-grading", locator: "LUT intensity ~50% (via search summary)"}
+      - {title: "4 Things To Know About Working With LUTs", author: "Mixing Light", url: "https://mixinglight.com/color-tutorial/4-things-to-know-about-working-with-luts", locator: "technical vs creative LUTs (via search summary)"}
+
+  - id: tech.color.hero_shot_match
+    type: technique
+    name: Grade a hero shot, then match others to it
+    summary: "Pick the most representative clip (usually the main talking-head angle), finalise its correction and look, then match every other clip to it — brightness and contrast first, then colour balance, then saturation."
+    when_to_use: "Any reel combining multiple angles, phones or lighting setups."
+    how: ["Choose hero clip", "Display hero and target side by side or split-screen", "Match luma levels on waveform first", "Then match parade balance", "Then saturation/vectorscope extent", "Copy look node to all clips"]
+    parameters: {match_order: "brightness -> contrast -> balance -> saturation"}
+    avoid_when: "Deliberate look change between sections (e.g. interview vs b-roll two-tone)."
+    genres: [genre.interview, genre.podcast_clip, genre.talking_head, genre.event_recap, genre.testimonial]
+    goals: [goal.trust, goal.watch_through]
+    uses_capabilities: [cap.color.shot_match, cap.analysis.scopes, cap.color.group_grade]
+    conflicts_with: []
+    requires: [principle.color.correct_before_grade]
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "How To Make Resolve's 'Color Match' Easier with the 'Brightness First' Rule", author: "Mixing Light", url: "https://mixinglight.com/color-tutorial/make-resolves-color-match-easier-brightness-first-rule", locator: "brightness first (via search summary)"}
+      - {title: "What You Need to Know to Match Shots from Two or More Cameras for Color and Exposure", author: "Wolfcrow", url: "https://wolfcrow.com/how-to-match-shots-from-two-or-more-cameras-for-color-and-exposure/", locator: "multi-camera matching (via search summary)"}
+
+  - id: tech.color.chart_based_match
+    type: technique
+    name: Chart-based camera matching
+    summary: "When a colour chart was shot under the scene lighting on each device, use chart-based colour match to get cameras to a common baseline, then finish by eye. Without a chart, automatic 'match' is little better than auto-colour."
+    when_to_use: "Planned multi-camera/phone shoots where a chart can be filmed."
+    how: ["Shoot chart well-exposed in the scene light per camera", "Set correct source gamma/colour space", "Run chart match", "Refine manually on the hero shot"]
+    parameters: {chart_exposure: "well lit, filling a reasonable part of frame"}
+    avoid_when: "No chart available — use hero-shot matching instead."
+    genres: [genre.interview, genre.podcast_clip, genre.event_recap]
+    goals: [goal.trust]
+    uses_capabilities: [cap.color.chart_match]
+    conflicts_with: []
+    requires: [tech.color.input_transform_first]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Why is Camera Matching with Color Charts So Hard?", author: "Mixing Light", url: "https://mixinglight.com/color-tutorial/camera-matching-with-color-charts-part-1", locator: "Part 1 (via search summary)"}
+      - {title: "How to Use the DSC Labs OneShot, ColorChecker or SpyderCheckr with DaVinci Resolve", author: "Wolfcrow", url: "https://wolfcrow.com/how-to-use-the-dsc-labs-oneshot-x-rite-colorchecker-or-datacolor-spydercheckr-with-davinci-resolve-to-match-color/", locator: "chart exposure and gamma warnings (via search summary)"}
+
+  - id: tech.color.shared_look_layer
+    type: technique
+    name: One shared look for the whole reel
+    summary: "Separate per-clip corrections from a single look applied to all clips (grouped/shared node or adjustment layer). Changing the look once updates every clip and keeps the reel visually consistent."
+    when_to_use: "Any reel with more than a handful of clips."
+    how: ["Per-clip node: correction/match", "Group/timeline node or adjustment layer: look", "Tweak look globally, never per clip"]
+    parameters: {structure: "clip-level correction + group-level look"}
+    avoid_when: "Sections intentionally graded differently — use two groups (e.g. A-roll, B-roll)."
+    genres: [genre.montage, genre.brand_story, genre.event_recap, genre.vlog]
+    goals: [goal.brand_recall]
+    uses_capabilities: [cap.color.group_grade, cap.color.lut_apply]
+    conflicts_with: []
+    requires: [principle.color.correct_before_grade]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "What You Need to Know to Match Shots from Two or More Cameras for Color and Exposure", author: "Wolfcrow", url: "https://wolfcrow.com/how-to-match-shots-from-two-or-more-cameras-for-color-and-exposure/", locator: "groups / shared nodes (via search summary)"}
+
+  - id: tech.color.look_teal_orange
+    type: technique
+    name: Teal-and-orange complementary look
+    summary: "Shift shadows and environment toward teal while keeping skin and warm highlights orange, using complementary contrast to separate people from backgrounds. Effective and popular, but easy to overdo and can oversaturate deeper skin tones."
+    when_to_use: "Energetic lifestyle, travel, brand and promo reels needing a cinematic polish."
+    how: ["Cool shadows/mids slightly toward teal", "Protect skin with a qualifier or hue curve", "Keep skin on the skin line", "Reduce intensity for deeper complexions"]
+    parameters: {strength: "subtle-moderate; skin must remain on skin line"}
+    avoid_when: "Deep skin tones without skin protection; product shots needing accurate colour; overused aesthetic for the brand."
+    genres: [genre.vlog, genre.brand_story, genre.montage, genre.event_recap]
+    goals: [goal.emotion, goal.energy]
+    uses_capabilities: [cap.color.split_tone, cap.color.secondary_qualifier, cap.color.lut_apply]
+    conflicts_with: [tech.color.look_desaturated_serious]
+    requires: [tech.color.skin_tone_line]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "What is the 'Orange & Teal Look' and Why is it So Popular?", author: "PetaPixel", url: "https://petapixel.com/2017/02/23/orange-teal-look-popular-hollywood/", locator: "skin in orange range; complementary contrast"}
+      - {title: "Why use orange and teal grading", author: "Adobe", url: "https://www.adobe.com/creativecloud/video/hub/features/why-use-orange-teal-grading", locator: "mood/era (via search summary)"}
+      - {title: "Teal and orange color grading", author: "Pixflow", url: "https://pixflow.net/blog/teal-and-orange-color-grading/", locator: "deeper skin oversaturation caveat (via search summary)"}
+
+  - id: tech.color.look_warm_natural
+    type: technique
+    name: Warm-natural look for trust and intimacy
+    summary: "Slightly warm white balance, gentle contrast, natural saturation and soft highlights read as friendly and honest. Suits founders, testimonials and personal stories where credibility matters more than spectacle."
+    when_to_use: "Talking heads, testimonials, personal vlogs, wellness and family brands."
+    how: ["Neutral balance then small warm push in highlights", "Moderate contrast curve", "Keep saturation near natural", "Avoid heavy LUTs"]
+    parameters: {wb_shift: "small warm offset (~+200-500 K equivalent, heuristic)"}
+    avoid_when: "Tech/futuristic products or night/urban moods."
+    genres: [genre.testimonial, genre.talking_head, genre.vlog, genre.brand_story]
+    goals: [goal.trust, goal.emotion]
+    uses_capabilities: [cap.color.white_balance, cap.color.split_tone]
+    conflicts_with: [tech.color.look_cool_tech]
+    requires: [principle.color.correct_before_grade]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "What is the 'Orange & Teal Look' and Why is it So Popular?", author: "PetaPixel", url: "https://petapixel.com/2017/02/23/orange-teal-look-popular-hollywood/", locator: "warmth draws the eye to people"}
+      - {title: "Reference reel analysis (bathroom.mp4)", author: "project analysis", url: "analysis/bathroom/notes.md", locator: "Craft observations: warm orange interview grade"}
+
+  - id: tech.color.look_cool_tech
+    type: technique
+    name: Cool, clean look for tech and product
+    summary: "Neutral-to-cool balance, crisp contrast, clean whites and restrained saturation suggest precision and modernity. Keep skin on the skin line so presenters do not look ill."
+    when_to_use: "SaaS/tech product demos, gadget reviews, explainers."
+    how: ["Balance neutral, cool shadows slightly", "Clean white point", "Moderate contrast", "Protect skin hue"]
+    parameters: {saturation: "neutral to slightly reduced"}
+    avoid_when: "Warm, human-centred stories."
+    genres: [genre.product, genre.tutorial]
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.color.white_balance, cap.color.split_tone]
+    conflicts_with: [tech.color.look_warm_natural]
+    requires: [tech.color.skin_tone_line]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Why use orange and teal grading", author: "Adobe", url: "https://www.adobe.com/creativecloud/video/hub/features/why-use-orange-teal-grading", locator: "colour adds mood (via search summary)"}
+
+  - id: tech.color.look_desaturated_serious
+    type: technique
+    name: Muted/desaturated look for serious topics
+    summary: "Lower overall saturation and softer contrast signal seriousness, reflection or documentary realism. Keep a little warmth in skin so faces stay alive."
+    when_to_use: "Serious explainers, emotional stories, documentary-style clips."
+    how: ["Global saturation down", "Optionally protect skin saturation", "Soft contrast, slightly lifted blacks if stylistically appropriate"]
+    parameters: {saturation: "~70-85% of neutral (heuristic)"}
+    avoid_when: "High-energy promos and product launches."
+    genres: [genre.interview, genre.brand_story, genre.podcast_clip]
+    goals: [goal.emotion, goal.trust]
+    uses_capabilities: [cap.color.saturation, cap.color.curves]
+    conflicts_with: [tech.color.mobile_contrast_saturation, tech.color.look_teal_orange]
+    requires: [principle.color.correct_before_grade]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Grading by Numbers: When to Use Color Scopes (and When Not To)", author: "Frame.io Insider", url: "https://blog.frame.io/2023/09/18/when-to-use-color-scopes-and-when-not-to/", locator: "lifted-black example (~10 IRE)"}
+
+  - id: tech.color.aroll_broll_two_tone
+    type: technique
+    name: Distinct but consistent A-roll / B-roll palettes
+    summary: "Grade the talking-head A-roll and the illustrative B-roll as two consistent families (e.g. warm interview, cooler b-roll) so cuts between them feel designed rather than mismatched."
+    when_to_use: "Testimonials and brand stories alternating speaker and b-roll."
+    how: ["Group A-roll and B-roll separately", "Give each group one look", "Keep complementary relationship (warm vs cool)", "Keep skin consistent wherever faces appear"]
+    parameters: {groups: "2"}
+    avoid_when: "Single continuous scene where a palette shift would read as an error."
+    genres: [genre.testimonial, genre.brand_story, genre.interview]
+    goals: [goal.brand_recall, goal.emotion]
+    uses_capabilities: [cap.color.group_grade, cap.color.split_tone]
+    conflicts_with: []
+    requires: [tech.color.shared_look_layer]
+    evidence_level: single_opinion
+    confidence: low
+    sources:
+      - {title: "Reference reel analysis (bathroom.mp4)", author: "project analysis", url: "analysis/bathroom/notes.md", locator: "Craft observations: Grade"}
+
+  - id: anti.color.creative_lut_on_log
+    type: anti_pattern
+    name: Creative LUT on un-normalised log/HDR footage
+    summary: "Dropping a creative LUT directly on log or HDR clips produces broken, clipped or oddly saturated colours, because the LUT expects normalised Rec.709 input."
+    when_to_use: "Detect: LUT applied as first operation on clips whose transfer is log/HLG/PQ."
+    how: ["Insert technical transform before the LUT", "Re-balance", "Then re-apply look at reduced intensity"]
+    parameters: {}
+    avoid_when: "The LUT is explicitly a log-to-look LUT designed for that exact camera profile."
+    genres: []
+    goals: [goal.trust]
+    uses_capabilities: [cap.color.lut_apply, cap.color.color_space_transform]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "4 Things To Know About Working With LUTs", author: "Mixing Light", url: "https://mixinglight.com/color-tutorial/4-things-to-know-about-working-with-luts", locator: "via search summary"}
+      - {title: "How to use LUTs in DaVinci Resolve", author: "DaVinci Resolve Club", url: "https://davinciresolveclub.com/how-to-use-luts-in-davinci-resolve/", locator: "technical vs creative LUT (via search summary)"}
+
+  - id: anti.color.unnatural_skin
+    type: anti_pattern
+    name: Oversaturated, red-flushed or yellow-green skin
+    summary: "Over-saturated reds make skin blotchy and flushed; desaturated or yellow/green-shifted skin looks ill. Both destroy trust in talking-head content faster than any other colour error."
+    when_to_use: "Detect: skin trace far off the skin line or extending unusually far from vectorscope centre."
+    how: ["Bring hue back toward skin line", "Reduce skin saturation via hue-vs-sat or qualifier", "Reduce look/LUT intensity"]
+    parameters: {}
+    avoid_when: "Never desirable unless a deliberate stylised effect."
+    genres: [genre.talking_head, genre.testimonial, genre.interview]
+    goals: [goal.trust]
+    uses_capabilities: [cap.analysis.scopes, cap.color.hue_vs_hue, cap.color.saturation]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "5 Tips for Getting Perfect Skin Tones in DaVinci Resolve", author: "Frame.io Insider", url: "https://blog.frame.io/2020/10/05/skin-tones-in-davinci-resolve/", locator: "saturation discussion"}
+
+  - id: anti.color.scope_chasing
+    type: anti_pattern
+    name: Grading to the numbers instead of the picture
+    summary: "Forcing every face exactly onto the skin line or every trace into a fixed range ignores lighting intent and complexion variety; if a shot looks right, it does not need correcting just to satisfy a scope."
+    when_to_use: "Detect: automated corrections that push intentionally stylised shots back to neutral."
+    how: ["Use scopes to catch errors, not to define the look", "Only correct when deviation is visible or out of legal range"]
+    parameters: {}
+    avoid_when: "QC/legal checks, where numbers do rule."
+    genres: []
+    goals: [goal.emotion]
+    uses_capabilities: [cap.analysis.scopes]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Grading by Numbers: When to Use Color Scopes (and When Not To)", author: "Frame.io Insider", url: "https://blog.frame.io/2023/09/18/when-to-use-color-scopes-and-when-not-to/", locator: "When not to trust scopes"}
+      - {title: "5 Tips for Getting Perfect Skin Tones in DaVinci Resolve", author: "Frame.io Insider", url: "https://blog.frame.io/2020/10/05/skin-tones-in-davinci-resolve/", locator: "neutralise rather than correct"}
+
+  - id: anti.color.mixed_hdr_sdr_untreated
+    type: anti_pattern
+    name: Mixing untreated HDR and SDR clips
+    summary: "Placing raw iPhone HDR (HLG/Dolby Vision) clips next to SDR clips without conversion causes shots that look washed out, overly bright or differently coloured on different apps and devices."
+    when_to_use: "Detect: timeline contains clips with differing color_transfer metadata."
+    how: ["Convert all to one working space", "Tone-map to SDR for social delivery"]
+    parameters: {}
+    avoid_when: "All sources share one transfer and delivery matches it."
+    genres: [genre.vlog, genre.montage, genre.event_recap]
+    goals: [goal.trust]
+    uses_capabilities: [cap.color.tone_map_hdr_sdr, cap.analysis.probe_metadata]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "HDR iPhone 14 footage washed out (forum thread)", author: "Adobe Community", url: "https://community.adobe.com/t5/premiere-pro-discussions/hdr-iphone-14-footage-washed-out-exhausted-all-solutions/m-p/13982055", locator: "user reports"}
+      - {title: "iPhone HDR to SDR in DaVinci Resolve", author: "DaVinci Resolve Club", url: "https://davinciresolveclub.com/iphone-hdr-to-sdr-davinci-resolve/", locator: "via search summary"}
+
+  # ===================================================================
+  # TYPOGRAPHY & CAPTIONS
+  # ===================================================================
+
+  - id: principle.type.reading_load_ceiling
+    type: principle
+    name: Respect a reading-speed ceiling
+    summary: "Professional subtitle standards cap reading load at about 20 characters/second for adult English (17 for children) with at most 2 lines of 42 characters. Treat these long-form limits as an upper bound for reel captions, which should be lighter still."
+    when_to_use: "Any on-screen text tied to speech; check every caption chunk."
+    how: ["Compute chars/sec per chunk = characters / on-screen duration", "If over ceiling, shorten text or extend dwell", "Prefer 1 line for reels"]
+    parameters: {max_cps_adult_en: "20", max_cps_children_en: "17", max_chars_per_line: "42", max_lines: "2"}
+    avoid_when: "Never ignored; kinetic single-word captions trivially satisfy it."
+    genres: [genre.talking_head, genre.tutorial, genre.interview, genre.podcast_clip]
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.text.caption_phrase, cap.text.caption_word]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: high
+    sources:
+      - {title: "English (USA) Timed Text Style Guide", author: "Netflix", url: "https://partnerhelp.netflixstudios.com/hc/en-us/articles/217350977-English-USA-Timed-Text-Style-Guide", locator: "Character limitation; Reading speed limits"}
+
+  - id: tech.type.reading_speed_wpm
+    type: technique
+    name: Use 160-180 words per minute as a comfortable caption rate
+    summary: "Broadcast guidance targets roughly 160-180 words per minute (about 15-17 characters/second) for general audiences. When speech is faster, edited or chunked captions should still not exceed what viewers can read while also watching the picture."
+    when_to_use: "Fast talkers, podcast clips, tutorial voice-overs."
+    how: ["Measure speaker wpm from transcript timings", "If > 180 wpm, use shorter chunks/word-by-word or trim filler", "Keep important words on screen long enough"]
+    parameters: {target_wpm: "160-180", approx_cps: "15-17"}
+    avoid_when: "Verbatim accessibility captions where text must not be edited."
+    genres: [genre.podcast_clip, genre.talking_head, genre.tutorial]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.text.caption_phrase, cap.text.caption_word]
+    conflicts_with: []
+    requires: [principle.type.reading_load_ceiling]
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "BBC Subtitle Guidelines", author: "BBC", url: "https://bbc.github.io/subtitle-guidelines/", locator: "Timing: reading rate (figure via secondary summaries; page not fetched)"}
+      - {title: "BBC Subtitling Guidelines (summary)", author: "Clevercast", url: "https://clevercast.com/bbc-subtitling-guidelines", locator: "reading speed (via search summary)"}
+
+  - id: tech.type.hindi_reading_speed
+    type: technique
+    name: Hindi caption reading-speed and line limits
+    summary: "Netflix's Hindi guide allows about 22 characters/second for adults (18 for children) and 42 characters per line, centred. Devanagari character counts include matras, so a cps check must count Unicode grapheme clusters consistently."
+    when_to_use: "Devanagari captions for Hindi or Hinglish speech."
+    how: ["Count characters per chunk (decide grapheme vs code point consistently)", "Keep below 22 cps; aim lower for reels", "Centre-align"]
+    parameters: {max_cps_adult_hi: "22", max_cps_children_hi: "18", max_chars_per_line: "42"}
+    avoid_when: "Roman-script Hinglish captions (use English limits)."
+    genres: [genre.talking_head, genre.podcast_clip, genre.vlog]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.text.caption_phrase, cap.text.font_select]
+    conflicts_with: []
+    requires: [principle.type.reading_load_ceiling]
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "Hindi Timed Text Style Guide", author: "Netflix", url: "https://backlothelp.netflix.com/hc/en-us/articles/115003196707", locator: "Reading speed / character limitation (via search summary; page returned 403)"}
+
+  - id: tech.type.semantic_line_breaks
+    type: technique
+    name: Break caption lines at sense boundaries
+    summary: "Break after punctuation or before conjunctions/prepositions, and never separate article from noun, first from last name, or verb from its auxiliary or negation. In two-line captions prefer a bottom-heavy shape."
+    when_to_use: "Any multi-word caption chunk, including reel phrase captions."
+    how: ["Chunk transcript at clause/phrase boundaries", "Reject breaks that split grammatical pairs", "Avoid 1-2 orphan words on the top line"]
+    parameters: {shape: "bottom-heavy pyramid for 2 lines"}
+    avoid_when: "Single-word kinetic captions."
+    genres: [genre.talking_head, genre.tutorial, genre.interview, genre.podcast_clip]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.text.caption_phrase]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: high
+    sources:
+      - {title: "English (USA) Timed Text Style Guide", author: "Netflix", url: "https://partnerhelp.netflixstudios.com/hc/en-us/articles/217350977-English-USA-Timed-Text-Style-Guide", locator: "Line treatment"}
+
+  - id: tech.type.reel_chunk_size
+    type: technique
+    name: Short caption chunks for vertical reels
+    summary: "On 9:16 phone video, captions are usually set as one line of about 1-4 words (roughly 8-20 characters) so they fit the narrow safe width at a large size and can be read in a glance while watching the face."
+    when_to_use: "Default for reel captions."
+    how: ["Chunk at phrase boundaries into 1-4 words", "Keep within ~70-80% of frame width", "Swap chunks on word timings from ASR"]
+    parameters: {words_per_chunk: "1-4", chars_per_line: "~8-20", lines: "1 (max 2)", min_dwell_s: "~0.3-0.5 (heuristic)"}
+    avoid_when: "Dense instructional text that must be read as a sentence (use phrase captions, 2 lines)."
+    genres: [genre.talking_head, genre.vlog, genre.podcast_clip, genre.testimonial]
+    goals: [goal.retention_first_3s, goal.clarity]
+    uses_capabilities: [cap.text.caption_word, cap.text.caption_phrase]
+    conflicts_with: []
+    requires: [principle.type.reading_load_ceiling]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Reference reel analysis (bathroom.mp4)", author: "project analysis", url: "analysis/bathroom/notes.md", locator: "Craft observations: 1-4 words kinetic text"}
+      - {title: "English (USA) Timed Text Style Guide", author: "Netflix", url: "https://partnerhelp.netflixstudios.com/hc/en-us/articles/217350977-English-USA-Timed-Text-Style-Guide", locator: "one line unless > 42 characters"}
+
+  - id: tech.type.word_by_word_captions
+    type: technique
+    name: Word-by-word (karaoke) captions
+    summary: "Reveal or highlight each word as it is spoken. Widely used on short-form for energy and to anchor attention; vendor claims of retention lifts exist but no controlled study was found, so treat it as a style choice rather than a proven win."
+    when_to_use: "High-energy talking heads, podcast clips, hooks in the first seconds."
+    how: ["Get word-level timestamps", "Show current chunk; highlight active word (colour or scale)", "Keep chunk static while words highlight to avoid jitter"]
+    parameters: {highlight_change: "on word onset, 0-80 ms transition", chunk_words: "2-4"}
+    avoid_when: "Calm/emotional pieces; long reading-heavy captions; viewers with motion sensitivity."
+    genres: [genre.podcast_clip, genre.talking_head, genre.vlog]
+    goals: [goal.energy, goal.retention_first_3s]
+    uses_capabilities: [cap.text.caption_word, cap.text.highlight_word]
+    conflicts_with: [tech.caption.style_minimal_calm]
+    requires: [tech.type.reel_chunk_size]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Animated Captions vs Static Captions (critical review of claims)", author: "BlitzCut", url: "https://blitzcutai.com/blog/animated-captions-vs-static-captions", locator: "claims not established by controlled research (via search summary)"}
+
+  - id: tech.type.phrase_captions
+    type: technique
+    name: Phrase/sentence captions
+    summary: "Show a complete phrase at once (1-2 lines), timed to speech, with simple appear/disappear. Calmer and easier to read for information-dense content, at the cost of less visual energy."
+    when_to_use: "Tutorials, explainers, interviews, emotional or serious content."
+    how: ["Chunk by clause", "Respect cps ceiling", "Cut-in or short fade (<=150 ms)", "Hold positions stable between chunks"]
+    parameters: {lines: "1-2", fade_ms: "0-150"}
+    avoid_when: "Very fast hype edits where captions must pulse with the beat."
+    genres: [genre.tutorial, genre.interview, genre.brand_story, genre.product]
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.text.caption_phrase]
+    conflicts_with: []
+    requires: [tech.type.semantic_line_breaks]
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "English (USA) Timed Text Style Guide", author: "Netflix", url: "https://partnerhelp.netflixstudios.com/hc/en-us/articles/217350977-English-USA-Timed-Text-Style-Guide", locator: "Line treatment; Reading speed limits"}
+
+  - id: tech.type.contrast_ratio
+    type: technique
+    name: Meet text contrast ratios over video
+    summary: "Aim for at least 4.5:1 contrast between text and what is directly behind it (3:1 is the floor for large bold text; 7:1 is the enhanced level). Over moving video the background varies, so guarantee contrast with a stroke, shadow or box."
+    when_to_use: "Every caption and title."
+    how: ["Sample background luma behind text box across its duration", "Compute contrast with WCAG formula", "If below target, add stroke/shadow/box or darken a region"]
+    parameters: {min_ratio_normal: "4.5:1", min_ratio_large: "3:1", enhanced_ratio: "7:1", large_text_definition: "18 pt or 14 pt bold"}
+    avoid_when: "Never skipped."
+    genres: [genre.talking_head, genre.tutorial, genre.product, genre.montage]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.text.stroke_shadow, cap.text.backing_box, cap.analysis.contrast_check]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: high
+    sources:
+      - {title: "Understanding Success Criterion 1.4.3: Contrast (Minimum)", author: "W3C WAI", url: "https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html", locator: "Intent; large text definition; SC 1.4.6"}
+
+  - id: tech.type.backing_for_legibility
+    type: technique
+    name: Stroke, shadow or box behind captions
+    summary: "Because video backgrounds change frame to frame, use a dark outline (stroke), soft drop shadow, or semi-opaque box behind light text. Box backing is most reliable; stroke suits bold sans display captions."
+    when_to_use: "Text over busy or bright footage."
+    how: ["White/light text + black stroke ~6-10% of font size, or", "Soft shadow (blur ~10-20% font size, 50-80% opacity), or", "Box with 60-80% opacity and padding ~0.3-0.5 em"]
+    parameters: {stroke_pct_font: "6-10% (heuristic)", box_opacity: "60-80% (heuristic)"}
+    avoid_when: "Text over a clean, flat, high-contrast background (decoration adds noise)."
+    genres: [genre.talking_head, genre.vlog, genre.montage, genre.podcast_clip]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.text.stroke_shadow, cap.text.backing_box]
+    conflicts_with: []
+    requires: [tech.type.contrast_ratio]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Understanding Success Criterion 1.4.3: Contrast (Minimum)", author: "W3C WAI", url: "https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html", locator: "contrast requirement basis"}
+
+  - id: tech.type.caption_size_vertical
+    type: technique
+    name: Caption size for vertical phone video
+    summary: "Size captions so cap height is clearly readable on a phone held at arm's length: roughly 4-6% of frame height for punchy word captions and 3-4% for phrase captions on a 1080x1920 canvas. Derived reasoning, not a published standard."
+    when_to_use: "Initial size choice for any reel caption."
+    how: ["Font size ~70-110 px at 1920 px height for 1-3 word captions", "~55-75 px for 2-line phrase captions", "Ensure longest chunk fits inside safe width"]
+    parameters: {font_px_word_style: "70-110 @1920h", font_px_phrase_style: "55-75 @1920h", pct_frame_height: "3-6%"}
+    avoid_when: "Titles/hooks may go much larger deliberately."
+    genres: [genre.talking_head, genre.vlog, genre.tutorial, genre.podcast_clip]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.text.caption_word, cap.text.caption_phrase]
+    conflicts_with: []
+    requires: [tech.type.safe_zone_reels]
+    evidence_level: theory
+    confidence: low
+    sources:
+      - {title: "Understanding Success Criterion 1.4.3: Contrast (Minimum)", author: "W3C WAI", url: "https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html", locator: "large-text definition as legibility anchor"}
+      - {title: "YouTube Shorts, Reels and TikTok Safe Zones", author: "Reap", url: "https://reap.video/blog/short-form-video-safe-zones", locator: "caption placement within safe area (via search summary)"}
+
+  - id: tech.type.safe_zone_reels
+    type: technique
+    name: Keep text inside the Reels safe zone
+    summary: "Platform UI (username, caption, buttons) covers parts of a vertical frame. A widely used working margin for Instagram/Facebook Reels is about 14% top, 35% bottom and 6% each side clear of key text; verify with the platform's own overlay."
+    when_to_use: "All Instagram Reels / Facebook Reels deliveries."
+    how: ["Overlay the safe-zone guide at 1080x1920", "Keep captions, CTAs and logos inside", "Place captions just above the bottom exclusion zone or mid-frame"]
+    parameters: {top_pct: "14", bottom_pct: "35", sides_pct: "6", bottom_with_disclaimer_pct: "40 (ads)"}
+    avoid_when: "Never; but full-bleed visuals may extend into margins."
+    genres: [genre.talking_head, genre.product, genre.tutorial, genre.vlog]
+    goals: [goal.clarity, goal.cta_conversion]
+    uses_capabilities: [cap.text.safe_zone_layout]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Meta ad safe zones guide", author: "Adnova", url: "https://adnova.ai/blogs/meta-ad-safe-zones-guide", locator: "Reels 14% / 35% / 6% (third-party measurement, via search summary)"}
+      - {title: "Meta Ads Safe Zones: A Guide to the 2026 Unified Creative Updates", author: "Billo", url: "https://billo.app/blog/meta-ads-safe-zones", locator: "via search summary"}
+
+  - id: tech.type.safe_zone_tiktok_shorts
+    type: technique
+    name: Keep text clear of TikTok/Shorts bottom bar and right-hand icons
+    summary: "On TikTok and Shorts, the bottom ~270-320 px (of 1920) holds caption/username and the right ~100-120 px holds action icons. Third-party measurements vary and UI changes with caption length, so leave generous margins."
+    when_to_use: "TikTok and YouTube Shorts deliveries; cross-posting one master."
+    how: ["Use a combined safe zone (intersection of Reels, TikTok, Shorts)", "Keep text centred-left of the right icon column", "Check with official templates when available"]
+    parameters: {bottom_px_at_1920: "270-320", right_px_at_1080w: "100-120", central_safe_area: "~900x1490 px (one estimate)"}
+    avoid_when: "Never."
+    genres: [genre.talking_head, genre.product, genre.tutorial, genre.vlog]
+    goals: [goal.clarity, goal.cta_conversion]
+    uses_capabilities: [cap.text.safe_zone_layout]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "YouTube Shorts, Reels and TikTok Safe Zones: Where to Put Captions, Faces and CTAs", author: "Reap", url: "https://reap.video/blog/short-form-video-safe-zones", locator: "via search summary"}
+      - {title: "TikTok ad sizes and specs for 2026 (with measured safe zones)", author: "ManyPixels", url: "https://www.manypixels.co/blog/social-media-design/tiktok-ad-specs", locator: "via search summary"}
+
+  - id: tech.type.place_relative_to_face
+    type: technique
+    name: Place captions beside or below the face, never over eyes or mouth
+    summary: "Detect the face and place captions in free space next to it or in the lower-middle band, keeping eyes and mouth visible. Subtitle standards move text to avoid covering important picture content; on reels the face is that content."
+    when_to_use: "All talking-head and interview shots."
+    how: ["Run face detection per shot", "Compute free regions inside safe zone", "Prefer lower-middle band; else side opposite the face's gaze", "Keep position stable within a shot"]
+    parameters: {min_gap_from_face_box: "~3-5% frame height (heuristic)"}
+    avoid_when: "Face fills the frame — use top or bottom safe band and accept chin overlap rather than eyes/mouth."
+    genres: [genre.talking_head, genre.interview, genre.testimonial, genre.podcast_clip]
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.analysis.face_detect, cap.text.safe_zone_layout]
+    conflicts_with: []
+    requires: [tech.type.safe_zone_reels]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Reference reel analysis (bathroom.mp4)", author: "project analysis", url: "analysis/bathroom/notes.md", locator: "Craft observations: text placed beside the face"}
+      - {title: "BBC Subtitle Guidelines", author: "BBC", url: "https://bbc.github.io/subtitle-guidelines/", locator: "Positioning: avoid obscuring important content (not fetched; general principle)"}
+
+  - id: tech.type.keyword_emphasis
+    type: technique
+    name: Emphasise one key word per chunk
+    summary: "Build hierarchy by enlarging, bolding or colouring the single most meaningful word (noun/verb/number) while the rest stays neutral. One accent per chunk keeps emphasis meaningful; emphasising everything emphasises nothing."
+    when_to_use: "Hooks, claims, numbers, brand names, punchlines."
+    how: ["Pick keyword via transcript analysis (numbers, named entities, contrastive words)", "Scale 1.3-2x or switch to heavier weight", "Use one brand accent colour", "Keep other words neutral white"]
+    parameters: {scale_factor: "1.3-2.0x (heuristic)", accent_colours: "1 (max 2)"}
+    avoid_when: "Every chunk already emphasised — skip to restore contrast."
+    genres: [genre.talking_head, genre.testimonial, genre.brand_story, genre.tutorial]
+    goals: [goal.clarity, goal.brand_recall, goal.retention_first_3s]
+    uses_capabilities: [cap.text.highlight_word, cap.text.kinetic]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Reference reel analysis (bathroom.mp4)", author: "project analysis", url: "analysis/bathroom/notes.md", locator: "Craft observations: key word enlarged"}
+      - {title: "UI Animation: How to Apply Disney's 12 Principles of Animation to UI Design", author: "Interaction Design Foundation", url: "https://ixdf.org/literature/article/ui-animation-how-to-apply-disney-s-12-principles-of-animation-to-ui-design", locator: "Staging: direct attention to one element"}
+
+  - id: tech.type.kinetic_for_emotion
+    type: technique
+    name: Kinetic typography to convey tone and direct attention
+    summary: "Animating text properties over time (scale, position, timing, rhythm) can convey emotion and guide attention beyond what static text does. Match motion character to the emotion: quick, bouncy for excitement; slow, smooth for calm or sadness."
+    when_to_use: "Talking heads with long static shots, brand stories, hooks."
+    how: ["Pick a motion vocabulary per emotion", "Animate on speech rhythm", "Keep readable: motion settles before the word must be read"]
+    parameters: {settle_before_read_ms: "<=200-300 (heuristic)"}
+    avoid_when: "Information-dense captions; motion-sensitive audiences."
+    genres: [genre.testimonial, genre.brand_story, genre.talking_head]
+    goals: [goal.emotion, goal.watch_through]
+    uses_capabilities: [cap.text.kinetic, cap.graphics.animate_in]
+    conflicts_with: []
+    requires: []
+    evidence_level: study
+    confidence: low
+    sources:
+      - {title: "Using kinetic typography to convey emotion in text-based interpersonal communication", author: "Lee, Jun, Forlizzi, Hudson (DIS 2006)", url: "https://doi.org/10.1145/1142405.1142414", locator: "pp. 41-49 (abstract not fetched)"}
+      - {title: "The kinetic typography engine: an extensible system for animating expressive text", author: "Lee, Forlizzi, Hudson (UIST 2002)", url: "https://uist.acm.org/archive/html/keywords/kwautomating.html", locator: "UIST 2002 archive listing (DOI unverified; contents not fetched)"}
+
+  - id: tech.type.text_carries_long_shot
+    type: technique
+    name: Let kinetic text carry a long static shot
+    summary: "Instead of cutting away, a long talking shot can stay engaging by changing text every phrase — new words, sizes and positions provide the visual novelty that cuts would otherwise supply."
+    when_to_use: "Strong performance you don't want to cut; few b-roll options."
+    how: ["Change text chunk every ~0.5-1.5 s", "Vary size/position within a consistent system", "Add subtle punch-ins at phrase starts if needed"]
+    parameters: {text_change_interval_s: "0.5-1.5"}
+    avoid_when: "Text would cover the face or the shot is visually weak anyway."
+    genres: [genre.testimonial, genre.talking_head, genre.brand_story]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.text.kinetic, cap.transform.punch_in]
+    conflicts_with: []
+    requires: [tech.type.place_relative_to_face]
+    evidence_level: single_opinion
+    confidence: low
+    sources:
+      - {title: "Reference reel analysis (bathroom.mp4)", author: "project analysis", url: "analysis/bathroom/notes.md", locator: "Edit style vector: longest shot 8.64 s carried by kinetic text"}
+
+  - id: tech.type.font_pairing
+    type: technique
+    name: Limit fonts to one family or a two-family pair
+    summary: "Use one versatile family with several weights, or pair a display face for emphasis with a neutral sans for body captions. Match stroke contrast and width between paired faces; more than two families reads as noise."
+    when_to_use: "Setting up a brand caption template."
+    how: ["Choose a sans with Regular/Bold/Black weights", "Optional display/serif accent for keywords", "Lock pairing in a brand template"]
+    parameters: {max_families: "2", weights: "2-3"}
+    avoid_when: "Brand guide already prescribes fonts."
+    genres: [genre.brand_story, genre.product, genre.testimonial]
+    goals: [goal.brand_recall]
+    uses_capabilities: [cap.text.font_select]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Devanagari Typography 101: A guide for typesetting with Latin", author: "Alphabettes", url: "https://www.alphabettes.org/devanagari-typography-101-a-guide-for-typesetting-with-latin/", locator: "Font pairing: match contrast, width, style"}
+
+  - id: tech.type.devanagari_no_tracking
+    type: technique
+    name: Do not letter-space Devanagari
+    summary: "Positive or negative tracking and manual kerning break the continuous headline (shirorekha) that joins Devanagari letters. Keep tracking at 0 for Devanagari even if the Latin caption style uses wide tracking."
+    when_to_use: "Any Devanagari caption or title."
+    how: ["Force tracking=0 on Devanagari runs", "Apply tracking only to Latin runs"]
+    parameters: {tracking: "0"}
+    avoid_when: "Never."
+    genres: [genre.talking_head, genre.vlog, genre.podcast_clip]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.text.font_select]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Devanagari Typography 101: A guide for typesetting with Latin", author: "Alphabettes", url: "https://www.alphabettes.org/devanagari-typography-101-a-guide-for-typesetting-with-latin/", locator: "Letterspacing and justification"}
+
+  - id: tech.type.devanagari_leading
+    type: technique
+    name: Give Devanagari extra line height
+    summary: "Devanagari matras extend above the headline and below the baseline, so Latin line-height settings clip or crowd them. Set leading manually and more open than for Latin, and give caption boxes extra vertical padding."
+    when_to_use: "Multi-line Devanagari captions; boxes with fixed height."
+    how: ["Line height ~1.4-1.6x font size for Devanagari (heuristic)", "Increase box top/bottom padding", "Render-test with words carrying upper and lower matras"]
+    parameters: {line_height: "~1.4-1.6 (heuristic; sources give no number)"}
+    avoid_when: "Single-line captions with no box (still check clipping)."
+    genres: [genre.talking_head, genre.vlog, genre.podcast_clip]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.text.font_select, cap.text.backing_box]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Devanagari Typography 101: A guide for typesetting with Latin", author: "Alphabettes", url: "https://www.alphabettes.org/devanagari-typography-101-a-guide-for-typesetting-with-latin/", locator: "Leading"}
+      - {title: "Proxima Nova Devanagari — story", author: "Mark Simonson Studio", url: "https://proximasupernova.marksimonson.com/devanagari/story", locator: "more open line-height (via search summary)"}
+
+  - id: tech.type.devanagari_emphasis
+    type: technique
+    name: Emphasise Devanagari with true weight, not underline or italic
+    summary: "Underlines collide with matras and slanted 'italic' Devanagari looks forced. Emphasise with a true bold weight from the same family, colour, or size; avoid synthetic (faux) bold."
+    when_to_use: "Keyword emphasis in Hindi captions."
+    how: ["Use Bold/Black weight of the Devanagari family", "Or accent colour/scale as in Latin style", "Never underline or skew"]
+    parameters: {}
+    avoid_when: "Never applicable to underline/italic."
+    genres: [genre.talking_head, genre.vlog]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.text.highlight_word, cap.text.font_select]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Devanagari Typography 101: A guide for typesetting with Latin", author: "Alphabettes", url: "https://www.alphabettes.org/devanagari-typography-101-a-guide-for-typesetting-with-latin/", locator: "Emphasis"}
+
+  - id: tech.type.bilingual_family
+    type: technique
+    name: Use one family covering Latin and Devanagari for mixed captions
+    summary: "For Hindi-English mixed captions, prefer a family designed for both scripts (e.g. Noto Sans + Noto Sans Devanagari, Hind, Mukta) so weight, texture and vertical metrics match. Size Devanagari so its headline aligns near the Latin x-height."
+    when_to_use: "Captions mixing scripts within one line or across lines."
+    how: ["Select multi-script family", "Set same point size against sentence-case Latin; enlarge Devanagari slightly if Latin is all caps", "Align optically using the shirorekha"]
+    parameters: {size_ratio: "~1.0 vs sentence-case Latin; >1.0 vs all-caps Latin"}
+    avoid_when: "Brand font lacks Devanagari — pick the closest matching Devanagari partner by contrast/width."
+    genres: [genre.talking_head, genre.vlog, genre.podcast_clip]
+    goals: [goal.clarity, goal.brand_recall]
+    uses_capabilities: [cap.text.font_select]
+    conflicts_with: []
+    requires: [tech.type.devanagari_no_tracking]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Devanagari Typography 101: A guide for typesetting with Latin", author: "Alphabettes", url: "https://www.alphabettes.org/devanagari-typography-101-a-guide-for-typesetting-with-latin/", locator: "Size matching; Font pairing"}
+      - {title: "Noto Sans Devanagari", author: "Fontsource", url: "https://fontsource.org/fonts/noto-sans-devanagari/about", locator: "family listing (not fetched)"}
+
+  - id: tech.type.hinglish_roman_script
+    type: technique
+    name: Caption Hinglish speech in Roman script by default
+    summary: "Code-mixed Hindi-English speech is commonly captioned in Roman script on Indian social media because it reads fast for urban audiences and avoids script switching mid-line. Use Devanagari for pure-Hindi audiences or as a stylistic accent word."
+    when_to_use: "Hinglish talking heads targeting urban/young Indian audiences."
+    how: ["Transliterate Hindi words consistently (pick one spelling scheme)", "Keep English words in English spelling", "Optionally set one punch word in Devanagari for flavour"]
+    parameters: {}
+    avoid_when: "Audience is predominantly Hindi-literate rural/older viewers, or speech is pure Hindi."
+    genres: [genre.talking_head, genre.vlog, genre.podcast_clip]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.text.caption_word, cap.text.caption_phrase]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: low
+    sources:
+      - {title: "Hindi Timed Text Style Guide", author: "Netflix", url: "https://backlothelp.netflix.com/hc/en-us/articles/115003196707", locator: "context only: formal Hindi subtitles use Devanagari (page 403; norm for reels is unsourced)"}
+
+  - id: anti.type.caption_over_face
+    type: anti_pattern
+    name: Captions covering eyes or mouth
+    summary: "Text over the eyes or mouth hides expression and lip movement, the main carriers of trust and comprehension in talking-head content."
+    when_to_use: "Detect: caption bbox intersects face landmarks (eyes/mouth)."
+    how: ["Move caption to free region", "Shrink or rewrap chunk", "Reframe shot (punch-out) if no space"]
+    parameters: {}
+    avoid_when: "Deliberate full-frame title card moment."
+    genres: [genre.talking_head, genre.interview, genre.testimonial]
+    goals: [goal.trust, goal.clarity]
+    uses_capabilities: [cap.analysis.face_detect, cap.text.safe_zone_layout]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "YouTube Shorts, Reels and TikTok Safe Zones: Where to Put Captions, Faces and CTAs", author: "Reap", url: "https://reap.video/blog/short-form-video-safe-zones", locator: "faces vs captions (via search summary)"}
+
+  - id: anti.type.text_under_platform_ui
+    type: anti_pattern
+    name: Text hidden under platform UI
+    summary: "Captions, CTAs or logos placed in the bottom bar or right icon column get covered by usernames, descriptions and buttons, wasting the message."
+    when_to_use: "Detect: any text bbox outside the combined safe zone."
+    how: ["Move inside safe zone", "Shorten text to fit safe width"]
+    parameters: {}
+    avoid_when: "Never acceptable for essential text."
+    genres: []
+    goals: [goal.clarity, goal.cta_conversion]
+    uses_capabilities: [cap.text.safe_zone_layout]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: high
+    sources:
+      - {title: "Meta ad safe zones guide", author: "Adnova", url: "https://adnova.ai/blogs/meta-ad-safe-zones-guide", locator: "via search summary"}
+      - {title: "YouTube Shorts, Reels and TikTok Safe Zones", author: "Reap", url: "https://reap.video/blog/short-form-video-safe-zones", locator: "via search summary"}
+
+  - id: anti.type.too_fast_text
+    type: anti_pattern
+    name: Captions faster than they can be read
+    summary: "Chunks that flash by above roughly 20 characters/second, or words that change faster than the eye can settle, force viewers to choose between reading and watching — and many will scroll."
+    when_to_use: "Detect: chunk cps > ceiling or dwell < ~0.3 s for multi-word chunks."
+    how: ["Shorten text", "Merge with neighbour chunk", "Switch to keyword-only captions"]
+    parameters: {cps_ceiling: "20 (EN), 22 (HI)"}
+    avoid_when: "Single short words synced to speech (fine at sub-second dwell)."
+    genres: []
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.text.caption_phrase, cap.text.caption_word]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    sources:
+      - {title: "English (USA) Timed Text Style Guide", author: "Netflix", url: "https://partnerhelp.netflixstudios.com/hc/en-us/articles/217350977-English-USA-Timed-Text-Style-Guide", locator: "Reading speed limits"}
+
+  - id: anti.type.font_and_effect_overload
+    type: anti_pattern
+    name: Too many fonts, colours and effects
+    summary: "Mixing several typefaces, many colours, and stacked effects (glow + stroke + shadow + gradient) destroys hierarchy and looks amateur; emphasis stops working when everything is emphasised."
+    when_to_use: "Detect: >2 families, >2 accent colours, or >2 decorations on a caption style."
+    how: ["Reduce to one family (+1 accent)", "One accent colour", "One legibility treatment"]
+    parameters: {max_families: "2", max_accent_colours: "2"}
+    avoid_when: "Deliberate maximalist/meme aesthetic for comedy."
+    genres: []
+    goals: [goal.brand_recall, goal.clarity]
+    uses_capabilities: [cap.text.font_select]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "UI Animation: How to Apply Disney's 12 Principles of Animation to UI Design", author: "Interaction Design Foundation", url: "https://ixdf.org/literature/article/ui-animation-how-to-apply-disney-s-12-principles-of-animation-to-ui-design", locator: "Staging; Solid drawing (consistent styling)"}
+      - {title: "Devanagari Typography 101: A guide for typesetting with Latin", author: "Alphabettes", url: "https://www.alphabettes.org/devanagari-typography-101-a-guide-for-typesetting-with-latin/", locator: "pairing by matched contrast"}
+
+  # ---------------- caption style families (mood/genre -> style) ----------------
+
+  - id: tech.caption.style_bold_pop
+    type: technique
+    name: "Caption style: bold pop (high energy)"
+    summary: "Heavy sans (Black weight), 1-3 words, centred in lower-middle band, white with dark stroke, active word in one accent colour with a quick scale pop. Suits hype, podcasts and fast talking heads."
+    when_to_use: "Energetic talking heads, podcast clips, motivational and hook segments."
+    how: ["Black-weight sans, title or upper case", "Word-by-word highlight", "Pop: scale 0.9 -> 1.05 -> 1.0 over ~120-180 ms with ease-out", "Stroke or shadow for contrast"]
+    parameters: {font_px_at_1920: "80-110", pop_duration_ms: "120-180", overshoot_scale: "1.05-1.12", accent_colours: "1"}
+    avoid_when: "Calm, emotional or premium-brand pieces."
+    genres: [genre.podcast_clip, genre.talking_head, genre.vlog]
+    goals: [goal.energy, goal.retention_first_3s]
+    uses_capabilities: [cap.text.caption_word, cap.text.highlight_word, cap.graphics.overshoot_spring, cap.text.stroke_shadow]
+    conflicts_with: [tech.caption.style_minimal_calm]
+    requires: [tech.type.word_by_word_captions, tech.type.contrast_ratio]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Best Caption Presets & Styles that Boost Retention", author: "OpusClip", url: "https://www.opus.pro/blog/best-caption-presets-styles-boost-retention", locator: "preset styles (vendor; retention claims not relied on)"}
+      - {title: "Executing UX Animations: Duration and Motion Characteristics", author: "Nielsen Norman Group", url: "https://www.nngroup.com/articles/animation-duration/", locator: "short durations for frequent animations"}
+
+  - id: tech.caption.style_clean_phrase
+    type: technique
+    name: "Caption style: clean phrase (clarity)"
+    summary: "Medium/semibold sans, sentence case, 1-2 line phrases on a semi-opaque box or soft shadow, simple cut or 100-150 ms fade, fixed position. Prioritises readability for tutorials, explainers and interviews."
+    when_to_use: "Tutorials, product explainers, interviews, information-dense speech."
+    how: ["Semibold sans, sentence case", "Phrase chunking with semantic breaks", "Box at 60-80% opacity or soft shadow", "Stable lower-third position inside safe zone"]
+    parameters: {font_px_at_1920: "55-75", lines: "1-2", fade_ms: "0-150"}
+    avoid_when: "Hype edits that need visual rhythm."
+    genres: [genre.tutorial, genre.product, genre.interview]
+    goals: [goal.clarity, goal.trust]
+    uses_capabilities: [cap.text.caption_phrase, cap.text.backing_box]
+    conflicts_with: []
+    requires: [tech.type.phrase_captions]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "English (USA) Timed Text Style Guide", author: "Netflix", url: "https://partnerhelp.netflixstudios.com/hc/en-us/articles/217350977-English-USA-Timed-Text-Style-Guide", locator: "Line treatment; Reading speed"}
+      - {title: "Understanding Success Criterion 1.4.3: Contrast (Minimum)", author: "W3C WAI", url: "https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html", locator: "contrast"}
+
+  - id: tech.caption.style_editorial_kinetic
+    type: technique
+    name: "Caption style: editorial kinetic (brand/testimonial)"
+    summary: "Designed typography rather than subtitles: 1-4 words, mixed sizes and weights, the key word much larger, placed beside the face, often a serif or display accent paired with a sans, continuing over b-roll. Suits brand stories and testimonials."
+    when_to_use: "Founder/customer testimonials, brand films, agency showcase reels."
+    how: ["Pair display/serif accent with neutral sans", "Enlarge key word 1.5-2x", "Place in free space beside face", "Ease-out entrances 200-300 ms; staggered words 40-80 ms"]
+    parameters: {key_word_scale: "1.5-2.0x", entrance_ms: "200-300", stagger_ms: "40-80"}
+    avoid_when: "Fast-paced podcast clips where text must keep up with dense speech."
+    genres: [genre.testimonial, genre.brand_story, genre.product]
+    goals: [goal.brand_recall, goal.emotion, goal.watch_through]
+    uses_capabilities: [cap.text.kinetic, cap.text.highlight_word, cap.graphics.stagger, cap.analysis.face_detect]
+    conflicts_with: []
+    requires: [tech.type.keyword_emphasis, tech.type.place_relative_to_face]
+    evidence_level: single_opinion
+    confidence: medium
+    sources:
+      - {title: "Reference reel analysis (bathroom.mp4)", author: "project analysis", url: "analysis/bathroom/notes.md", locator: "Craft observations: kinetic typography"}
+      - {title: "Using kinetic typography to convey emotion in text-based interpersonal communication", author: "Lee, Jun, Forlizzi, Hudson (DIS 2006)", url: "https://doi.org/10.1145/1142405.1142414", locator: "pp. 41-49"}
+
+  - id: tech.caption.style_minimal_calm
+    type: technique
+    name: "Caption style: minimal calm (aesthetic/emotional)"
+    summary: "Small lowercase or sentence-case light/regular weight, generous spacing, short phrases, slow 300-500 ms fades, no highlight effects, soft shadow only. Suits calm vlogs, wellness, emotional or premium-aesthetic content."
+    when_to_use: "Slow-paced vlogs, travel, wellness, emotional storytelling, premium brands."
+    how: ["Light/regular weight", "Lowercase or sentence case", "Fade in/out 300-500 ms, ease-in-out", "Lower third or centred in negative space"]
+    parameters: {font_px_at_1920: "45-65", fade_ms: "300-500"}
+    avoid_when: "Busy backgrounds (thin weights lose contrast) or fast speech."
+    genres: [genre.vlog, genre.brand_story]
+    goals: [goal.emotion, goal.brand_recall]
+    uses_capabilities: [cap.text.caption_phrase, cap.graphics.animate_in, cap.text.stroke_shadow]
+    conflicts_with: [tech.caption.style_bold_pop, tech.type.word_by_word_captions]
+    requires: [tech.type.contrast_ratio]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Executing UX Animations: Duration and Motion Characteristics", author: "Nielsen Norman Group", url: "https://www.nngroup.com/articles/animation-duration/", locator: "duration character (slower reads calmer; >500 ms sluggish for UI)"}
+      - {title: "Understanding Success Criterion 1.4.3: Contrast (Minimum)", author: "W3C WAI", url: "https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html", locator: "thin text needs higher contrast"}
+
+  - id: tech.caption.style_speaker_coded
+    type: technique
+    name: "Caption style: speaker-coded conversational (interview/podcast)"
+    summary: "Each speaker gets a consistent caption colour (or side placement), phrase or word chunks, so multi-person clips stay followable without speaker labels. Suits podcasts, interviews and street-interview reels."
+    when_to_use: "Two or more speakers in frame or alternating."
+    how: ["Diarise speakers", "Assign one colour per speaker (white + one accent, or two accessible accents)", "Keep both colours above contrast target", "Optionally place captions near the active speaker"]
+    parameters: {speakers_max_colours: "2-3", contrast_min: "4.5:1"}
+    avoid_when: "Single speaker (colour coding becomes meaningless noise)."
+    genres: [genre.podcast_clip, genre.interview]
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.text.speaker_color, cap.text.caption_phrase, cap.analysis.diarization]
+    conflicts_with: []
+    requires: [tech.type.contrast_ratio]
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "BBC Subtitle Guidelines", author: "BBC", url: "https://bbc.github.io/subtitle-guidelines/", locator: "Speaker identification: colours (not fetched; broadcast convention)"}
+
+  # ===================================================================
+  # MOTION DESIGN
+  # ===================================================================
+
+  - id: principle.motion.ease_not_linear
+    type: principle
+    name: Ease motion; avoid linear interpolation
+    summary: "Real objects accelerate and decelerate, so linear keyframes look mechanical. Use eased curves for every position, scale and opacity move on text and graphics (Disney's slow-in/slow-out)."
+    when_to_use: "Every animated text or graphic."
+    how: ["Default to ease-out for entrances", "Ease-in for exits", "Standard ease-in-out for on-screen moves"]
+    parameters: {standard_curve: "cubic-bezier(0.4, 0.0, 0.2, 1)"}
+    avoid_when: "Constant-velocity effects (scrolling tickers, continuous slow push) where linear is intended."
+    genres: []
+    goals: [goal.clarity]
+    uses_capabilities: [cap.graphics.ease_curve]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "Executing UX Animations: Duration and Motion Characteristics", author: "Nielsen Norman Group", url: "https://www.nngroup.com/articles/animation-duration/", locator: "Easing"}
+      - {title: "UI Animation: How to Apply Disney's 12 Principles of Animation to UI Design", author: "Interaction Design Foundation", url: "https://ixdf.org/literature/article/ui-animation-how-to-apply-disney-s-12-principles-of-animation-to-ui-design", locator: "Slow in and slow out"}
+
+  - id: tech.motion.enter_decelerate
+    type: technique
+    name: Entrances decelerate (ease-out)
+    summary: "Elements entering the frame should arrive fast and slow to rest, which feels responsive and lets the viewer read the element as soon as it lands."
+    when_to_use: "Caption/title/graphic entrances."
+    how: ["Use deceleration curve", "Enter ~225 ms (mobile reference)", "Ensure the element is legible at its rest position before speech moves on"]
+    parameters: {curve: "cubic-bezier(0.0, 0.0, 0.2, 1)", duration_ms: "~200-300 (225 reference)"}
+    avoid_when: "Comedic or dramatic slow reveals."
+    genres: []
+    goals: [goal.clarity, goal.energy]
+    uses_capabilities: [cap.graphics.animate_in, cap.graphics.ease_curve]
+    conflicts_with: []
+    requires: [principle.motion.ease_not_linear]
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "Material Design (v1) — Duration & easing", author: "Google", url: "https://m1.material.io/motion/duration-easing.html", locator: "Deceleration curve; mobile durations"}
+      - {title: "Executing UX Animations: Duration and Motion Characteristics", author: "Nielsen Norman Group", url: "https://www.nngroup.com/articles/animation-duration/", locator: "Ease-out for entrances"}
+
+  - id: tech.motion.exit_accelerate
+    type: technique
+    name: Exits accelerate (ease-in) and are shorter than entrances
+    summary: "Departing elements speed up as they leave and take less time than they took to arrive, so attention moves on quickly to the next element."
+    when_to_use: "Caption/graphic exits."
+    how: ["Use acceleration curve", "Exit ~195 ms vs ~225 ms entrance", "Or simply cut out when the next chunk replaces it"]
+    parameters: {curve: "cubic-bezier(0.4, 0.0, 1, 1)", duration_ms: "~150-250 (195 reference)"}
+    avoid_when: "Elements that may return immediately — use sharp curve or keep on screen."
+    genres: []
+    goals: [goal.clarity]
+    uses_capabilities: [cap.graphics.animate_out, cap.graphics.ease_curve]
+    conflicts_with: []
+    requires: [principle.motion.ease_not_linear]
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "Material Design (v1) — Duration & easing", author: "Google", url: "https://m1.material.io/motion/duration-easing.html", locator: "Acceleration curve; enter vs exit"}
+      - {title: "Executing UX Animations: Duration and Motion Characteristics", author: "Nielsen Norman Group", url: "https://www.nngroup.com/articles/animation-duration/", locator: "entering longer than exiting"}
+
+  - id: tech.motion.duration_budget
+    type: technique
+    name: Keep graphic animations within 100-400 ms
+    summary: "Small feedback-like moves take ~100 ms, typical element transitions 200-300 ms, and large full-frame moves up to ~375-400 ms. Longer usually feels sluggish; animations are far more often too long than too short."
+    when_to_use: "Choosing default durations for caption/graphic templates."
+    how: ["Small pop/highlight: ~100-150 ms", "Caption/lower-third in: ~200-300 ms", "Full-screen graphic/transition: ~300-400 ms"]
+    parameters: {small_ms: "100", typical_ms: "200-300", large_ms: "375-400", sluggish_ms: ">=500"}
+    avoid_when: "Deliberate slow, cinematic title reveals (calm moods)."
+    genres: []
+    goals: [goal.energy, goal.clarity]
+    uses_capabilities: [cap.graphics.animate_in, cap.graphics.animate_out]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "Executing UX Animations: Duration and Motion Characteristics", author: "Nielsen Norman Group", url: "https://www.nngroup.com/articles/animation-duration/", locator: "Duration"}
+      - {title: "Material Design (v1) — Duration & easing", author: "Google", url: "https://m1.material.io/motion/duration-easing.html", locator: "Duration: mobile ~300 ms, large 375 ms, >400 ms too slow"}
+
+  - id: tech.motion.standard_curve_moves
+    type: technique
+    name: Standard curve for on-screen repositioning
+    summary: "When an element moves or resizes while staying on screen, use a standard ease-in-out curve with quick acceleration and long deceleration. Material 3 uses a stronger variant for its standard token."
+    when_to_use: "Text sliding to a new position, graphic resizing, layout changes."
+    how: ["M1/M2 standard cubic-bezier(0.4,0,0.2,1)", "M3 standard cubic-bezier(0.2,0,0,1) for snappier settle", "~250-350 ms"]
+    parameters: {m1_standard: "cubic-bezier(0.4, 0.0, 0.2, 1)", m3_standard: "cubic-bezier(0.2, 0.0, 0, 1.0)", duration_ms: "250-350"}
+    avoid_when: "Entrances/exits (use decelerate/accelerate)."
+    genres: []
+    goals: [goal.clarity]
+    uses_capabilities: [cap.graphics.ease_curve]
+    conflicts_with: []
+    requires: [principle.motion.ease_not_linear]
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Material Design (v1) — Duration & easing", author: "Google", url: "https://m1.material.io/motion/duration-easing.html", locator: "Standard curve"}
+      - {title: "Material Components Android — Motion", author: "Google", url: "https://github.com/material-components/material-components-android/blob/master/docs/theming/Motion.md", locator: "M3 easing tokens (values via search summary; page returned 503)"}
+
+  - id: tech.motion.anticipation
+    type: technique
+    name: Anticipation before a big move
+    summary: "A small opposite movement (slight scale-down or pull-back) before the main action prepares the eye and makes the main move read more clearly. Use sparingly on hero text or graphics, not on every caption."
+    when_to_use: "Hook title slams, logo reveals, big number reveals."
+    how: ["Scale to ~0.9-0.95 for ~60-100 ms", "Then main move with ease-out", "Optionally overshoot and settle"]
+    parameters: {anticipation_scale: "0.9-0.95 (heuristic)", anticipation_ms: "60-100 (heuristic)"}
+    avoid_when: "Frequent repeated elements (word captions) — adds latency and fatigue."
+    genres: [genre.brand_story, genre.product, genre.montage]
+    goals: [goal.energy, goal.retention_first_3s]
+    uses_capabilities: [cap.graphics.animate_in, cap.graphics.ease_curve]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "UI Animation: How to Apply Disney's 12 Principles of Animation to UI Design", author: "Interaction Design Foundation", url: "https://ixdf.org/literature/article/ui-animation-how-to-apply-disney-s-12-principles-of-animation-to-ui-design", locator: "Anticipation"}
+
+  - id: tech.motion.overshoot_settle
+    type: technique
+    name: Overshoot and settle (follow-through)
+    summary: "Let an element travel slightly past its target and settle back, giving weight and liveliness. Keep overshoot small and the settle quick so text is readable almost immediately."
+    when_to_use: "Playful/energetic caption pops, sticker/emoji graphics, keyword emphasis."
+    how: ["Spring or back-ease", "Overshoot ~5-12% of scale/distance", "Settle within ~100-150 ms after peak"]
+    parameters: {overshoot_pct: "5-12 (heuristic)", settle_ms: "100-150 (heuristic)", back_ease_example: "cubic-bezier(0.34, 1.56, 0.64, 1)"}
+    avoid_when: "Premium, serious or calm content; long text blocks."
+    genres: [genre.vlog, genre.podcast_clip, genre.talking_head]
+    goals: [goal.energy]
+    uses_capabilities: [cap.graphics.overshoot_spring]
+    conflicts_with: [tech.caption.style_minimal_calm]
+    requires: [principle.motion.ease_not_linear]
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "UI Animation: How to Apply Disney's 12 Principles of Animation to UI Design", author: "Interaction Design Foundation", url: "https://ixdf.org/literature/article/ui-animation-how-to-apply-disney-s-12-principles-of-animation-to-ui-design", locator: "Follow through and overlapping action; Exaggeration"}
+
+  - id: tech.motion.stagger_overlap
+    type: technique
+    name: Stagger related elements (overlapping action)
+    summary: "Animate a group in sequence — lead element first, supporting elements slightly after — so hierarchy is communicated by order and the group feels organic rather than mechanical."
+    when_to_use: "Multi-word kinetic titles, title + subtitle, list reveals."
+    how: ["Lead element (key word/image) first", "Followers offset by ~30-80 ms each", "Total sequence ideally <= ~500 ms"]
+    parameters: {stagger_ms: "30-80 (heuristic)", total_ms: "<=500"}
+    avoid_when: "Word-by-word speech-synced captions (speech timing already sequences them)."
+    genres: [genre.brand_story, genre.product, genre.tutorial]
+    goals: [goal.clarity, goal.brand_recall]
+    uses_capabilities: [cap.graphics.stagger]
+    conflicts_with: []
+    requires: [principle.motion.ease_not_linear]
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "UI Animation: How to Apply Disney's 12 Principles of Animation to UI Design", author: "Interaction Design Foundation", url: "https://ixdf.org/literature/article/ui-animation-how-to-apply-disney-s-12-principles-of-animation-to-ui-design", locator: "Follow through and overlapping action"}
+
+  - id: tech.motion.staging_single_focus
+    type: technique
+    name: Stage one focal motion at a time
+    summary: "At any moment only one element should be doing something attention-grabbing; everything else stays still. Competing motions split attention and hide the message."
+    when_to_use: "Any frame with text plus graphics plus camera moves."
+    how: ["Freeze secondary graphics while hero text animates", "Avoid animating text during a whip or zoom transition", "Sequence rather than overlap major moves"]
+    parameters: {simultaneous_major_motions: "1"}
+    avoid_when: "Montage chaos intentionally designed for energy."
+    genres: []
+    goals: [goal.clarity]
+    uses_capabilities: [cap.graphics.animate_in]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "UI Animation: How to Apply Disney's 12 Principles of Animation to UI Design", author: "Interaction Design Foundation", url: "https://ixdf.org/literature/article/ui-animation-how-to-apply-disney-s-12-principles-of-animation-to-ui-design", locator: "Staging"}
+
+  - id: tech.motion.arcs
+    type: technique
+    name: Move along arcs, not straight lines
+    summary: "Curved motion paths look more natural than straight ones for graphics that travel across the frame (stickers, arrows, product callouts)."
+    when_to_use: "Elements that travel more than a short distance."
+    how: ["Add a curved path or offset x/y easing", "Keep arc subtle for text"]
+    parameters: {}
+    avoid_when: "Short UI-like slides of captions (straight is fine)."
+    genres: [genre.product, genre.tutorial]
+    goals: [goal.clarity]
+    uses_capabilities: [cap.graphics.animate_in]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: low
+    sources:
+      - {title: "UI Animation: How to Apply Disney's 12 Principles of Animation to UI Design", author: "Interaction Design Foundation", url: "https://ixdf.org/literature/article/ui-animation-how-to-apply-disney-s-12-principles-of-animation-to-ui-design", locator: "Arcs"}
+
+  - id: tech.motion.frequent_means_subtle
+    type: technique
+    name: The more often an animation repeats, the subtler and shorter it should be
+    summary: "Animations seen dozens of times per reel (each caption chunk) must be short and understated; reserve bigger, longer motion for rare moments like the hook title or CTA."
+    when_to_use: "Designing caption entrance vs title/CTA animation."
+    how: ["Captions: <=150 ms, small offsets/scale", "Hook/CTA: up to ~300-400 ms with anticipation/overshoot"]
+    parameters: {caption_anim_ms: "<=150", hero_anim_ms: "300-400"}
+    avoid_when: "Never."
+    genres: []
+    goals: [goal.clarity, goal.watch_through]
+    uses_capabilities: [cap.graphics.animate_in, cap.text.caption_word]
+    conflicts_with: []
+    requires: [tech.motion.duration_budget]
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "Executing UX Animations: Duration and Motion Characteristics", author: "Nielsen Norman Group", url: "https://www.nngroup.com/articles/animation-duration/", locator: "frequency vs duration"}
+
+  - id: principle.motion.restraint_consistency
+    type: principle
+    name: One consistent motion vocabulary per reel
+    summary: "Choose a small set of motions (one entrance, one exit, one emphasis, one transition) with fixed curves and durations, and reuse them throughout. Consistency reads as professional and branded; exaggeration should be scaled to the content's tone."
+    when_to_use: "Template design and every edit."
+    how: ["Define motion tokens (curves + durations)", "Apply them to all captions/graphics", "Allow at most one 'special' motion for the hook or CTA"]
+    parameters: {entrance_variants: "1", transition_types: "1-2"}
+    avoid_when: "Never."
+    genres: []
+    goals: [goal.brand_recall, goal.clarity]
+    uses_capabilities: [cap.graphics.ease_curve]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "UI Animation: How to Apply Disney's 12 Principles of Animation to UI Design", author: "Interaction Design Foundation", url: "https://ixdf.org/literature/article/ui-animation-how-to-apply-disney-s-12-principles-of-animation-to-ui-design", locator: "Exaggeration; Solid drawing; Appeal"}
+      - {title: "Material Design (v1) — Duration & easing", author: "Google", url: "https://m1.material.io/motion/duration-easing.html", locator: "defined curve set"}
+
+  - id: tech.motion.emphasis_on_beat
+    type: technique
+    name: Use motion to emphasise meaning, timed to speech or beat
+    summary: "Trigger emphasis motion (pop, punch-in, colour flash) on the stressed word, a number, or a music hit, so movement reinforces content. Motion unrelated to meaning becomes distraction."
+    when_to_use: "Key claims, numbers, punchlines, beat drops in montages."
+    how: ["Detect stressed words/numbers in transcript and beats in music", "Align emphasis keyframe within ~1-2 frames of onset", "Limit to a few emphasis moments per 10 s"]
+    parameters: {sync_tolerance_frames: "1-2", emphasis_per_10s: "~1-3 (heuristic)"}
+    avoid_when: "Every word — then nothing stands out."
+    genres: [genre.talking_head, genre.montage, genre.podcast_clip]
+    goals: [goal.energy, goal.clarity]
+    uses_capabilities: [cap.text.highlight_word, cap.transform.punch_in, cap.analysis.beat_detect]
+    conflicts_with: []
+    requires: [principle.motion.restraint_consistency]
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "UI Animation: How to Apply Disney's 12 Principles of Animation to UI Design", author: "Interaction Design Foundation", url: "https://ixdf.org/literature/article/ui-animation-how-to-apply-disney-s-12-principles-of-animation-to-ui-design", locator: "Timing; Secondary action"}
+      - {title: "Using kinetic typography to convey emotion in text-based interpersonal communication", author: "Lee, Jun, Forlizzi, Hudson (DIS 2006)", url: "https://doi.org/10.1145/1142405.1142414", locator: "pp. 41-49"}
+
+  # ---------------- transitions ----------------
+
+  - id: tech.transition.match_cut
+    type: technique
+    name: Match cut (graphic or action match)
+    summary: "Cut between two shots linked by similar shape, colour, composition or continuing movement so the change feels seamless or meaningful. Graphic matches draw attention and imply comparison; matches on action hide the cut."
+    when_to_use: "Transformations (before/after with same framing), product reveals, montage continuity."
+    how: ["Find shots with matching shape/position or continuing motion", "Align the matched element's position in frame", "Cut on the motion, mid-action", "Match colour/brightness across the cut"]
+    parameters: {position_alignment: "matched element within a few % of frame between shots (heuristic)"}
+    avoid_when: "No genuine visual link exists — forced matches look gimmicky."
+    genres: [genre.transformation, genre.montage, genre.product, genre.brand_story]
+    goals: [goal.rewatch, goal.watch_through]
+    uses_capabilities: [cap.transition.match_cut, cap.transform.punch_in]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Match Cut", author: "StudioBinder", url: "https://www.studiobinder.com/blog/match-cut/", locator: "graphic match, match on action (via search summary)"}
+      - {title: "Match cut", author: "Wikipedia", url: "https://en.wikipedia.org/wiki/Match_cut", locator: "definition"}
+
+  - id: tech.transition.whip_pan
+    type: technique
+    name: Whip-pan transition
+    summary: "Join two shots through fast directional motion blur, either shot in camera or simulated in post with directional blur on the outgoing tail and incoming head. Adds energy; works best when pan speed, direction and brightness match."
+    when_to_use: "Location changes in vlogs/travel, energetic montages."
+    how: ["Match direction and speed of both pans", "Cut inside the blurred frames", "Simulated: ~4-8 frames of directional blur + position offset each side (heuristic)", "Match brightness/colour at the join"]
+    parameters: {blur_frames_each_side: "4-8 (heuristic)", total_ms_at_30fps: "~250-500"}
+    avoid_when: "Calm or serious content; overuse (more than 1-2 per reel feels like a template)."
+    genres: [genre.vlog, genre.montage, genre.event_recap]
+    goals: [goal.energy]
+    uses_capabilities: [cap.transition.whip_pan]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "What is a Whip Pan Shot", author: "StudioBinder", url: "https://www.studiobinder.com/camera-shots/camera-movements/whip-pan-shot/", locator: "via search summary"}
+      - {title: "How to Do a Whip Pan in Film and Video", author: "No Film School", url: "https://nofilmschool.com/how-to-do-a-whip-pan", locator: "consistent pan speed; slow shutter (via search summary)"}
+
+  - id: tech.transition.zoom_punch
+    type: technique
+    name: Zoom/punch-in transition and jump-cut punch-ins
+    summary: "Alternate framing scale (e.g. 100% to ~115-125%) at cuts within one talking-head take to hide jump cuts and add rhythm; a fast zoom-through can also bridge two shots. Supersample to avoid softness."
+    when_to_use: "Talking heads with jump cuts; energetic emphasis moments."
+    how: ["Alternate between wide and punched framing at cuts", "Instant punch for emphasis or 1-4 s slow push for build", "Keep eyes in the upper third after scaling"]
+    parameters: {scale: "1.10-1.25", instant_or_slow_s: "0 or 1-4"}
+    avoid_when: "Low-resolution source where scaling visibly softens the face."
+    genres: [genre.talking_head, genre.podcast_clip, genre.tutorial]
+    goals: [goal.energy, goal.watch_through]
+    uses_capabilities: [cap.transform.punch_in, cap.transition.zoom]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: low
+    sources:
+      - {title: "Knowledge base schema (punch-in capability example)", author: "project", url: "knowledge/SCHEMA.md", locator: "cap.transform.punch_in parameters"}
+      - {title: "Reference reel analysis (bathroom.mp4)", author: "project analysis", url: "analysis/bathroom/notes.md", locator: "Edit style vector"}
+
+  - id: tech.transition.dip_to_black
+    type: technique
+    name: Dip to black for section breaks
+    summary: "A short fade through black marks a change of section or time and gives a breath before a new beat; use rarely in reels because it costs momentum."
+    when_to_use: "Between hook/intro and main body, or before the end card."
+    how: ["~0.3-0.8 s total", "Ease-in-out opacity", "Duck/transition audio at the same time"]
+    parameters: {duration_s: "0.3-0.8"}
+    avoid_when: "Fast montages where every frame must carry energy."
+    genres: [genre.testimonial, genre.brand_story]
+    goals: [goal.emotion]
+    uses_capabilities: [cap.transition.dip_to_black]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: low
+    sources:
+      - {title: "Reference reel analysis (bathroom.mp4)", author: "project analysis", url: "analysis/bathroom/notes.md", locator: "Technical: black 9.32-10.04 s (0.72 s dip)"}
+
+  - id: tech.transition.cut_default
+    type: technique
+    name: Hard cut as the default transition
+    summary: "Most transitions in professional reels are plain cuts; designed transitions (whip, zoom, match) are accents. Limit to a consistent 1-2 transition types per reel."
+    when_to_use: "Default between all shots."
+    how: ["Use cuts", "Reserve stylised transitions for section changes or genuine visual links"]
+    parameters: {stylised_transition_types_per_reel: "1-2"}
+    avoid_when: "Never as a rule; deviate for intent."
+    genres: []
+    goals: [goal.watch_through, goal.clarity]
+    uses_capabilities: [cap.cut.hard_cut]
+    conflicts_with: []
+    requires: [principle.motion.restraint_consistency]
+    evidence_level: practitioner
+    confidence: medium
+    sources:
+      - {title: "Reference reel analysis (bathroom.mp4)", author: "project analysis", url: "analysis/bathroom/notes.md", locator: "44 cuts, one dip transition"}
+      - {title: "UI Animation: How to Apply Disney's 12 Principles of Animation to UI Design", author: "Interaction Design Foundation", url: "https://ixdf.org/literature/article/ui-animation-how-to-apply-disney-s-12-principles-of-animation-to-ui-design", locator: "Exaggeration: excess annoys"}
+
+  # ---------------- motion anti-patterns ----------------
+
+  - id: anti.motion.flashing
+    type: anti_pattern
+    name: More than three flashes per second or saturated-red flashes
+    summary: "Flashing more than three times in any one second over a large screen area, or transitions to/from saturated red, can trigger photosensitive seizures and breach broadcast/web accessibility rules. Beat-synced strobe edits and flash transitions are the usual culprits."
+    when_to_use: "Detect: luminance/red flash analysis over sliding 1 s windows."
+    how: ["Run flash detection on render", "Space flashes >= 1/3 s apart or reduce contrast/area", "Avoid full-frame red flashes"]
+    parameters: {max_flashes_per_s: "3", area_threshold: "> 1/4 of screen (broadcast rule)"}
+    avoid_when: "Never acceptable."
+    genres: [genre.montage, genre.event_recap]
+    goals: [goal.trust]
+    uses_capabilities: [cap.analysis.flash_check]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: high
+    sources:
+      - {title: "Understanding Success Criterion 2.3.1: Three Flashes or Below Threshold", author: "W3C WAI", url: "https://w3c.github.io/wcag21/understanding/three-flashes-or-below-threshold", locator: "via search summary"}
+      - {title: "Recommendation ITU-R BT.1702 — Guidance for the reduction of photosensitive epileptic seizures", author: "ITU-R", url: "https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.1702-3-202311-I!!PDF-E.pdf", locator: "saturated red transitions (via search summary)"}
+      - {title: "ITC Guidance Note for Licensees on Flashing Images and Regular Patterns", author: "ITC/Ofcom", url: "https://www.ofcom.org.uk/__data/assets/pdf_file/0021/16248/gn_flash.pdf", locator: "3 flashes/s; 1/4 screen area (via search summary)"}
+
+  - id: anti.motion.too_slow
+    type: anti_pattern
+    name: Sluggish text and graphic animation
+    summary: "Animations of 500 ms or more on routine elements feel slow, delay reading and pad the edit; in reels they also eat into the short attention window."
+    when_to_use: "Detect: routine caption/graphic animations >= 500 ms."
+    how: ["Cut to 100-300 ms", "Reserve longer only for one hero moment"]
+    parameters: {threshold_ms: "500"}
+    avoid_when: "Deliberate calm-style fades (still keep <= ~500 ms)."
+    genres: []
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.graphics.animate_in]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: high
+    sources:
+      - {title: "Executing UX Animations: Duration and Motion Characteristics", author: "Nielsen Norman Group", url: "https://www.nngroup.com/articles/animation-duration/", locator: "Duration"}
+
+  - id: anti.motion.vestibular_overload
+    type: anti_pattern
+    name: Excessive zooms, shakes and parallax
+    summary: "Constant zoom-pulses, camera shake effects and large parallax moves can cause dizziness or nausea for motion-sensitive viewers and make text unreadable."
+    when_to_use: "Detect: continuous transform animation on most shots; shake effects behind text."
+    how: ["Limit shake/zoom pulses to emphasis moments", "Hold text still while background moves", "Reduce amplitude"]
+    parameters: {}
+    avoid_when: "Short deliberate accent (one impact moment)."
+    genres: [genre.montage, genre.vlog]
+    goals: [goal.watch_through, goal.clarity]
+    uses_capabilities: [cap.transform.punch_in, cap.effect.camera_shake]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    sources:
+      - {title: "Executing UX Animations: Duration and Motion Characteristics", author: "Nielsen Norman Group", url: "https://www.nngroup.com/articles/animation-duration/", locator: "vestibular disorders / excessive motion"}
+
+  # ===================================================================
+  # EXAMPLES (reference reel)
+  # ===================================================================
+
+  - id: example.bathroom.kinetic_beside_face
+    type: example
+    name: "Reference reel: kinetic text beside the face"
+    summary: "In the reference testimonial reel, on-screen text is 1-4 words with mixed sizes and weights; the key word ('Business', 'Creative', 'Over Deliver.') is enlarged and placed next to the speaker rather than as bottom-centre subtitles."
+    when_to_use: "Template for editorial-kinetic caption style."
+    how: ["Mixed weights", "Key word enlarged", "Placed in free space beside the face"]
+    parameters: {words_per_card: "1-4", text_on_screen_at_s: "0.3"}
+    avoid_when: "Information-dense speech."
+    genres: [genre.testimonial, genre.brand_story]
+    goals: [goal.brand_recall, goal.retention_first_3s]
+    uses_capabilities: [cap.text.kinetic, cap.text.highlight_word]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: medium
+    sources:
+      - {title: "Reference reel analysis (bathroom.mp4)", author: "project analysis", url: "analysis/bathroom/notes.md", locator: "Craft observations; Edit style vector"}
+
+  - id: example.bathroom.text_over_broll
+    type: example
+    name: "Reference reel: text continues over b-roll"
+    summary: "The spoken line's text keeps running when the picture cuts to b-roll, so the sentence never visually stops and the b-roll illustrates the words being read."
+    when_to_use: "Testimonials/brand stories intercutting b-roll mid-sentence."
+    how: ["Keep caption track independent of video cuts", "Choose b-roll that literally illustrates the words"]
+    parameters: {}
+    avoid_when: "B-roll is busy enough to break text contrast (add backing)."
+    genres: [genre.testimonial, genre.brand_story]
+    goals: [goal.watch_through, goal.clarity]
+    uses_capabilities: [cap.text.kinetic]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: medium
+    sources:
+      - {title: "Reference reel analysis (bathroom.mp4)", author: "project analysis", url: "analysis/bathroom/notes.md", locator: "Craft observations: text continues over b-roll"}
+
+  - id: example.bathroom.two_tone_grade
+    type: example
+    name: "Reference reel: warm interview vs teal/green b-roll"
+    summary: "The reference reel grades its interview warm orange and its b-roll teal/green, a consistent two-tone palette that makes A-roll/B-roll alternation feel intentional."
+    when_to_use: "Model for A-roll/B-roll palette separation."
+    how: ["Group interview clips warm", "Group b-roll cool/teal"]
+    parameters: {}
+    avoid_when: "Single-scene content."
+    genres: [genre.testimonial, genre.brand_story]
+    goals: [goal.brand_recall]
+    uses_capabilities: [cap.color.group_grade, cap.color.split_tone]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: medium
+    sources:
+      - {title: "Reference reel analysis (bathroom.mp4)", author: "project analysis", url: "analysis/bathroom/notes.md", locator: "Craft observations: Grade"}
+
+  - id: example.bathroom.long_shot_text_driven
+    type: example
+    name: "Reference reel: 8.6 s shot kept alive by text"
+    summary: "The longest shot (8.64 s at 38 s) far exceeds the reel's 1.08 s median, yet holds because kinetic text changes throughout instead of cuts."
+    when_to_use: "Evidence that text can substitute for cuts in a strong performance."
+    how: ["Change text chunk every ~1 s", "Vary scale/position"]
+    parameters: {shot_s: "8.64", median_shot_s: "1.08"}
+    avoid_when: "Weak performance or no text plan."
+    genres: [genre.testimonial]
+    goals: [goal.watch_through]
+    uses_capabilities: [cap.text.kinetic]
+    conflicts_with: []
+    requires: []
+    evidence_level: single_opinion
+    confidence: medium
+    sources:
+      - {title: "Reference reel analysis (bathroom.mp4)", author: "project analysis", url: "analysis/bathroom/notes.md", locator: "Edit style vector: Longest shot; Craft observations"}

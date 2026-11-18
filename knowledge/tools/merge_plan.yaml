@@ -1,0 +1,1231 @@
+# Hand-curated merge plan. build_kb.py applies this to knowledge/drafts/* and writes
+# knowledge/capabilities.yaml and knowledge/graph/*. Never hand-edit generated files —
+# edit this plan, rebuild, re-validate.
+#
+# ADR paths used as sources are relative to the project root.
+
+# ───────────────────────── capability id reconciliation ─────────────────────────
+# guessed id (used in graph drafts) → real catalog id (string) or list of ids.
+cap_id_map:
+  cap.analysis.beat_detect: cap.analysis.beat_detection
+  cap.analysis.blink_detection: cap.analysis.blink_detection          # new
+  cap.analysis.color_analysis: cap.analysis.palette_extraction        # new (ADR-0011)
+  cap.analysis.contrast_check: cap.analysis.contrast_check            # new
+  cap.analysis.diarization: cap.analysis.speaker_diarization
+  cap.analysis.face_detect: cap.analysis.face_detection               # new
+  cap.analysis.face_expression: cap.analysis.face_expression          # new
+  cap.analysis.face_tracking: cap.analysis.subject_tracking
+  cap.analysis.flash_check: cap.analysis.photosensitivity
+  cap.analysis.gaze_detection: cap.analysis.gaze_estimation           # new
+  cap.analysis.loudness_measure: cap.analysis.loudness_measurement
+  cap.analysis.mono_check: cap.analysis.mono_compatibility            # new
+  cap.analysis.motion_detection: cap.analysis.motion_estimation       # new
+  cap.analysis.preview_render: cap.analysis.contact_sheet             # new
+  cap.analysis.probe_metadata: cap.analysis.probe_metadata            # new
+  cap.analysis.retention_curve: cap.analysis.retention_analytics      # new (unsupported)
+  cap.analysis.saliency: cap.analysis.subject_tracking                # closest: face/pose position as eye-trace proxy
+  cap.analysis.shape_matching: cap.analysis.visual_search             # closest
+  cap.analysis.shot_detection: cap.analysis.scene_detection
+  cap.analysis.silence_detect: cap.analysis.silence_detection
+  cap.analysis.speech_transcript: cap.analysis.transcription
+  cap.analysis.transcribe: cap.analysis.transcription
+  cap.audio.breath_reduce: cap.audio.breath_attenuation               # new
+  cap.audio.compress: cap.audio.compression
+  cap.audio.declick: cap.audio.declick                                # new
+  cap.audio.declip: cap.audio.declip                                  # new
+  cap.audio.deess: cap.audio.de_ess
+  cap.audio.dehum: cap.audio.dehum                                    # new
+  cap.audio.denoise: cap.audio.noise_reduction
+  cap.audio.dereverb: cap.audio.de_reverb
+  cap.audio.duck_sidechain: cap.audio.ducking
+  cap.audio.dynamic_eq: cap.audio.dynamic_eq                          # new
+  cap.audio.expand: cap.audio.expander                                # new
+  cap.audio.highpass: cap.audio.high_pass
+  cap.audio.mix: cap.audio.mix                                        # new
+  cap.audio.music_beat_sync: cap.cut.cut_to_beat
+  cap.audio.music_ducking: cap.audio.ducking
+  cap.audio.music_select: cap.audio.music_library_select              # new (ADR-0022)
+  cap.audio.pan: cap.audio.pan                                        # new
+  cap.audio.reverb: cap.audio.reverb                                  # new
+  cap.audio.room_tone_fill: cap.audio.room_tone
+  cap.audio.sfx: cap.audio.sfx_add
+  cap.audio.sfx_place: cap.audio.sfx_add
+  cap.audio.slip: cap.trim.slip
+  cap.audio.split_edit: [cap.cut.j_cut, cap.cut.l_cut]
+  cap.audio.stem_separate: cap.audio.stem_separation
+  cap.audio.stems: cap.audio.stem_separation
+  cap.audio.true_peak_limit: cap.audio.limiter
+  cap.audio.voiceover: cap.audio.voiceover                            # new (recorded VO, not TTS)
+  cap.audio.volume_keyframe: cap.audio.volume_automation
+  cap.color.chart_match: cap.color.shot_match
+  cap.color.color_space_transform: cap.color.technical_lut
+  cap.color.curves: cap.color.rgb_curves
+  cap.color.grade_match: cap.color.shot_match
+  cap.color.group_grade: cap.compositing.adjustment_layer
+  cap.color.hue_vs_hue: cap.color.hue_sat_curves
+  cap.color.lut_apply: cap.color.creative_lut
+  cap.color.primary_balance: [cap.color.white_balance, cap.color.color_wheels]
+  cap.color.saturation: cap.color.saturation_vibrance
+  cap.color.secondary_qualifier: cap.color.hsl_qualifier
+  cap.color.split_tone: cap.color.color_wheels
+  cap.color.tone_map_hdr_sdr: cap.color.hdr_tonemap
+  cap.compositing.broll_overlay: cap.cut.b_roll_cutaway
+  cap.compositing.overlay_broll: cap.cut.b_roll_cutaway
+  cap.cut.snap_to_marker: cap.cut.cut_to_beat
+  cap.cut.split_edit: [cap.cut.j_cut, cap.cut.l_cut]
+  cap.cut.trim: cap.trim.trim_in_out
+  cap.effect.blur: cap.effect.gaussian_blur
+  cap.export.color_tag: cap.export.color_tagging
+  cap.export.render: cap.export.h264_mp4
+  cap.export.variants: cap.export.multi_version
+  cap.graphics.animate_in: cap.text.animation_preset
+  cap.graphics.animate_out: cap.text.animation_preset
+  cap.graphics.ease_curve: cap.graphics.motion_easing                 # new
+  cap.graphics.logo: cap.graphics.logo_watermark
+  cap.graphics.overshoot_spring: cap.graphics.motion_easing
+  cap.graphics.progress_counter: cap.graphics.progress_bar
+  cap.graphics.split_screen: cap.compositing.split_screen
+  cap.graphics.stagger: cap.graphics.motion_easing
+  cap.text.backing_box: cap.text.background_box
+  cap.text.caption_phrase: cap.text.auto_captions
+  cap.text.caption_word: cap.text.word_highlight
+  cap.text.captions: cap.text.auto_captions
+  cap.text.cta_card: cap.graphics.cta_card
+  cap.text.font_select: cap.text.caption_style
+  cap.text.highlight_word: cap.text.keyword_emphasis
+  cap.text.safe_zone_layout: cap.text.safe_zone
+  cap.text.speaker_color: cap.text.caption_style
+  cap.text.stroke_shadow: cap.text.caption_style
+  cap.transform.flip_horizontal: cap.transform.flip_mirror
+  cap.transform.reframe: cap.transform.auto_reframe
+  cap.transition.crossfade: cap.transition.cross_dissolve
+  cap.transition.match_cut: cap.cut.hard_cut                          # a match cut is a hard cut chosen for a visual match
+  cap.transition.whip: cap.transition.whip_pan
+
+# ───────────────────────── capability patches (by id) ─────────────────────────
+# Fields replace existing values. `pinned` sets requires_pinned_ffmpeg (default false).
+cap_patches:
+  cap.cut.multicam_switch:
+    notes: "Speaker-based angle switching uses cap.analysis.speaker_diarization (engine: pyannote) plus face boxes from cap.analysis.face_detection; ffmpeg executes the chosen segment list."
+  cap.cut.cut_to_beat:
+    notes: "Beat grid and sections come from cap.analysis.beat_detection (engine: beat_this + librosa, stored in music_index.json per ADR-0022). The compiler snaps cuts where speech allows; ffmpeg executes."
+    decided_by: [ADR-0022]
+  cap.cut.silence_removal:
+    notes: "Detection = cap.analysis.voice_activity (Silero VAD) cross-checked with cap.analysis.silence_detection; execution = ffmpeg segment cuts. Over-tight padding sounds robotic; QA flags dead air > 1.5 s (ADR-0006)."
+    decided_by: [ADR-0006]
+  cap.cut.filler_word_removal:
+    notes: "Needs word timestamps from cap.analysis.transcription and cap.analysis.filler_detection (engine). Add 5–10 ms audio fades at each cut and room tone under the gap (ADR-0017)."
+  cap.transition.morph_cut:
+    notes: "Unsupported: needs dense optical-flow warping between non-adjacent frames; our face landmarks (MediaPipe) do not provide this and no warping model is in the stack. Use cap.transform.punch_in alternation or a b-roll cover instead."
+  cap.transform.auto_reframe:
+    notes: "ffmpeg executes a keyframed crop path (renderer-split: follow face = ffmpeg). The path comes from cap.analysis.subject_tracking (engine: MediaPipe face/pose), smoothed before compile."
+  cap.transform.stabilize:
+    notes: "ffmpeg: vidstabdetect/vidstabtransform needs libvidstab, which is NOT in the ADR-0023 pinned-build list (libzimg, libplacebo, libass, VideoToolbox); deshake is always available at lower quality. Add vidstab to the pinned build before relying on it."
+  cap.transform.beat_zoom_pulse:
+    notes: "Triggered from the engine beat grid (cap.analysis.beat_detection) or caption emphasis timestamps."
+  cap.speed.ramp:
+    notes: "Resolved in ADR-0004: ffmpeg setpts (segmented or expression), atempo where audio is retimed. Never speed-ramp speech (ADR-0017); mute or replace audio on ramped segments."
+    decided_by: [ADR-0004, ADR-0017]
+  cap.speed.ml_interpolation:
+    notes: "Unsupported for now: RIFE-class frame interpolation is deferred until its weight licence is checked (ADR-0004). Fallback: cap.speed.optical_flow (ffmpeg minterpolate) or real high-frame-rate footage."
+    decided_by: [ADR-0004]
+  cap.color.technical_lut:
+    notes: "ffmpeg: lut3d with the manufacturer's conversion LUT; gamut/transfer transforms via zscale (libzimg) in the pinned build (ADR-0023). Set explicit in/out matrices and ranges on every scale and lut3d."
+    pinned: true
+    decided_by: [ADR-0023]
+  cap.color.hdr_tonemap:
+    notes: "Stage S0 of the ADR-0023 colour pipeline: HLG/PQ (incl. iPhone Dolby Vision) to bt709 SDR via zscale+tonemap or libplacebo in the pinned build; fallback AVFoundation tonemap. Every reel is delivered SDR."
+    pinned: true
+    decided_by: [ADR-0023]
+  cap.color.creative_lut:
+    notes: "ffmpeg: lut3d (+ blend for intensity < 1). Apply after per-clip correction and at partial strength (ADR-0023); explicit in/out matrices on lut3d."
+    decided_by: [ADR-0023]
+  cap.color.power_window:
+    notes: "Static shapes in ffmpeg (geq/alphamerge + maskedmerge). Tracked windows use a mask track from cap.compositing.point_tracking (engine: SAM 2.1) or face boxes (MediaPipe)."
+  cap.color.skin_tone:
+    notes: "Face-aware isolation uses MediaPipe face landmarks (engine) as the mask, then a hue-range correction in ffmpeg. ADR-0023 adds a skin-tone range QA check on face regions."
+    decided_by: [ADR-0023]
+  cap.color.shot_match:
+    notes: "Engine computes per-clip channel stats (signalstats / palette) and derives colorlevels/colorbalance per clip; ADR-0023 requires per-clip exposure, white balance and cross-phone matching before the look LUT."
+    decided_by: [ADR-0023]
+  cap.audio.loudness_normalize:
+    parameters:
+      - {name: integrated, type: float, typical_range: "-14 (project target)", unit: LUFS}
+      - {name: true_peak, type: float, typical_range: "≤ -1.5 (project target, ADR-0017)", unit: dBTP}
+      - {name: lra, type: float, typical_range: "7–11", unit: LU}
+    notes: "ffmpeg: two-pass linear loudnorm (measure, then apply with linear=true) targeting -14 LUFS / -1.5 dBTP, limiter before it; verify on the final encoded file (ADR-0017, ADR-0023)."
+    decided_by: [ADR-0017, ADR-0023]
+  cap.audio.limiter:
+    parameters:
+      - {name: ceiling, type: float, typical_range: "-1.5 (project default, ADR-0017); -2 if mastering louder than -14 LUFS", unit: dBTP}
+      - {name: release, type: float, typical_range: "50–200", unit: ms}
+    notes: "ffmpeg: alimiter before the loudnorm pass (ADR-0023); loudnorm TP=-1.5 also enforces true peak."
+    decided_by: [ADR-0017, ADR-0023]
+  cap.export.loudness_target:
+    parameters:
+      - {name: integrated, type: float, typical_range: "-14 ± 1", unit: LUFS}
+      - {name: true_peak, type: float, typical_range: "≤ -1.5", unit: dBTP}
+    notes: "Same machinery as cap.audio.loudness_normalize, measured on the final encoded master. Gate: -14 LUFS / ≤ -1.5 dBTP (ADR-0006 as amended by ADR-0017)."
+    decided_by: [ADR-0006, ADR-0017]
+  cap.audio.noise_reduction:
+    renderer_owner: engine
+    engine_tool: "DeepFilterNet or RNNoise (licence to verify); ffmpeg afftdn/anlmdn fallback"
+    notes: "ADR-0017 voice chain: denoise first in the repair stage. Model candidates DeepFilterNet / RNNoise — licence pending, so until cleared the engine falls back to ffmpeg afftdn (or arnndn with an RNNoise model file). Over-processing causes watery artefacts; aim for 6–12 dB reduction."
+    decided_by: [ADR-0017]
+  cap.audio.voice_enhance:
+    renderer_owner: engine
+    engine_tool: "DeepFilterNet (licence pending) + ffmpeg EQ/compression chain"
+    notes: "Engine runs the speech-enhancement model on the voice stem before the ffmpeg mix; blend ≤ 80% wet to keep naturalness. Licence pending (ADR-0017 §3); fallback is ffmpeg arnndn + EQ + compression."
+    decided_by: [ADR-0017]
+  cap.audio.de_reverb:
+    renderer_owner: engine
+    engine_tool: "TBD (ADR-0023 adds de-reverb to the voice chain; tool not yet chosen)"
+    notes: "Required by ADR-0023 §4 voice finishing. ffmpeg has no dereverb filter, so this is an engine-side pre-processing step on the voice stem; the tool is not yet selected. Until then: gentle downward expansion + EQ cut 200–500 Hz in ffmpeg."
+    decided_by: [ADR-0023]
+  cap.audio.music_bed:
+    notes: "Tracks come only from the owned/licensed library assets/music/ with a licence record (ADR-0022); songs and trending audio are never baked in. A no-music variant is always exported so trending audio can be added in-app."
+    decided_by: [ADR-0022]
+  cap.audio.music_retime:
+    renderer_owner: ffmpeg
+    notes: "ADR-0022: the compiler does the musical edit — trim to reel length ending on an indexed clean ending (or loop + ending), align a section change or drop to the hook/payoff — using sections and beat grid from music_index.json (engine). ffmpeg executes cuts and acrossfades on bar boundaries."
+    decided_by: [ADR-0022]
+  cap.audio.stem_separation:
+    renderer_owner: engine
+    engine_tool: "Demucs"
+    notes: "Engine separates vocals/music/other stems before render (e.g. to remove music under found dialogue or to duck a song's vocal). Output stems are plain audio assets mixed by ffmpeg."
+  cap.audio.pitch_shift:
+    notes: "ffmpeg: rubberband is NOT in the ADR-0023 pinned-build list, so use asetrate+atempo+aresample (changes formants) unless rubberband is added."
+  cap.audio.ducking:
+    notes: "ffmpeg: volume automation compiled from engine VAD/transcript timings (rule-based, ADR-0022), or sidechaincompress with voice as key."
+    decided_by: [ADR-0022]
+  cap.audio.room_tone:
+    notes: "ffmpeg: aloop + amix under the dialogue track. ADR-0017: room tone under cuts instead of bare fades."
+    decided_by: [ADR-0017]
+  cap.text.auto_captions:
+    notes: "Word timings from cap.analysis.transcription (engine). Style family and tokens per ADR-0011/0017 (brand tokens override palette); ≤ 20 chars/s; never over the face box; safe zone is a warning for captions."
+    decided_by: [ADR-0011, ADR-0017]
+  cap.text.safe_zone:
+    notes: "Project default safe area x 120–888, y 288–1248 on 1080x1920 (ADR-0011). Hard gate for CTA, logo and end-card text; configurable warning for kinetic captions (ADR-0017)."
+    decided_by: [ADR-0011, ADR-0017]
+  cap.text.tracked_text:
+    notes: "Remotion draws the text from a per-frame position list produced by the engine (face/pose from MediaPipe, objects from SAM 2.1 mask tracks via cap.compositing.point_tracking)."
+  cap.graphics.arrow_callout:
+    notes: "Static targets fine; moving targets use engine tracks (cap.compositing.point_tracking / cap.analysis.subject_tracking) as the position list."
+  cap.compositing.background_removal:
+    renderer_owner: engine
+    engine_tool: "MediaPipe person segmentation (v1); SAM 2.1 only if quality requires"
+    notes: "Engine precomputes a per-frame person matte (ADR-0004); ffmpeg uses it (alphamerge/maskedmerge) for text-behind-subject, portrait blur or background replacement. Hair edges are soft in MediaPipe; escalate to SAM 2.1 per clip if QA fails."
+    decided_by: [ADR-0004]
+  cap.compositing.rotoscope:
+    renderer_owner: engine
+    engine_tool: "SAM 2.1 (prompted masks propagated through video)"
+    notes: "Engine produces object masks from point/box prompts chosen by Claude on a contact sheet; masks are consumed by ffmpeg maskedmerge or as Remotion track mattes."
+  cap.compositing.point_tracking:
+    renderer_owner: engine
+    engine_tool: "SAM 2.1 mask propagation (objects); MediaPipe (faces/pose)"
+    notes: "Object-level tracking only: bbox/centroid per frame from SAM 2.1 masks or MediaPipe landmarks, output as keyframes for ffmpeg or Remotion. Sub-pixel point tracking and planar corner pins are not provided."
+  cap.compositing.planar_screen_replace:
+    notes: "Unsupported: needs a planar (homography) tracker; SAM 2.1 masks give object position, not stable corner pins. Static screens can use cap.transform.perspective with fixed corners."
+  cap.compositing.camera_track_3d:
+    notes: "Unsupported: needs structure-from-motion camera solving; out of scope for the engine and both renderers."
+  cap.compositing.object_removal:
+    notes: "Unsupported: needs video inpainting. SAM 2.1 can mask the object, but nothing in the stack fills the hole convincingly; ffmpeg delogo/removelogo only smear a small static area (see cap.effect.censor_blur)."
+  cap.compositing.text_behind_subject:
+    notes: "ADR-0004: Remotion draws the text; ffmpeg composites the precomputed person matte back over it. v1 matte = MediaPipe person segmentation (engine); SAM 2.1 only if quality requires."
+    decided_by: [ADR-0004]
+  cap.effect.depth_background_blur:
+    renderer_owner: ffmpeg
+    notes: "Person-matte approximation: engine matte (cap.compositing.background_removal), ffmpeg gblur on the background and maskedmerge. No depth model, so multi-plane falloff is not reproduced."
+  cap.effect.censor_blur:
+    notes: "ffmpeg: crop region → pixelize/boxblur → overlay; delogo for small logos. Moving targets follow an engine track (MediaPipe faces or SAM 2.1 masks)."
+  cap.effect.beauty_retouch:
+    notes: "Unsupported by design: MediaPipe gives face masks, but texture-preserving retouch is not built and appearance edits need subject consent. Global smoothing is not equivalent."
+  cap.effect.lip_sync:
+    notes: "Unsupported: needs a generative face model; also consent-sensitive."
+  cap.effect.ai_upscale:
+    notes: "Unsupported: no ML super-resolution model in the stack; ffmpeg only offers classic scalers (scale=flags=lanczos). Prefer 4K sources for big punch-ins."
+  cap.trim.generative_extend:
+    notes: "Unsupported: needs a video-generation model; neither the engine nor the renderers synthesize footage. Use cap.trim.hold_extend (freeze/tpad) or a b-roll cover."
+  cap.color.relight:
+    notes: "Unsupported: needs depth/normal estimation and relighting models. Approximation: a static or face-tracked power window brightening (cap.color.power_window)."
+  cap.audio.tts_voiceover:
+    notes: "Unsupported in-stack: needs an external TTS service; once generated it is just an audio file mixed by ffmpeg (see cap.audio.voiceover)."
+  cap.audio.dubbing_translate:
+    notes: "Unsupported: needs ASR + MT + voice cloning. Captions-only translation is cap.text.translated_captions; platform-side AI dubbing (e.g. Meta) can be used after upload."
+  cap.audio.voice_effect:
+    notes: "Classic DSP presets in ffmpeg (bandpass, aecho, vibrato, flanger). AI 'character' voice conversion is not in the stack."
+  cap.export.captions_burn_in:
+    notes: "Drawn in the Remotion overlay by decision (ADR-0004/0011: caption families are Remotion components). The pinned build adds libass (ADR-0023), usable only as a fallback for plain ASS subtitles, not for the caption families."
+    decided_by: [ADR-0004, ADR-0011, ADR-0023]
+  cap.export.captions_sidecar:
+    notes: "SRT/VTT generated from the transcript JSON and delivered with every master (ADR-0017 delivery profile); ffmpeg can mux (-c:s mov_text)."
+    decided_by: [ADR-0017]
+  cap.export.hdr_delivery:
+    notes: "Unsupported by decision: ADR-0023 tonemaps all HDR sources to bt709 SDR at ingest; Remotion overlays are sRGB/SDR and there is no colour-managed PQ/HLG composite or Dolby Vision authoring. Deliver SDR."
+    decided_by: [ADR-0023]
+  cap.export.color_tagging:
+    notes: "-colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv, with explicit in/out matrices on every scale/lut3d/overlay (ADR-0023). Mismatches cause washed-out uploads; QA checks brand swatch ΔE through the overlay path."
+    decided_by: [ADR-0023]
+  cap.export.multi_version:
+    notes: "ADR-0017 delivery profile: high-bitrate master, textless version, no-music version, SRT/VTT, cover frame, optional 4:5 cut-down; re-run the compile per version (overlays re-laid out per aspect)."
+    decided_by: [ADR-0017]
+  cap.analysis.transcription:
+    renderer_owner: engine
+    engine_tool: "mlx-whisper / Whisper (final model chosen by the ADR-0007 bake-off)"
+    notes: "Engine pre-render step producing word-level timestamps and confidences (not a Remotion feature; the earlier remotion label was wrong). Low-confidence words are proofed per ADR-0021 before captions are sendable."
+    decided_by: [ADR-0007, ADR-0021]
+  cap.analysis.filler_detection:
+    renderer_owner: engine
+    engine_tool: "transcript tokens (Whisper prompted to keep disfluencies) + Silero VAD"
+    notes: "Derived from cap.analysis.transcription tokens; Whisper often omits fillers unless prompted, so cross-check short voiced segments with VAD."
+  cap.analysis.speaker_diarization:
+    renderer_owner: engine
+    engine_tool: "pyannote"
+    notes: "Engine labels who speaks when; feeds multicam/layout switching, speaker-coded captions and J/L-cut placement."
+  cap.analysis.beat_detection:
+    renderer_owner: engine
+    engine_tool: "beat_this + librosa"
+    notes: "Engine builds the beat/downbeat grid, BPM, sections, clean ending points and loopable regions into music_index.json (ADR-0022). Check half/double-time errors."
+    decided_by: [ADR-0022]
+  cap.analysis.subject_tracking:
+    renderer_owner: engine
+    engine_tool: "MediaPipe face detection/landmarks + pose"
+    notes: "Engine tracks faces and bodies per frame for reframing, caption placement and the caption-over-face gate (measured on the rendered base, ADR-0017). Output feeds cap.transform.auto_reframe (ffmpeg)."
+    decided_by: [ADR-0017]
+  cap.analysis.highlight_detection:
+    renderer_owner: engine
+    engine_tool: "engine signals (transcript, VAD, faces, motion, loudness) + Claude planner selection"
+    notes: "Engine prepares transcript and per-segment signals; Claude (selects stage, ADR-0016) chooses the moments. Not a renderer function."
+  cap.analysis.visual_search:
+    renderer_owner: engine
+    engine_tool: "sampled frames / contact sheets + Claude vision"
+    notes: "Engine samples frames and builds contact sheets; Claude tags shots (content, shape/colour for match cuts). No CLIP-class model is pinned yet."
+  cap.analysis.scene_detection:
+    renderer_owner: engine
+    engine_tool: "ffmpeg scdet / select=scene (run by the engine)"
+    notes: "Pre-render analysis run by the engine via ffmpeg scdet (threshold ~8 per the reference-reel protocol) or select='gt(scene,0.35)'. Fades and flash cuts cause misses/false positives."
+  cap.analysis.silence_detection:
+    renderer_owner: engine
+    engine_tool: "ffmpeg silencedetect + Silero VAD"
+    notes: "Pre-render analysis; level-based silencedetect is cross-checked with VAD so quiet speech is not cut."
+  cap.analysis.crop_detection:
+    renderer_owner: engine
+    engine_tool: "ffmpeg cropdetect (run by the engine)"
+    notes: "Ingest analysis for letterboxed or pillarboxed sources."
+  cap.analysis.scopes:
+    renderer_owner: engine
+    engine_tool: "ffmpeg signalstats / waveform / vectorscope (run by the engine)"
+    notes: "Numeric signal stats per shot (ideal for Claude) feed correction and matching; also used by colour QA (highlight clipping, skin range — ADR-0023)."
+    decided_by: [ADR-0023]
+  cap.analysis.loudness_measurement:
+    notes: "QA measurement on the final encoded render: ffmpeg ebur128=peak=true or loudnorm print_format=json. Gate -14 LUFS / ≤ -1.5 dBTP (ADR-0017)."
+    decided_by: [ADR-0006, ADR-0017]
+  cap.analysis.photosensitivity:
+    notes: "QA on the render: ffmpeg photosensitivity filter. Relevant when stacking flash cuts and strobe effects (anti.motion.flashing)."
+
+# ───────────────────────── new capabilities ─────────────────────────
+new_caps:
+  - id: cap.analysis.face_detection
+    category: analysis
+    name: Face detection and landmarks
+    description: "Find faces per frame with boxes and landmarks for reframing, caption placement and the caption-over-face check."
+    parameters:
+      - {name: sample_fps, type: float, typical_range: "5–30", unit: fps}
+      - {name: min_confidence, type: float, typical_range: "0.5–0.8"}
+    nle_names: {premiere: "Auto Reframe (internal)", resolve: "Face Refinement / Smart Reframe (internal)"}
+    renderer_owner: engine
+    engine_tool: "MediaPipe Face Detector / Face Landmarker"
+    notes: "Measured on the rendered base for the caption-over-face gate (ADR-0017)."
+    decided_by: [ADR-0017]
+    sources:
+      - {title: "MediaPipe Face Detector guide", url: "https://ai.google.dev/edge/mediapipe/solutions/vision/face_detector", locator: "overview"}
+      - {title: "ADR-0017 QA gate calibration", url: "docs/adr/0017-council-revisions-qa-captions-audio-delivery.md", locator: "§1 measure on the render"}
+  - id: cap.analysis.pose_estimation
+    category: analysis
+    name: Body pose estimation
+    description: "Track body keypoints per frame to frame gestures, follow a moving presenter and find motion peaks for cutting in movement."
+    parameters:
+      - {name: sample_fps, type: float, typical_range: "10–30", unit: fps}
+    nle_names: {}
+    renderer_owner: engine
+    engine_tool: "MediaPipe Pose Landmarker"
+    notes: "Complements face tracking when the face is small or turned away."
+    sources:
+      - {title: "MediaPipe Pose Landmarker guide", url: "https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker", locator: "overview"}
+  - id: cap.analysis.face_expression
+    category: analysis
+    name: Facial expression signals
+    description: "Estimate expression intensity (smile, brow raise, mouth open) per frame to find reactions and emotional peaks."
+    parameters:
+      - {name: blendshapes, type: string, typical_range: "smile, brow, jaw-open subsets"}
+    nle_names: {}
+    renderer_owner: engine
+    engine_tool: "MediaPipe Face Landmarker blendshapes"
+    notes: "Signals, not emotion labels; Claude interprets them alongside the transcript."
+    sources:
+      - {title: "MediaPipe Face Landmarker guide", url: "https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker", locator: "blendshapes output"}
+  - id: cap.analysis.gaze_estimation
+    category: analysis
+    name: Gaze direction (approximate)
+    description: "Approximate where a subject looks from iris and head pose, to support eyeline matches and eye-trace placement."
+    parameters:
+      - {name: output, type: enum, values: [left, right, up, down, camera]}
+    nle_names: {}
+    renderer_owner: engine
+    engine_tool: "MediaPipe Face Landmarker iris landmarks + head pose"
+    notes: "Coarse direction only; not calibrated eye tracking. True visual saliency is not modelled — faces, pose and motion are used as the proxy."
+    sources:
+      - {title: "MediaPipe Face Landmarker guide", url: "https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker", locator: "landmarks"}
+  - id: cap.analysis.blink_detection
+    category: analysis
+    name: Blink detection
+    description: "Detect blinks per frame so cuts can land on or near a natural blink and frozen frames avoid closed eyes."
+    parameters:
+      - {name: eye_closed_threshold, type: float, typical_range: "0.4–0.6 (blendshape score)"}
+    nle_names: {}
+    renderer_owner: engine
+    engine_tool: "MediaPipe Face Landmarker eyeBlink blendshapes"
+    notes: "Also used to pick cover frames and freeze frames with open eyes."
+    sources:
+      - {title: "MediaPipe Face Landmarker guide", url: "https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker", locator: "blendshapes output"}
+  - id: cap.analysis.voice_activity
+    category: analysis
+    name: Voice activity detection
+    description: "Mark where speech is present, independent of loudness, for pause removal, ducking and breath handling."
+    parameters:
+      - {name: threshold, type: float, typical_range: "0.4–0.6"}
+      - {name: min_silence, type: float, typical_range: "0.1–0.3", unit: s}
+    nle_names: {}
+    renderer_owner: engine
+    engine_tool: "Silero VAD"
+    notes: "Drives ducking envelopes and silence removal; cross-checked with ffmpeg silencedetect."
+    sources:
+      - {title: "Silero VAD", url: "https://github.com/snakers4/silero-vad", locator: "README"}
+  - id: cap.analysis.palette_extraction
+    category: analysis
+    name: Palette and look measurement
+    description: "Measure dominant and accent colours, luminance under the caption zone, saturation and warm/cool bias per scene."
+    parameters:
+      - {name: k, type: int, typical_range: "4–8"}
+      - {name: downscale, type: int, typical_range: "64–160", unit: px}
+    nle_names: {}
+    renderer_owner: engine
+    engine_tool: "k-means on downscaled frames (palette.json)"
+    notes: "ADR-0011 step 1; feeds caption style tokens when no brand kit exists (brand tokens override palette, ADR-0017)."
+    decided_by: [ADR-0011, ADR-0017]
+    sources:
+      - {title: "ADR-0011 Adaptive caption & typography style engine", url: "docs/adr/0011-adaptive-caption-style-engine.md", locator: "Decision §1"}
+  - id: cap.analysis.motion_estimation
+    category: analysis
+    name: Motion energy per shot
+    description: "Measure how much movement each shot contains over time to find cut-in-movement points and match shot length to motion."
+    parameters:
+      - {name: window, type: float, typical_range: "0.1–0.5", unit: s}
+    nle_names: {}
+    renderer_owner: engine
+    engine_tool: "ffmpeg signalstats YDIF / mestimate (run by the engine)"
+    notes: "Frame-difference or motion-vector magnitude; no learned optical-flow model needed."
+    sources:
+      - {title: "FFmpeg Filters — signalstats", url: "https://ffmpeg.org/ffmpeg-filters.html#signalstats", locator: "YDIF"}
+  - id: cap.analysis.probe_metadata
+    category: analysis
+    name: Media metadata probe
+    description: "Read container and stream metadata — frame rate, resolution, rotation, colour transfer and primaries, HDR flags, audio layout."
+    parameters:
+      - {name: fields, type: string, typical_range: "color_transfer, color_primaries, r_frame_rate, side_data"}
+    nle_names: {premiere: "Properties", resolve: "Clip Attributes"}
+    renderer_owner: engine
+    engine_tool: "ffprobe"
+    notes: "Ingest step; decides the input transform (HLG arib-std-b67 / PQ smpte2084 / bt709) for the ADR-0023 colour pipeline."
+    decided_by: [ADR-0023]
+    sources:
+      - {title: "ffprobe documentation", url: "https://ffmpeg.org/ffprobe.html", locator: "show_streams"}
+  - id: cap.analysis.contrast_check
+    category: analysis
+    name: Text contrast check on final pixels
+    description: "Measure contrast between caption text and the pixels behind it on the rendered frame and flag text below the ratio."
+    parameters:
+      - {name: min_ratio, type: float, typical_range: "4.5", unit: ":1"}
+    nle_names: {}
+    renderer_owner: engine
+    engine_tool: "engine QA on rendered frames + overlay alpha"
+    notes: "ADR-0011 contrast ≥ 4.5:1, measured on final pixels per ADR-0017."
+    decided_by: [ADR-0011, ADR-0017]
+    sources:
+      - {title: "WCAG 2.1 — Contrast (Minimum)", url: "https://www.w3.org/TR/WCAG21/#contrast-minimum", locator: "1.4.3"}
+  - id: cap.analysis.contact_sheet
+    category: analysis
+    name: Contact sheet / preview render
+    description: "Tile sampled frames from a source or render into one image so Claude can review pacing, framing and colour at a glance."
+    parameters:
+      - {name: interval, type: float, typical_range: "0.5–2", unit: s}
+      - {name: grid, type: string, typical_range: "4x4–6x8"}
+    nle_names: {}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg fps + scale + tile. Used for the Reviewer's advisory passes (ADR-0006) and reference-reel Mode A."
+    decided_by: [ADR-0006]
+    sources:
+      - {title: "FFmpeg Filters — tile", url: "https://ffmpeg.org/ffmpeg-filters.html#tile", locator: "tile"}
+  - id: cap.analysis.mono_compatibility
+    category: analysis
+    name: Mono / phase compatibility check
+    description: "Check that the mix survives a mono phone speaker: phase correlation and loudness after downmix."
+    parameters:
+      - {name: min_correlation, type: float, typical_range: "0–1"}
+    nle_names: {}
+    renderer_owner: ffmpeg
+    notes: "QA on the render: ffmpeg aphasemeter, plus ebur128 on a pan=mono downmix."
+    sources:
+      - {title: "FFmpeg Filters — aphasemeter", url: "https://ffmpeg.org/ffmpeg-filters.html#aphasemeter", locator: "aphasemeter"}
+  - id: cap.analysis.retention_analytics
+    category: analysis
+    name: Audience retention analytics
+    description: "Read a published reel's retention curve and drop-off points to learn which edits held viewers."
+    parameters:
+      - {name: metric, type: enum, values: [viewed_vs_swiped, average_view_duration, retention_curve]}
+    nle_names: {}
+    renderer_owner: unsupported
+    notes: "Unsupported pre-render: the data exists only after publishing, inside each platform's analytics. It enters the learning loop (ADR-0027) as imported numbers, not as an editing capability."
+    decided_by: [ADR-0027]
+    sources:
+      - {title: "YouTube Help — audience retention", url: "https://support.google.com/youtube/answer/9314415", locator: "audience retention report"}
+  - id: cap.audio.music_library_select
+    category: audio
+    name: Pick a track from the owned music library
+    description: "Choose a licensed track by id from the indexed library by mood, energy, BPM and brand fit, with a stated reason."
+    parameters:
+      - {name: track_id, type: string, typical_range: "music_index.json id"}
+      - {name: section, type: string, typical_range: "intro / verse / drop / outro"}
+    nle_names: {premiere: "Essential Sound — Music", capcut: "Audio library"}
+    renderer_owner: engine
+    engine_tool: "music_index.json (BPM, key, mood, energy curve, sections, clean endings, beat grid via beat_this + librosa)"
+    notes: "ADR-0022: only tracks with a licence record; Claude picks in the finish pass; songs/trending audio never baked in; no-music variant always exported."
+    decided_by: [ADR-0022]
+    sources:
+      - {title: "ADR-0022 Owned music library with musical editing", url: "docs/adr/0022-owned-music-library.md", locator: "Decision"}
+  - id: cap.audio.breath_attenuation
+    category: audio
+    name: Breath attenuation
+    description: "Turn breaths down by a few decibels instead of deleting them, so speech keeps its natural rhythm."
+    parameters:
+      - {name: reduction, type: float, typical_range: "-6 to -12", unit: dB}
+    nle_names: {premiere: "Volume keyframes", resolve: "Clip gain keyframes"}
+    renderer_owner: ffmpeg
+    notes: "Breaths located by the engine (VAD gaps + transcript); ffmpeg applies volume automation."
+    sources:
+      - {title: "FFmpeg Filters — volume", url: "https://ffmpeg.org/ffmpeg-filters.html#volume", locator: "eval=frame"}
+  - id: cap.audio.declick
+    category: audio
+    name: De-click (mouth clicks, impulses)
+    description: "Remove short clicks and mouth noises from dialogue before noise reduction."
+    parameters:
+      - {name: threshold, type: float, typical_range: "2–8"}
+    nle_names: {}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: adeclick."
+    sources:
+      - {title: "FFmpeg Filters — adeclick", url: "https://ffmpeg.org/ffmpeg-filters.html#adeclick", locator: "adeclick"}
+  - id: cap.audio.declip
+    category: audio
+    name: De-clip
+    description: "Reconstruct clipped waveform peaks in overloaded recordings."
+    parameters:
+      - {name: threshold, type: float, typical_range: "1–10"}
+    nle_names: {}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: adeclip. Only where clipping is detected; first in the repair order."
+    sources:
+      - {title: "FFmpeg Filters — adeclip", url: "https://ffmpeg.org/ffmpeg-filters.html#adeclip", locator: "adeclip"}
+  - id: cap.audio.dehum
+    category: audio
+    name: De-hum
+    description: "Notch out mains hum at 50 or 60 Hz and its harmonics."
+    parameters:
+      - {name: fundamental, type: enum, values: ["50", "60"]}
+      - {name: harmonics, type: int, typical_range: "3–6"}
+    nle_names: {premiere: "DeHummer", resolve: "Hum Removal"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: chain of bandreject (or equalizer with negative gain) at f0 and harmonics. Only when hum is present."
+    sources:
+      - {title: "FFmpeg Filters — bandreject", url: "https://ffmpeg.org/ffmpeg-filters.html#bandreject", locator: "bandreject"}
+  - id: cap.audio.dynamic_eq
+    category: audio
+    name: Dynamic EQ
+    description: "Cut or boost a frequency band only when it exceeds a threshold, e.g. carve a speech window in music only while someone talks."
+    parameters:
+      - {name: frequency, type: float, typical_range: "1000–4000", unit: Hz}
+      - {name: range, type: float, typical_range: "-3 to -6", unit: dB}
+    nle_names: {}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: adynamicequalizer (sidechain variant possible); static alternative is a volume-automated equalizer."
+    sources:
+      - {title: "FFmpeg Filters — adynamicequalizer", url: "https://ffmpeg.org/ffmpeg-filters.html#adynamicequalizer", locator: "adynamicequalizer"}
+  - id: cap.audio.expander
+    category: audio
+    name: Downward expander
+    description: "Lower background noise between words gently, without the chopped sound of a hard gate."
+    parameters:
+      - {name: ratio, type: float, typical_range: "1.5–3"}
+      - {name: range, type: float, typical_range: "-6 to -12", unit: dB}
+    nle_names: {}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: agate with a low ratio and limited range, or compand."
+    sources:
+      - {title: "FFmpeg Filters — agate", url: "https://ffmpeg.org/ffmpeg-filters.html#agate", locator: "agate"}
+  - id: cap.audio.mix
+    category: audio
+    name: Multitrack mix
+    description: "Sum voice, music, SFX and room tone stems into one mix with per-stem gain."
+    parameters:
+      - {name: stems, type: string, typical_range: "voice, music, sfx, room_tone"}
+    nle_names: {premiere: "Audio Track Mixer", resolve: "Fairlight mixer"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: amix (normalize=0) on sample-accurate segments (ADR-0023 audio graph)."
+    decided_by: [ADR-0023]
+    sources:
+      - {title: "FFmpeg Filters — amix", url: "https://ffmpeg.org/ffmpeg-filters.html#amix", locator: "amix"}
+  - id: cap.audio.pan
+    category: audio
+    name: Pan / stereo placement
+    description: "Place a sound left or right in the stereo field, or keep speech centred."
+    parameters:
+      - {name: position, type: float, typical_range: "-1 to 1"}
+    nle_names: {premiere: "Pan", resolve: "Pan"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: pan or stereotools. Keep dialogue centred for mono phone playback."
+    sources:
+      - {title: "FFmpeg Filters — pan", url: "https://ffmpeg.org/ffmpeg-filters.html#pan", locator: "pan"}
+  - id: cap.audio.reverb
+    category: audio
+    name: Reverb / space
+    description: "Add a sense of room to a sound effect or voiceover so it sits in the scene."
+    parameters:
+      - {name: wet, type: float, typical_range: "0.05–0.3"}
+    nle_names: {premiere: "Studio Reverb", resolve: "Reverb"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: afir with an impulse response, or aecho for simple tails."
+    sources:
+      - {title: "FFmpeg Filters — afir", url: "https://ffmpeg.org/ffmpeg-filters.html#afir", locator: "afir"}
+  - id: cap.audio.voiceover
+    category: audio
+    name: Recorded voiceover track
+    description: "Lay a separately recorded narration under the picture as the story spine."
+    parameters:
+      - {name: gain, type: float, typical_range: "0 ± 6", unit: dB}
+    nle_names: {premiere: "Voice-over record", capcut: "Voiceover"}
+    renderer_owner: ffmpeg
+    notes: "The VO file is a provided asset processed by the voice chain and mixed by ffmpeg. Synthetic narration would be cap.audio.tts_voiceover, which needs an external TTS service."
+    sources:
+      - {title: "FFmpeg Filters — amix", url: "https://ffmpeg.org/ffmpeg-filters.html#amix", locator: "amix"}
+  - id: cap.graphics.motion_easing
+    category: graphics
+    name: Overlay motion curves (easing, spring, stagger)
+    description: "Animate overlay elements with easing curves, spring overshoot and staggered timing instead of linear moves."
+    parameters:
+      - {name: easing, type: enum, values: [ease_out, ease_in, ease_in_out, spring]}
+      - {name: duration, type: float, typical_range: "0.1–0.4", unit: s}
+      - {name: stagger, type: float, typical_range: "0.03–0.08", unit: s}
+    nle_names: {after_effects: "Graph Editor / Easy Ease", capcut: "Animation curves"}
+    renderer_owner: remotion
+    notes: "Remotion interpolate() with Easing and spring(). Base-video moves use cap.transform.keyframe_easing (ffmpeg)."
+    sources:
+      - {title: "Remotion — spring()", url: "https://www.remotion.dev/docs/spring", locator: "spring"}
+      - {title: "Remotion — interpolate()", url: "https://www.remotion.dev/docs/interpolate", locator: "easing"}
+
+# ───────────────────────── node merges ─────────────────────────
+# canonical: kept (or new) id. absorb: ids folded in. Optional overrides replace merged fields.
+merges:
+  - canonical: tech.audio.j_cut
+    absorb: [tech.split.j_cut_audio_lead]
+    summary: "The incoming shot's sound (voice, ambience or music) starts before its picture, pulling the viewer into the next shot and hiding the picture cut behind continuous audio. Dialogue leads of about 6–12 frames at 30 fps are typical; ambience or music pre-laps can run 0.5–1 s with the outgoing background crossfaded underneath."
+  - canonical: tech.audio.l_cut
+    absorb: [tech.split.l_cut_audio_tail]
+    summary: "The outgoing shot's audio continues under the next picture: a line finishing over a reaction or b-roll, or music bridging a scene change. It is the core move for covering talking-head trims and showing reactions; tails of about 6–15 frames at 30 fps with a 100–300 ms fade are typical."
+  - canonical: tech.transition.match_cut
+    absorb: [tech.transition.graphic_match]
+    summary: "Cut between two shots linked by shared shape, colour, composition or continuing movement so one image seems to become the other. Graphic matches are noticed on purpose and imply a comparison or metaphor; action matches hide the cut. Use only where a real visual link exists."
+  - canonical: tech.transition.zoom_punch
+    absorb: [tech.cut.jump_cut_punch_in]
+    name: Punch-in across jump cuts (and zoom-through transitions)
+    summary: "Alternate framing scale (about 100% to 110–125%) across successive jump cuts in one take, so each cut also changes shot size — the single-camera substitute for the 30° rule — and adds rhythm and emphasis. A fast zoom-through can also bridge two shots. Needs resolution headroom; supersample slow pushes."
+  - canonical: tech.music.beat_synced_cuts
+    absorb: [tech.beat.cut_grid]
+    summary: "Frames per beat = fps × 60 / BPM (120 BPM at 30 fps = 15), with the grid anchored on the first detected beat. Cut every 2–4 beats as the base cadence and every beat only in short bursts at peaks; put the cut on or one frame before the transient, letting action pick the exact frame."
+  - canonical: anti.music.cut_every_beat
+    absorb: [anti.beat.overcutting]
+    summary: "Cutting on every beat for the whole reel becomes monotonous and tiring, flattens dynamics, and the sync stops registering. Every-beat cutting works as a short burst into a peak, not as the base rhythm; vary intervals so peaks stand out."
+  - canonical: tech.ending.narrative_loop
+    absorb: [tech.story.loop_ending_to_open]
+    summary: "Make the ending answer, echo or reframe the opening image so the reel closes its own setup and a rewatch is rewarded with new meaning. Unlike a seamless seam it does not hide the restart; it makes the restart worth it. A reel-specific use of setup and payoff."
+  - canonical: anti.story.unclosed_loop
+    absorb: [anti.loop.unpaid_or_oversold]
+    name: Unclosed loop / unpaid hook
+    summary: "Opening a question, planting a setup or promising something in the hook and never paying it off. Viewers feel cheated, swipe away or leave negative feedback; repeated, it reads as clickbait and erodes trust. Clippers warn specifically against hooks the excerpt does not support."
+  - canonical: tech.story.emotional_beat_hold
+    absorb: [tech.silence.linger_after_peak]
+    summary: "When a feeling peaks (a confession, a reveal, a laugh), let the shot breathe for about 0.5–1.5 s with room tone or a sustained note instead of cutting on schedule, then cut on the shift to the next feeling. Use it about once per reel — the deliberate exception to aggressive pause removal."
+  - canonical: tech.india.romanised_hinglish_captions
+    absorb: [tech.type.hinglish_roman_script]
+    summary: "Caption code-mixed Hindi-English speech in Roman script, written as spoken rather than translated; it reads fast for urban audiences and avoids switching scripts mid-line. Spellings vary and no sourced standard exists. Use Devanagari for pure-Hindi or Devanagari-reading audiences, or as an accent word."
+  - canonical: tech.type.safe_zone
+    absorb: [tech.type.safe_zone_reels, tech.type.safe_zone_tiktok_shorts]
+    name: Keep key text inside the platform safe zone
+    summary: "Platform UI (username, caption, buttons, right-hand icons) covers parts of a vertical frame. Keep key text inside the project default safe area (x 120–888, y 288–1248 on 1080×1920, ADR-0011). Third-party margins differ by platform and change with UI updates, so verify against each platform's overlay."
+    when_to_use: "Every delivery. Hard gate for CTA, logo and end-card text; warning only for kinetic captions (ADR-0017)."
+    avoid_when: "Full-bleed visuals may extend into the margins; intentional caption placements outside the area are allowed as a warning, never for CTA/logo/end-card text."
+    parameters_add:
+      project_default_safe_area_1080x1920: "x 120–888, y 288–1248 (ADR-0011)"
+      gate: "hard for CTA/logo/end card; warning for kinetic captions (ADR-0017)"
+  - canonical: anti.brand.heavy_promo_early
+    absorb: [anti.cta.hard_sell_early]
+    name: Heavy promotion or hard sell at the start
+    summary: "Opening with a hard sell, packshot, brand card or 'link in bio, buy now' before any value reads as an ad and invites a swipe; TikTok research and practitioners both report it hurts completion. A light brand mention by 5 s (tech.hook.brand_message_within_5s) is different and helped Meta's branded ads."
+  - canonical: example.testimonial.dearma_wortham
+    absorb: [example.bathroom.kinetic_beside_face, example.bathroom.text_over_broll, example.bathroom.two_tone_grade, example.bathroom.long_shot_text_driven]
+    from_new: true          # canonical node defined in new_nodes (reference_reels_plan.md §3.2 template)
+
+# ───────────────────────── node patches (applied after merge, by final id) ─────────────────────────
+# set: replace fields · add: append to list fields / dict keys · remove: drop list items
+node_patches:
+  # C-ADR-01 true peak
+  tech.loudness.short_form_master:
+    set:
+      name: "Short-form master at −14 LUFS / −1.5 dBTP"
+      summary: "Master reels to about −14 LUFS integrated with a true-peak ceiling of −1.5 dBTP (project rule, ADR-0017), using a true-peak limiter then two-pass linear loudness normalisation measured on the final file. Quieter masters may sit weak in the feed; louder ones gain nothing where platforms turn down."
+      how: ["Limit with a true-peak limiter at −1.5 dBTP (≤ 3 dB gain reduction ideally)", "ffmpeg loudnorm pass 1: measure", "Pass 2: loudnorm=I=-14:TP=-1.5:LRA=7 with measured_* values and linear=true", "Verify integrated LUFS and true peak on the encoded file (ADR-0017)"]
+    add:
+      parameters: {true_peak_dbtp: -1.5, true_peak_note: "draft value −1 dBTP superseded by ADR-0017"}
+      enforced_by: [compiler, qa_gate]
+      decided_by: [ADR-0017, ADR-0006]
+      sources:
+        - {title: "ADR-0017 QA gate calibration, brand-first captions, audio finishing, delivery profile", url: "docs/adr/0017-council-revisions-qa-captions-audio-delivery.md", locator: "§1 Loudness"}
+  principle.loudness.reference_targets:
+    set:
+      summary: "Published references: EBU R128 −23 LUFS, ≤ −1 dBTP; AES TD1008 streaming speech −18, music −16, mixed about −17 LUFS; Spotify −14 (Loud −11, Quiet −19); Apple Podcasts about −16 LUFS. YouTube −14 is widely reported but undocumented; no reel platform publishes a target. Project delivery is −14 LUFS / −1.5 dBTP (ADR-0017)."
+    add:
+      parameters: {project_target: "−14 LUFS / ≤ −1.5 dBTP (ADR-0017)"}
+      decided_by: [ADR-0017]
+  # C-ADR-02 caption reading speed
+  tech.type.hindi_reading_speed:
+    set:
+      summary: "Netflix's Hindi guide allows about 22 characters per second for adults (18 for children) and 42 per line. The project gate is stricter: ≤ 20 chars/s for every script (ADR-0011). Count Devanagari as Unicode grapheme clusters so matras do not inflate the rate."
+    add:
+      parameters: {project_max_cps: "20 (ADR-0011 gate, all scripts)"}
+      enforced_by: [qa_gate]
+      decided_by: [ADR-0011]
+  anti.type.too_fast_text:
+    set:
+      parameters: {cps_ceiling: "20 for all scripts (ADR-0011 gate; external guides allow 20 EN / 22 HI)"}
+    add:
+      enforced_by: [qa_gate]
+      decided_by: [ADR-0011]
+      sources:
+        - {title: "ADR-0011 Adaptive caption & typography style engine", url: "docs/adr/0011-adaptive-caption-style-engine.md", locator: "Decision §4 (≤ 20 chars/s)"}
+  principle.type.reading_load_ceiling:
+    add:
+      parameters: {project_max_cps: "20 (ADR-0011 gate)"}
+      enforced_by: [qa_gate]
+      decided_by: [ADR-0011]
+  platform.tiktok:
+    set:
+      summary: "TikTok's ad guidance: hook within 6 s, core message within 3 s, people on screen, native lo-fi look, sound on. A 2021 TikTok ad analysis found 21–34 s ads had the best conversion lift. Organic length data is mixed: Buffer saw longer videos get more reach; OpusClip saw viral clips skew shorter."
+    add:
+      parameters: {text_rate_claim: "draft cited '5–10 words per second' — unverified and above the 20 chars/s gate; do not use"}
+  # C-ADR-03 caption over face
+  tech.type.place_relative_to_face:
+    set:
+      summary: "Use face boxes to place captions in free space beside or below the face, never overlapping the face box (ADR-0011), and keep eyes and mouth visible. Subtitle standards move text off important picture content; on reels the face is that content."
+      avoid_when: "Face fills the frame — use a band outside the face box, a smaller caption family, or phrase captions; never accept overlap with the face box (ADR-0011)."
+    add:
+      enforced_by: [qa_gate]
+      decided_by: [ADR-0011, ADR-0017]
+  anti.type.caption_over_face:
+    set:
+      when_to_use: "Detect on the render: caption alpha mask intersects the face box from MediaPipe on the rendered base (ADR-0017)."
+    add:
+      enforced_by: [qa_gate]
+      decided_by: [ADR-0011, ADR-0017]
+  # split-edit guesses mapped to both J and L caps; keep only the matching one
+  tech.audio.j_cut:
+    remove: {uses_capabilities: [cap.cut.l_cut]}
+  tech.audio.l_cut:
+    remove: {uses_capabilities: [cap.cut.j_cut]}
+  # C-ADR-04 safe zone gate (merged node edited in merges)
+  tech.type.safe_zone:
+    set:
+      parameters:
+        project_default_safe_area_1080x1920: "x 120–888, y 288–1248 (ADR-0011)"
+        gate: "hard for CTA/logo/end card; warning for kinetic captions (ADR-0017)"
+        reels_margins_third_party: "≈14% top, 35% bottom (40% for ads with disclaimer), 6% sides"
+        tiktok_shorts_margins_third_party: "bottom ≈270–320 px of 1920; right ≈100–120 px of 1080"
+        tiktok_shorts_central_area_estimate: "≈900×1490 px (one estimate)"
+    add:
+      enforced_by: [qa_gate, qa_warning]
+      decided_by: [ADR-0011, ADR-0017]
+      sources:
+        - {title: "ADR-0011 Adaptive caption & typography style engine", url: "docs/adr/0011-adaptive-caption-style-engine.md", locator: "Decision §4 safe zone default"}
+        - {title: "ADR-0017 QA gate calibration", url: "docs/adr/0017-council-revisions-qa-captions-audio-delivery.md", locator: "§1 Safe zone"}
+  anti.type.text_under_platform_ui:
+    add:
+      decided_by: [ADR-0017]
+      enforced_by: [qa_gate, qa_warning]
+  # C-ADR-05 contrast
+  tech.type.contrast_ratio:
+    add:
+      parameters: {project_min_ratio: "4.5:1 for all caption text on final pixels (ADR-0011/0017); the 3:1 large-text floor is not used"}
+      enforced_by: [qa_gate]
+      decided_by: [ADR-0011, ADR-0017]
+  # C-ADR-06 end card
+  anti.ending.outro_card:
+    set:
+      avoid_when: "A brand end card or CTA card from the brand kit (ADR-0017) is required — keep it short and ending on a musical hit (ADR-0022); what stays an anti-pattern is a 'thanks for watching' tail, credits or a long logo sting after the payoff."
+    add:
+      decided_by: [ADR-0017, ADR-0022]
+  # C-ADR-07 music library
+  tech.music.auto_retime:
+    set:
+      when_to_use: "Reference only: NLE Remix tools show the idea. In this project the compiler does the musical edit from music_index.json (sections, clean endings, beat grid) per ADR-0022."
+      avoid_when: "Always in our pipeline — use the compiler's bar/section edit with an indexed clean ending instead; NLE auto-retime is for the human finishing path only."
+    add:
+      uses_capabilities: [cap.audio.music_retime]
+      decided_by: [ADR-0022]
+  tech.music.tempo_energy_match:
+    set:
+      how: ["Filter the owned library (music_index.json) by mood, energy curve and BPM band", "Pick a track id with a stated reason (ADR-0022)", "Check the bed does not fight the speech rhythm"]
+    add:
+      uses_capabilities: [cap.audio.music_library_select]
+      decided_by: [ADR-0022]
+  tech.india.local_meme_sound_adaptation:
+    set:
+      avoid_when: "Information-dense content that needs speech. Never bake trending or copyrighted sounds into the export (ADR-0022): deliver the no-music variant and add the sound in-app."
+    add:
+      decided_by: [ADR-0022]
+  tech.audio.speech_plus_music:
+    add:
+      uses_capabilities: [cap.audio.music_library_select]
+      decided_by: [ADR-0022]
+  # C-ADR-08 HDR delivery
+  tech.color.hdr_to_sdr_tonemap:
+    set:
+      avoid_when: "Never skipped in this pipeline: ADR-0023 tonemaps every HDR source to bt709 SDR at ingest (HDR delivery is unsupported)."
+    add:
+      enforced_by: [compiler]
+      decided_by: [ADR-0023]
+  tech.color.creative_lut_reduced_intensity:
+    add:
+      enforced_by: [compiler]
+      decided_by: [ADR-0023]
+  principle.color.correct_before_grade:
+    add:
+      enforced_by: [compiler]
+      decided_by: [ADR-0023]
+  anti.color.unnatural_skin:
+    add:
+      enforced_by: [qa_gate]
+      decided_by: [ADR-0023]
+  # C-ADR-09 never speed-ramp speech
+  tech.structure.transformation_before_process_after:
+    set:
+      avoid_when: "The result is underwhelming without context — lead with stakes instead. Never speed-ramp a segment that carries speech (ADR-0017); ramp silent process footage and keep VO at 1x."
+    add:
+      decided_by: [ADR-0017]
+  # C-ADR-10 room tone vs fades
+  tech.dialogue.edit_fades:
+    set:
+      when_to_use: "Every audio edit point, combined with room tone under the cut (ADR-0017 replaces bare 30 ms fades with fades + room tone)."
+    add:
+      enforced_by: [compiler]
+      decided_by: [ADR-0017]
+  tech.dialogue.room_tone_fill:
+    add:
+      enforced_by: [compiler]
+      decided_by: [ADR-0017]
+  anti.dialogue.dead_air_or_gating:
+    add:
+      parameters: {qa_dead_air_s: "> 1.5 s fails (ADR-0006)"}
+      enforced_by: [qa_gate]
+      decided_by: [ADR-0006]
+  # C-ADR-11 A/V sync gate vs perceptual tolerance
+  principle.sound.av_sync_tolerance:
+    add:
+      parameters: {pipeline_sync_gate_ms: "≤ 20 (ADR-0006, beep+flash probe ADR-0017)"}
+      decided_by: [ADR-0006, ADR-0017]
+  # C-ADR-12 denoise licence / de-reverb tool
+  tech.repair.denoise:
+    add:
+      parameters: {engine_tool: "DeepFilterNet / RNNoise (licence pending, ADR-0017); ffmpeg afftdn fallback"}
+      decided_by: [ADR-0017]
+  tech.repair.dereverb:
+    add:
+      parameters: {engine_tool: "TBD — ADR-0023 §4 requires de-reverb; tool not chosen"}
+      decided_by: [ADR-0023]
+  tech.voice.processing_chain:
+    set:
+      how: ["Level-match clips", "Repair in deepest-damage order", "HPF 80–100 Hz; mud −2 to −4 dB at 200–500 Hz", "Compress 3:1, 10–25 ms / 60–200 ms, 3–6 dB GR", "Presence +1 to +3 dB at 3–5 kHz", "De-ess 5–8 kHz, 3–6 dB", "Optional expander 1.5:1, 6–15 dB range", "Master: −1.5 dBTP limit, −14 LUFS (ADR-0017)"]
+    add:
+      decided_by: [ADR-0017, ADR-0023]
+      parameters: {project_true_peak_dbtp: -1.5}
+  # C-ADR-13 brand tokens override palette
+  tech.caption.style_bold_pop:
+    add: {decided_by: [ADR-0011, ADR-0017]}
+  tech.caption.style_clean_phrase:
+    add: {decided_by: [ADR-0011, ADR-0017]}
+  tech.caption.style_editorial_kinetic:
+    add: {decided_by: [ADR-0011, ADR-0017]}
+  tech.caption.style_minimal_calm:
+    add: {decided_by: [ADR-0011, ADR-0017]}
+  tech.caption.style_speaker_coded:
+    add: {decided_by: [ADR-0011, ADR-0017]}
+  tech.type.keyword_emphasis:
+    add:
+      parameters: {max_enlarged_words_per_line: "1 (ADR-0011 gate)"}
+      enforced_by: [qa_gate]
+      decided_by: [ADR-0011]
+  # C-ADR-14 ducking / music edit are compiler rules
+  tech.duck.depth:
+    add:
+      enforced_by: [compiler]
+      decided_by: [ADR-0022]
+  tech.music.backtime_ending:
+    add:
+      enforced_by: [compiler]
+      decided_by: [ADR-0022]
+  tech.music.beat_synced_cuts:
+    add:
+      enforced_by: [compiler]
+      decided_by: [ADR-0022]
+  # C-SCOPE-01 30° rule vs jump cuts
+  principle.continuity.thirty_degree_rule:
+    set:
+      genres: [genre.interview, genre.brand_story, genre.testimonial, genre.product]
+      avoid_genres: [genre.talking_head, genre.vlog, genre.tutorial, genre.podcast_clip]
+      avoid_when: "Single-camera talking heads, vlogs, tutorials and podcast clips, where the visible jump cut is the native grammar (tech.cut.jump_cut_talking_head); there a 110–125% punch-in (tech.transition.zoom_punch) is the substitute when a cut should look deliberate."
+  tech.cut.jump_cut_talking_head:
+    set:
+      genres: [genre.talking_head, genre.tutorial, genre.podcast_clip, genre.vlog]
+      avoid_genres: [genre.testimonial, genre.brand_story]
+      avoid_when: "Emotional testimonial and brand-story moments where pauses carry meaning — mask cuts there instead (tech.jumpcut.visible_vs_masked, tech.cut.cutaway_cover)."
+  # C-SCOPE-02 cut long when unsure vs compression
+  principle.cut.cut_long_when_unsure:
+    set:
+      genres: [genre.testimonial, genre.interview, genre.brand_story]
+      avoid_genres: [genre.talking_head, genre.tutorial, genre.podcast_clip, genre.vlog, genre.montage]
+      when_to_use: "Assembly / rough-cut stage in every genre (keep handles); in the final cut only for reaction holds and emotional beats in testimonials, interviews and brand stories."
+      avoid_when: "Final pacing pass on talking heads, tutorials, podcast clips and vlogs (remove dead air and fillers, ADR-0006 dead-air gate), and anything in the first 3 s before the hook lands."
+    add:
+      parameters: {stage: "assembly (all genres); final cut only for emotional holds"}
+  # C-SCOPE-03 positive reason vs pattern interrupts
+  tech.pattern_interrupt.purposeful_reset:
+    set:
+      avoid_when: "Emotional peaks and testimonials where stillness carries meaning. Every interrupt still needs a positive reason (principle.cut.positive_reason): a text change, new point or new image counts; a random cut or effect does not."
+    add:
+      requires: [principle.cut.positive_reason]
+  # C-SCOPE-04 abrupt ending vs music ring-out
+  tech.ending.abrupt_after_payoff:
+    set:
+      avoid_when: "Music-led reels where the track needs to resolve: backtime the music so its ending or final hit lands at the cut (tech.music.backtime_ending), keeping any ring-out tail ≤ 0.5 s."
+  tech.music.ring_out_ending:
+    add:
+      parameters: {max_tail_after_payoff_s: "0.5 (aligned with tech.ending.abrupt_after_payoff)"}
+  # C-EV-01 lo-fi native vs polished craft
+  tech.native.lofi_slice_of_life:
+    set:
+      avoid_genres: [genre.brand_story, genre.montage]
+  # cross-links for complementary pairs (not merged, linked)
+  anti.cut.unmotivated_cut:
+    add: {conflicts_with: [principle.cut.positive_reason]}
+  anti.cut.continuity_over_emotion:
+    add: {conflicts_with: [principle.cut.values_over_matches]}
+  tech.transition.one_language:
+    add: {requires: [principle.motion.restraint_consistency]}
+  anti.cta.end_only:
+    add: {conflicts_with: [tech.cta.before_dropoff]}
+
+# core principles always loaded into every Claude call (ADR-0027 §4: ~8)
+core_principles:
+  - principle.cut.emotion_first
+  - principle.cut.positive_reason
+  - principle.story.setup_payoff
+  - principle.early_continuation_metric
+  - principle.rhythm.shot_length_variation
+  - principle.sound.dialogue_anchor
+  - principle.color.correct_before_grade
+  - principle.type.reading_load_ceiling
+
+# ───────────────────────── new nodes ─────────────────────────
+# source_from: copy up to 2 sources from these (final) node ids, in addition to listed sources.
+new_nodes:
+  - id: genre.interview
+    type: genre
+    name: Interview (recorded conversation)
+    summary: "Two or more people in a recorded conversation shown for its own sake: sit-down Q&A, expert, customer or street interviews. Edits favour clean question-to-answer flow, J/L cuts on speaker changes, cutaways and reaction shots to hide trims, and a calmer cut rate than solo talking heads."
+    when_to_use: "Expert and customer interviews, street interviews, founder Q&As, panel excerpts that are not podcast episodes."
+    how: ["Cut the question down or replace it with a title card", "Use J/L cuts on speaker changes", "Hide trims inside answers with cutaways or reactions", "Keep at least one on-camera moment for every key claim"]
+    parameters: {hook_window_s: "0–3 (platform guidance, see platform nodes)"}
+    avoid_when: "A single speaker addresses the lens (use genre.talking_head)."
+    genres: [genre.podcast_clip, genre.testimonial]
+    goals: [goal.trust, goal.clarity]
+    uses_capabilities: [cap.cut.j_cut, cap.cut.l_cut, cap.cut.b_roll_cutaway, cap.analysis.speaker_diarization]
+    conflicts_with: []
+    requires: [tech.audio.j_cut, tech.cut.cutaway_cover]
+    evidence_level: practitioner
+    confidence: medium
+    source_from: [tech.audio.j_cut, tech.cut.cutaway_cover]
+    sources: []
+  - id: goal.retention_first_3s
+    type: goal
+    name: Hold viewers through the first 3 seconds
+    summary: "Stop the scroll and keep the viewer past the opening seconds. Platforms gate distribution on early continuation (viewed vs swiped on Shorts; Reels treats the first three seconds as the hook), so the opening frame, first line and first text must make one clear promise."
+    when_to_use: "Every reel; the first optimisation target."
+    how: ["Measure: viewed-vs-swiped (Shorts) or 3 s hold rate", "Proxy pre-publish: text on screen by 0.3 s, speech or motion within the first frames, hook promise stated by 3 s"]
+    parameters: {window_s: "0–3", proxy_metrics: "text_on_screen_at_0_3s, first_cut_s, hook_end_s"}
+    avoid_when: ""
+    genres: []
+    goals: []
+    uses_capabilities: [cap.analysis.retention_analytics]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: high
+    source_from: [principle.early_continuation_metric, platform.youtube_shorts]
+    sources: []
+  - id: goal.watch_through
+    type: goal
+    name: Watch-through (completion and average view duration)
+    summary: "Keep viewers watching to the payoff. Average view duration and completion are the strongest correlates of distribution in the drafts' platform data, and hold time matters more than nominal length, so trim anything that does not move the story."
+    when_to_use: "Every reel; the main body-pacing target."
+    how: ["Measure: average view duration, % viewed, retention curve drops", "Proxy pre-publish: no dead air, a re-hook or new point every few seconds, payoff placed before the drop-off"]
+    parameters: {metrics: "average_view_duration, completion_rate"}
+    avoid_when: ""
+    genres: []
+    goals: []
+    uses_capabilities: [cap.analysis.retention_analytics]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: high
+    source_from: [principle.retention_over_length, platform.youtube_shorts]
+    sources: []
+  - id: goal.rewatch
+    type: goal
+    name: Rewatch / loop
+    summary: "Make viewers play the reel again, through a seamless loop seam, a narrative ending that reframes the opening, or dense detail worth a second look. Meta cites interesting transitions as a rewatch driver; rewatches raise watch time above 100% of length."
+    when_to_use: "Short reels (≤ 20–30 s), transformations, satisfying process content, montage."
+    how: ["Measure: views per viewer, watch time > 100%", "Proxy: loop seam check, ending reframes opening"]
+    parameters: {}
+    avoid_when: "A CTA end card must be read (loops can hide it)."
+    genres: []
+    goals: []
+    uses_capabilities: [cap.analysis.retention_analytics]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    source_from: [platform.instagram_reels, tech.ending.seamless_visual_loop]
+    sources: []
+  - id: goal.shares_saves
+    type: goal
+    name: Shares and saves
+    summary: "Make the reel worth sending to someone or keeping for later: useful steps, a relatable moment, a strong opinion. Instagram's head named sends per reach as a key ranking signal; saves signal reference value for tutorials and lists."
+    when_to_use: "Tutorials, lists, relatable vlogs, opinion pieces, podcast insights."
+    how: ["Measure: sends per reach, saves per reach", "Proxy: one complete, self-contained idea; a clear takeaway on screen"]
+    parameters: {metrics: "sends_per_reach, saves_per_reach"}
+    avoid_when: ""
+    genres: []
+    goals: []
+    uses_capabilities: [cap.analysis.retention_analytics]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    source_from: [platform.instagram_reels]
+    sources: []
+  - id: goal.clarity
+    type: goal
+    name: Clarity (understood on first watch)
+    summary: "The viewer understands the point on one watch, often on mute or a small screen: readable captions within reading-speed limits, one idea per beat, visuals that illustrate the words, and speech that stays intelligible over music."
+    when_to_use: "Tutorials, explainers, product demos, podcast clips, any speech-led reel."
+    how: ["Proxy: caption cps ≤ 20, contrast ≥ 4.5:1, music bed well below voice, one point per shot"]
+    parameters: {caption_max_cps: "20 (ADR-0011)"}
+    avoid_when: ""
+    genres: []
+    goals: []
+    uses_capabilities: [cap.text.auto_captions, cap.analysis.contrast_check]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: high
+    source_from: [principle.type.reading_load_ceiling, tech.duck.depth]
+    sources:
+      - {title: "ADR-0011 Adaptive caption & typography style engine", url: "docs/adr/0011-adaptive-caption-style-engine.md", locator: "Decision §4"}
+  - id: goal.emotion
+    type: goal
+    name: Emotion (make the viewer feel something)
+    summary: "The reel moves the viewer — warmth, surprise, laughter, inspiration. Murch ranks emotion first among cutting criteria; in short form it comes from performance, held beats at peaks, music and contrast rather than cut speed."
+    when_to_use: "Testimonials, brand stories, transformations, emotional vlogs."
+    how: ["Proxy: one held emotional beat, music dynamics aligned to the peak, reaction shots kept"]
+    parameters: {}
+    avoid_when: ""
+    genres: []
+    goals: []
+    uses_capabilities: [cap.analysis.face_expression]
+    conflicts_with: []
+    requires: []
+    evidence_level: theory
+    confidence: medium
+    source_from: [principle.cut.emotion_first, tech.story.emotional_beat_hold]
+    sources: []
+  - id: goal.energy
+    type: goal
+    name: Energy (pace and momentum)
+    summary: "The reel feels lively and moving forward: frequent purposeful changes in picture, text or sound, music tempo matched to content, and cut density that builds toward peaks rather than staying flat."
+    when_to_use: "Montages, event recaps, product launches, high-energy talking heads."
+    how: ["Proxy: visual change every 2–4 s, accelerating cut rate into peaks, beat-aligned accents"]
+    parameters: {}
+    avoid_when: "Trust- or emotion-led pieces where calm reads as credible."
+    genres: []
+    goals: []
+    uses_capabilities: [cap.analysis.motion_estimation, cap.analysis.beat_detection]
+    conflicts_with: []
+    requires: []
+    evidence_level: practitioner
+    confidence: medium
+    source_from: [tech.pattern_interrupt.purposeful_reset, tech.music.tempo_energy_match]
+    sources: []
+  - id: goal.trust
+    type: goal
+    name: Trust (credible and honest)
+    summary: "The viewer believes the speaker and the claim: visible faces at key claims, natural rather than ad-like delivery, promises the reel actually pays off, and no misleading edits. Platform ad guides favour a native, creator-style look for credibility."
+    when_to_use: "Testimonials, founder stories, product claims, expert interviews."
+    how: ["Proxy: speaker on camera for key claims, hook promise matched by payoff, no hard sell before value"]
+    parameters: {}
+    avoid_when: ""
+    genres: []
+    goals: []
+    uses_capabilities: [cap.analysis.face_detection]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    source_from: [tech.native.lofi_slice_of_life, anti.story.unclosed_loop]
+    sources: []
+  - id: goal.brand_recall
+    type: goal
+    name: Brand recall
+    summary: "Viewers remember whose reel it was: brand and main message shown early with sound and visuals together, the product shown repeatedly in use, consistent brand colours and type, without branding dominating the runtime."
+    when_to_use: "Product, brand story and testimonial reels for clients."
+    how: ["Proxy: brand/message within 5 s, brand kit tokens applied (ADR-0017), branding under ~a quarter of runtime"]
+    parameters: {}
+    avoid_when: "Organic creator content where early branding reads as an ad (anti.brand.heavy_promo_early)."
+    genres: []
+    goals: []
+    uses_capabilities: [cap.graphics.logo_watermark]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    source_from: [tech.hook.brand_message_within_5s, tech.product.repeat_and_limit_branding]
+    sources: []
+  - id: goal.cta_conversion
+    type: goal
+    name: CTA conversion
+    summary: "Viewers take the intended action — follow, click, buy, book. One clear call to action, spoken and on screen, placed before the biggest drop-off rather than only at the end, after value has been delivered."
+    when_to_use: "Product, testimonial and client reels with a commercial goal."
+    how: ["Proxy: a single CTA, inside the safe zone (hard gate, ADR-0017), placed before the drop-off point"]
+    parameters: {}
+    avoid_when: ""
+    genres: []
+    goals: []
+    uses_capabilities: [cap.graphics.cta_card]
+    conflicts_with: []
+    requires: []
+    evidence_level: platform
+    confidence: medium
+    source_from: [tech.cta.single_spoken_and_text, tech.cta.before_dropoff]
+    sources: []
+  - id: example.testimonial.dearma_wortham
+    type: example
+    name: DearMa founder on Wortham (agency testimonial)
+    summary: "Founder testimonial for a creative agency, kept fast by kinetic keyword typography beside the face and literal b-roll. Text keeps running over b-roll, an 8.6 s shot survives on changing text alone, and a warm interview vs teal b-roll grade separates A- and B-roll."
+    when_to_use: "Reference for testimonial / brand-story pacing, editorial-kinetic captions and two-tone A/B-roll grading."
+    how: ["Kinetic 1–4 word cards, key word enlarged, placed beside the face", "Caption track independent of video cuts so text runs over b-roll", "Change text about every 1 s to carry long shots", "Warm interview grade, teal/green b-roll grade"]
+    parameters: {words_per_card: "1–4", text_on_screen_at_s: "0.3"}
+    avoid_when: "Information-dense speech; single-scene content (two-tone grade adds nothing)."
+    genres: [genre.testimonial, genre.brand_story]
+    platforms: [platform.instagram_reels]
+    goals: [goal.trust, goal.brand_recall, goal.watch_through, goal.retention_first_3s]
+    uses_capabilities: [cap.text.kinetic, cap.text.keyword_emphasis, cap.compositing.adjustment_layer, cap.color.color_wheels]
+    conflicts_with: []
+    requires: []
+    url: null
+    provenance: third_party_download_unverified
+    file_held: true
+    provenance_note: "Per reference_reels_plan.md §2.4: obtain creator permission or delete the file and set file_held: false. Never publish frames."
+    measurement_mode: file
+    language: en
+    region: GL
+    style_vector:
+      duration_s: 73.73
+      fps: 25
+      resolution: 720x1280
+      cuts: 44
+      cuts_per_min: 35.8
+      shot_median_s: 1.08
+      shot_mean_s: 1.64
+      shot_cv: 0.95
+      shots_under_1s: 22
+      first_cut_s: 4.40
+      longest_shot: {s: 8.64, at_s: 38.28, carried_by: kinetic_text}
+      text_on_screen_at_0_3s: true
+      loudness: {lufs_i: -13.7, true_peak_dbfs: 0.6, lra_lu: 6.9}
+      dips_to_black: [{at_s: 9.32, dur_s: 0.72}]
+      detector: {scdet_threshold: 8, second_pass: null}
+    beats:
+      - {t: [0.0, 4.4], label: hook_line, approx: true}
+      - {t: [4.4, 10.0], label: intro_name_title_card, approx: true}
+      - {t: [10.0, 53.0], label: praise_team_usp_with_broll, approx: true}
+      - {t: [53.0, 59.0], label: fast_brand_montage}
+      - {t: [59.0, 73.7], label: thanks_credits_logo_url, approx: true}
+    techniques:
+      - {id: tech.caption.style_editorial_kinetic, at_s: null, note: "throughout; 1–4 words, key word enlarged, beside face"}
+      - {id: tech.type.keyword_emphasis, at_s: null}
+      - {id: tech.type.place_relative_to_face, at_s: null}
+      - {id: tech.type.text_carries_long_shot, at_s: [38.28, 46.92]}
+      - {id: tech.broll.new_point_new_image, at_s: null, note: "designers sketching while she says 'team'"}
+      - {id: tech.rhythm.accelerating_cut_rate, at_s: [53, 59], note: "sub-1 s montage burst as proof beat"}
+      - {id: tech.color.aroll_broll_two_tone, at_s: null}
+      - {id: anti.ending.outro_card, at_s: [59.0, 73.7], note: "counter-example: ~15 s thanks/credits/logo tail after the payoff"}
+    caption_style:
+      words_per_card_range: [1, 4]
+      words_per_card_median: null
+      position: beside_face
+      emphasis: [size, weight]
+      word_by_word: false
+      case: mixed
+      font_class: sans_bold_mixed_weights
+      runtime_with_text_pct: null
+    music_sync: {music_bed: true, bpm: null, cuts_on_beat_pct: null, notes: "Montage burst likely beat-cut; unmeasured"}
+    colour: {look: warm_interview_vs_teal_broll, warm_cool_ratio: null, mean_saturation: null, consistency: high}
+    lessons:
+      - "A long talking shot survives if text keeps changing about every second."
+      - "Sub-1 s montage bursts work as a 'proof' beat after the USP line."
+      - "Let caption text run on across b-roll cuts so the sentence never visually stops."
+      - "The master clips at +0.6 dBFS true peak; our delivery target is −14 LUFS / ≤ −1.5 dBTP (ADR-0017)."
+      - "The 15 s credits tail would fail our outro rule; keep only a short brand end card."
+    evidence_level: single_opinion
+    confidence: medium
+    sources:
+      - {title: "Local measurement", author: "project analysis", url: "analysis/bathroom/notes.md", locator: "Edit style vector; Craft observations"}
+      - {title: "Reference reel library plan (example template)", url: "knowledge/drafts/reference_reels_plan.md", locator: "§3.2"}
+
+# ───────────────────────── platform enrichment ─────────────────────────
+platform_params:
+  platform.instagram_reels:
+    safe_zone_third_party: "≈14% top, 35% bottom, 6% sides clear of key text (Meta ad guides; practitioner)"
+    project_safe_area_1080x1920: "x 120–888, y 288–1248 (ADR-0011)"
+  platform.tiktok:
+    safe_zone_third_party: "bottom ≈270–320 px of 1920 and right ≈100–120 px of 1080 reserved for UI (third-party measurements)"
+    project_safe_area_1080x1920: "x 120–888, y 288–1248 (ADR-0011)"
+  platform.youtube_shorts:
+    safe_zone_third_party: "bottom ≈270–320 px of 1920 and right ≈100–120 px of 1080 reserved for UI (third-party measurements)"
+    project_safe_area_1080x1920: "x 120–888, y 288–1248 (ADR-0011)"

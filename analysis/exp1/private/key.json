@@ -1,0 +1,56 @@
+{
+  "clip_E": {
+    "case": "clean_intro",
+    "defect": "none",
+    "source_start_s": 0.0,
+    "duration_s": 4.4
+  },
+  "clip_C": {
+    "case": "clean_founder",
+    "defect": "none",
+    "source_start_s": 11.52,
+    "duration_s": 4.4
+  },
+  "clip_I": {
+    "case": "clean_talk",
+    "defect": "none",
+    "source_start_s": 38.3,
+    "duration_s": 6.0
+  },
+  "clip_B": {
+    "case": "face_cut",
+    "defect": "punch-in crops the face/head out of frame",
+    "source_start_s": 38.3,
+    "duration_s": 6.0
+  },
+  "clip_H": {
+    "case": "graphic_over_face",
+    "defect": "opaque graphic covers the speaker's face",
+    "source_start_s": 11.52,
+    "duration_s": 4.4
+  },
+  "clip_G": {
+    "case": "black_gap",
+    "defect": "0.6 s of black frames mid-clip (1.8-2.4 s)",
+    "source_start_s": 0.0,
+    "duration_s": 4.4
+  },
+  "clip_A": {
+    "case": "freeze",
+    "defect": "picture frozen ~1.6-4.6 s",
+    "source_start_s": 38.3,
+    "duration_s": 6.0
+  },
+  "clip_F": {
+    "case": "squashed",
+    "defect": "picture squashed vertically and letterboxed",
+    "source_start_s": 11.52,
+    "duration_s": 4.4
+  },
+  "clip_D": {
+    "case": "pixelated",
+    "defect": "heavily pixelated / low-resolution footage",
+    "source_start_s": 4.4,
+    "duration_s": 3.28
+  }
+}

@@ -1,0 +1,2646 @@
+# Capability catalog — "everything that can be done to a reel in any editing software".
+# Schema: knowledge/SCHEMA.md §1. Renderer ownership: docs/architecture/renderer-split.md.
+# NLE keys used: premiere, resolve, capcut, after_effects, final_cut. A key is omitted when the UI name was not confirmed.
+# Descriptions are paraphrased; ffmpeg filter names in notes are implementation hints for the compiler.
+capabilities:
+  # ───────────────────────────── CUT ─────────────────────────────
+  - id: cap.cut.split
+    category: cut
+    name: Split / razor at playhead
+    description: "Divide one clip into two at a chosen frame so each part can be moved, deleted or treated separately."
+    parameters:
+      - {name: at, type: float, typical_range: "any frame inside the clip", unit: s}
+      - {name: tracks, type: enum, values: [video, audio, linked]}
+    nle_names: {premiere: "Razor tool / Add Edit", resolve: "Blade", capcut: "Split", after_effects: "Split Layer", final_cut: "Blade"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: trim/atrim per segment, then concat. Cut on a frame boundary of the source frame rate."
+    sources:
+      - {title: "Premiere Pro User Guide — Trim clips", url: "https://helpx.adobe.com/premiere-pro/using/trimming-clips.html", locator: "Trimming tools"}
+      - {title: "CapCut — Split video online", url: "https://www.capcut.com/tools/split-video-online", locator: "feature page"}
+
+  - id: cap.cut.hard_cut
+    category: cut
+    name: Hard (straight) cut
+    description: "Join two shots end to end with no transition so the picture changes instantly; the default edit in fast-paced reels."
+    parameters:
+      - {name: shot_length, type: float, typical_range: "0.8–3 (reels), up to 6 for talking head", unit: s}
+    nle_names: {premiere: "Edit point", resolve: "Edit point", capcut: "Split + arrange", final_cut: "Edit point"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg concat demuxer/filter. Keep audio and video segment boundaries identical to avoid drift."
+    sources:
+      - {title: "Premiere Pro User Guide — Trim clips", url: "https://helpx.adobe.com/premiere-pro/using/trimming-clips.html", locator: "Edit points"}
+
+  - id: cap.cut.jump_cut
+    category: cut
+    name: Jump cut
+    description: "Remove a section inside one continuous shot so the subject appears to jump forward in time; tightens talking-head pacing."
+    parameters:
+      - {name: removed_gap, type: float, typical_range: "0.2–3", unit: s}
+      - {name: mask_with_punch_in, type: bool, typical_range: "true for alternate cuts"}
+    nle_names: {premiere: "Razor + Ripple Delete", resolve: "Blade + Ripple Delete", capcut: "Split + Delete", final_cut: "Blade + Delete"}
+    renderer_owner: ffmpeg
+    notes: "Alternate 100% and ~110–115% scale on consecutive jump cuts to hide the jump (see cap.transform.punch_in)."
+    sources:
+      - {title: "Premiere Pro — Morph Cut overview (smoothing jump cuts)", url: "https://helpx.adobe.com/premiere-pro/using/morph-cut.html", locator: "Morph Cut overview"}
+
+  - id: cap.cut.ripple_delete
+    category: cut
+    name: Ripple delete
+    description: "Delete a clip or range and shift everything after it left so no gap remains."
+    parameters:
+      - {name: range, type: string, typical_range: "in–out timecode pair"}
+      - {name: affect_tracks, type: enum, values: [all_unlocked, selected]}
+    nle_names: {premiere: "Ripple Delete", resolve: "Ripple Delete", capcut: "Delete (main track auto-closes)", final_cut: "Delete"}
+    renderer_owner: ffmpeg
+    notes: "Compile-time timeline operation; the renderer only sees the resulting segment list."
+    sources:
+      - {title: "Premiere Pro — Perform ripple edits", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/trim-clips/perform-ripple-edits.html", locator: "Ripple edits"}
+
+  - id: cap.cut.reorder
+    category: cut
+    name: Reorder clips
+    description: "Move a clip to a different place in the sequence, e.g. putting the payoff first as a hook."
+    parameters:
+      - {name: from_index, type: int, typical_range: "0..n-1"}
+      - {name: to_index, type: int, typical_range: "0..n-1"}
+      - {name: mode, type: enum, values: [insert, swap, overwrite]}
+    nle_names: {premiere: "Insert/rearrange drag (Ctrl/Cmd-drag)", resolve: "Swap / shuffle insert", capcut: "Drag on main track", final_cut: "Drag in magnetic timeline"}
+    renderer_owner: ffmpeg
+    notes: "Pure segment-order change in timeline.json."
+    sources:
+      - {title: "DaVinci Resolve 20 Reference Manual", url: "https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf", locator: "Edit page — Editing basics (rearranging clips)"}
+
+  - id: cap.cut.b_roll_cutaway
+    category: cut
+    name: Full-screen B-roll cutaway
+    description: "Replace the main picture with supporting footage for a moment while the speaker's audio continues underneath."
+    parameters:
+      - {name: duration, type: float, typical_range: "1–4", unit: s}
+      - {name: keep_aroll_audio, type: bool, typical_range: "true"}
+      - {name: broll_audio_gain, type: float, typical_range: "-inf to -18", unit: dB}
+    nle_names: {premiere: "Overwrite on V2 / connected clip", resolve: "Place on Top", capcut: "Overlay / replace", final_cut: "Connected clip"}
+    renderer_owner: ffmpeg
+    notes: "Renderer-split table: full-screen b-roll replaces base pixels, so ffmpeg. A small floating card is cap.compositing.picture_in_picture (remotion)."
+    sources:
+      - {title: "Premiere Pro — Create J and L cuts", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/trim-clips/perform-j-cuts-and-l-cuts.html", locator: "Split edits"}
+      - {title: "DaVinci Resolve 20 Reference Manual", url: "https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf", locator: "Edit page — Place on Top"}
+
+  - id: cap.cut.j_cut
+    category: cut
+    name: J-cut (audio leads)
+    description: "Let the next shot's sound start before its picture appears, pulling the viewer into the new shot."
+    parameters:
+      - {name: audio_lead, type: float, typical_range: "0.2–1.5", unit: s}
+    nle_names: {premiere: "J cut (Alt/Opt-trim audio)", resolve: "Split edit (Alt-trim)", capcut: "Separate audio + trim", final_cut: "Expand audio + J cut"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: audio segment boundaries offset from video boundaries; crossfade the overlap (acrossfade)."
+    sources:
+      - {title: "Premiere Pro — Create J and L cuts", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/trim-clips/perform-j-cuts-and-l-cuts.html", locator: "J cut"}
+
+  - id: cap.cut.l_cut
+    category: cut
+    name: L-cut (audio trails)
+    description: "Cut the picture to the next shot while the previous shot's audio keeps playing for a moment."
+    parameters:
+      - {name: audio_tail, type: float, typical_range: "0.2–2", unit: s}
+    nle_names: {premiere: "L cut", resolve: "Split edit", capcut: "Separate audio + trim", final_cut: "Expand audio + L cut"}
+    renderer_owner: ffmpeg
+    sources:
+      - {title: "Premiere Pro — Create J and L cuts", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/trim-clips/perform-j-cuts-and-l-cuts.html", locator: "L cut"}
+
+  - id: cap.cut.silence_removal
+    category: cut
+    name: Remove pauses / dead air
+    description: "Find quiet gaps in speech longer than a threshold and cut them out, leaving a short breath."
+    parameters:
+      - {name: min_pause, type: float, typical_range: "0.3–0.8", unit: s}
+      - {name: threshold, type: float, typical_range: "-45 to -30", unit: dBFS}
+      - {name: keep_padding, type: float, typical_range: "0.05–0.15", unit: s}
+    nle_names: {premiere: "Text-Based Editing — Pauses (Delete all)"}
+    renderer_owner: ffmpeg
+    notes: "Detection = cap.analysis.silence_detection; execution = segment cuts. Over-tight padding sounds robotic."
+    sources:
+      - {title: "Premiere Pro — Detect and delete pauses in transcripts", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/edit-video-using-text-based-editing/detect-and-delete-pauses-in-transcripts.html", locator: "Pauses filter"}
+      - {title: "FFmpeg Filters — silencedetect", url: "https://ffmpeg.org/ffmpeg-filters.html#silencedetect", locator: "silencedetect"}
+
+  - id: cap.cut.filler_word_removal
+    category: cut
+    name: Remove filler words
+    description: "Cut out 'um', 'uh' and similar fillers found in a word-level transcript."
+    parameters:
+      - {name: words, type: string, typical_range: "um, uh, like, you know"}
+      - {name: padding, type: float, typical_range: "0.02–0.08", unit: s}
+    nle_names: {premiere: "Text-Based Editing — Filler words", capcut: "Remove filler words"}
+    renderer_owner: ffmpeg
+    notes: "Needs word timestamps from cap.analysis.transcription; check for audible clicks, add 5–10 ms audio fades at each cut."
+    sources:
+      - {title: "Premiere Pro — Text-Based Editing overview", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/edit-video-using-text-based-editing/overview-of-text-based-editing.html", locator: "Filler words"}
+      - {title: "CapCut — Filler words remover", url: "https://www.capcut.com/tools/filler-words", locator: "feature page"}
+
+  - id: cap.cut.text_based_edit
+    category: cut
+    name: Text-based (transcript) editing
+    description: "Edit the video by selecting, deleting or rearranging sentences in its transcript; the timeline follows."
+    parameters:
+      - {name: operations, type: string, typical_range: "keep/delete/reorder by word index"}
+    nle_names: {premiere: "Text-Based Editing", resolve: "Transcription / IntelliScript", capcut: "Transcript-based editing"}
+    renderer_owner: ffmpeg
+    notes: "Natural fit for Claude: plan cuts on the transcript, compile to segments."
+    sources:
+      - {title: "Premiere Pro — Edit sequences using Text-Based Editing", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/edit-video-using-text-based-editing/edit-sequences-using-text-based-editing.html", locator: "Edit sequences"}
+      - {title: "CapCut — Video transcript editing", url: "https://www.capcut.com/tools/video-transcript-editing", locator: "feature page"}
+
+  - id: cap.cut.multicam_switch
+    category: cut
+    name: Multicam angle switching
+    description: "Cut between synced camera angles of the same moment, e.g. host and guest in a podcast clip."
+    parameters:
+      - {name: min_angle_hold, type: float, typical_range: "1.5–5", unit: s}
+      - {name: switch_rule, type: enum, values: [active_speaker, manual, reaction]}
+    nle_names: {premiere: "Multi-Camera editing", resolve: "Multicam / AI SmartSwitch", final_cut: "Multicam clip"}
+    renderer_owner: ffmpeg
+    notes: "Auto speaker-based switching needs cap.analysis.speaker_diarization (unsupported locally)."
+    sources:
+      - {title: "DaVinci Resolve 20 New Features Guide", url: "https://documents.blackmagicdesign.com/SupportNotes/DaVinci_Resolve_20_New_Features_Guide.pdf", locator: "AI Multicam SmartSwitch"}
+
+  - id: cap.cut.cut_to_beat
+    category: cut
+    name: Cut on the beat
+    description: "Place edit points on detected music beats or bars so picture changes land with the rhythm."
+    parameters:
+      - {name: grid, type: enum, values: [beat, half_beat, bar, downbeat]}
+      - {name: offset, type: float, typical_range: "-0.05–0 (cut a hair early)", unit: s}
+    nle_names: {resolve: "Detect Music Beats (snap)", final_cut: "Beat Detection"}
+    renderer_owner: ffmpeg
+    notes: "Beat grid comes from cap.analysis.beat_detection (unsupported in-stack — needs an external analyser)."
+    sources:
+      - {title: "Final Cut Pro release notes", url: "https://support.apple.com/en-us/102825", locator: "Final Cut Pro 12.0 — Beat Detection"}
+      - {title: "DaVinci Resolve 20 New Features Guide", url: "https://documents.blackmagicdesign.com/SupportNotes/DaVinci_Resolve_20_New_Features_Guide.pdf", locator: "Detect music beats"}
+
+  # ───────────────────────────── TRIM ─────────────────────────────
+  - id: cap.trim.trim_in_out
+    category: trim
+    name: Trim head / tail
+    description: "Shorten or lengthen a clip by moving its start or end point, leaving a gap or overlap."
+    parameters:
+      - {name: head_delta, type: float, typical_range: "-2–2", unit: s}
+      - {name: tail_delta, type: float, typical_range: "-2–2", unit: s}
+    nle_names: {premiere: "Selection tool trim", resolve: "Selection mode trim", capcut: "Drag clip edge", after_effects: "Layer in/out (Alt+[ / ])", final_cut: "Trim edge"}
+    renderer_owner: ffmpeg
+    sources:
+      - {title: "Premiere Pro User Guide — Trim clips", url: "https://helpx.adobe.com/premiere-pro/using/trimming-clips.html", locator: "Regular trim"}
+
+  - id: cap.trim.ripple_trim
+    category: trim
+    name: Ripple trim
+    description: "Trim a clip edge and shift all later clips so the sequence length changes and no gap appears."
+    parameters:
+      - {name: delta, type: float, typical_range: "-2–2", unit: s}
+    nle_names: {premiere: "Ripple Edit tool (B)", resolve: "Trim Edit mode (T)", capcut: "Main-track trim", final_cut: "Default trim (magnetic)"}
+    renderer_owner: ffmpeg
+    sources:
+      - {title: "Premiere Pro — Perform ripple edits", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/trim-clips/perform-ripple-edits.html", locator: "Ripple edits"}
+
+  - id: cap.trim.roll_trim
+    category: trim
+    name: Roll trim
+    description: "Move the cut between two adjacent clips; one gets longer, the other shorter, total length unchanged."
+    parameters:
+      - {name: delta, type: float, typical_range: "-1–1", unit: s}
+    nle_names: {premiere: "Rolling Edit tool (N)", resolve: "Roll (Trim mode)", final_cut: "Roll"}
+    renderer_owner: ffmpeg
+    sources:
+      - {title: "Premiere Pro — Perform rolling edits", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/trim-clips/perform-rolling-edits.html", locator: "Rolling edits"}
+
+  - id: cap.trim.slip
+    category: trim
+    name: Slip
+    description: "Keep a clip's position and length but change which part of the source it shows."
+    parameters:
+      - {name: source_offset, type: float, typical_range: "-3–3", unit: s}
+    nle_names: {premiere: "Slip tool (Y)", resolve: "Slip (Trim mode)", final_cut: "Slip"}
+    renderer_owner: ffmpeg
+    sources:
+      - {title: "Premiere Pro User Guide — Trim clips", url: "https://helpx.adobe.com/premiere-pro/using/trimming-clips.html", locator: "Slip edits"}
+
+  - id: cap.trim.slide
+    category: trim
+    name: Slide
+    description: "Move a clip earlier or later between its neighbours, trimming them to compensate; the clip's content is unchanged."
+    parameters:
+      - {name: delta, type: float, typical_range: "-2–2", unit: s}
+    nle_names: {premiere: "Slide tool (U)", resolve: "Slide (Trim mode)", final_cut: "Slide"}
+    renderer_owner: ffmpeg
+    sources:
+      - {title: "Premiere Pro User Guide — Trim clips", url: "https://helpx.adobe.com/premiere-pro/using/trimming-clips.html", locator: "Slide edits"}
+
+  - id: cap.trim.hold_extend
+    category: trim
+    name: Extend with held frame
+    description: "Lengthen a clip past its source end by holding its first or last frame, e.g. to cover a caption or end card."
+    parameters:
+      - {name: extend_by, type: float, typical_range: "0.2–2", unit: s}
+      - {name: side, type: enum, values: [head, tail]}
+    nle_names: {premiere: "Frame Hold / Add Frame Hold", resolve: "Freeze Frame", capcut: "Freeze", final_cut: "Hold"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: tpad=stop_mode=clone (or start_mode=clone)."
+    sources:
+      - {title: "Premiere Pro — Freeze a video frame for the duration of a clip", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/change-clip-speed/freeze-a-video-frame-for-the-duration-of-a-clip.html", locator: "Frame Hold"}
+      - {title: "FFmpeg Filters — tpad", url: "https://ffmpeg.org/ffmpeg-filters.html#tpad", locator: "tpad"}
+
+  - id: cap.trim.generative_extend
+    category: trim
+    name: Generative extend
+    description: "Synthesize new frames (and ambience) past the end of a clip with a generative model to gain a few extra seconds."
+    parameters:
+      - {name: extend_by, type: float, typical_range: "0.5–2 video, up to 10 audio", unit: s}
+    nle_names: {premiere: "Generative Extend"}
+    renderer_owner: unsupported
+    notes: "Requires a video-generation model; neither ffmpeg nor Remotion can synthesize footage. Use cap.trim.hold_extend or slow the tail instead."
+    sources:
+      - {title: "Premiere — Generative Extend overview", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/edit-with-generative-ai/generative-extend-overview.html", locator: "Overview"}
+
+  # ───────────────────────────── TRANSITION ─────────────────────────────
+  - id: cap.transition.cross_dissolve
+    category: transition
+    name: Cross dissolve
+    description: "Blend the outgoing shot into the incoming one over a short overlap; signals a soft change of time or place."
+    parameters:
+      - {name: duration, type: float, typical_range: "0.2–1.0", unit: s}
+      - {name: alignment, type: enum, values: [center, start, end]}
+    nle_names: {premiere: "Cross Dissolve", resolve: "Cross Dissolve", after_effects: "Opacity keyframes", final_cut: "Cross Dissolve"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: xfade=transition=fade. Needs handles (extra source frames) on both clips."
+    sources:
+      - {title: "Premiere — Video dissolve transitions", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/effects-and-transitions-library/list-of-video-dissolve-transitions.html", locator: "Cross Dissolve"}
+      - {title: "FFmpeg Filters — xfade", url: "https://ffmpeg.org/ffmpeg-filters.html#xfade", locator: "xfade"}
+
+  - id: cap.transition.dip_to_black
+    category: transition
+    name: Dip to black
+    description: "Fade the outgoing shot to black, then fade up into the next; marks a chapter break or ending."
+    parameters:
+      - {name: duration, type: float, typical_range: "0.3–1.0", unit: s}
+    nle_names: {premiere: "Dip to Black", resolve: "Dip to Color Dissolve", final_cut: "Fade to Color"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: xfade=transition=fadeblack."
+    sources:
+      - {title: "Premiere — Video dissolve transitions", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/effects-and-transitions-library/list-of-video-dissolve-transitions.html", locator: "Dip to Black"}
+
+  - id: cap.transition.dip_to_white
+    category: transition
+    name: Dip to white
+    description: "Fade through white between shots; reads as a flash, memory or reveal."
+    parameters:
+      - {name: duration, type: float, typical_range: "0.15–0.6", unit: s}
+    nle_names: {premiere: "Dip to White", resolve: "Dip to Color Dissolve", final_cut: "Fade to Color"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: xfade=transition=fadewhite. A white flash laid over a hard cut is cap.effect.flash_white (remotion)."
+    sources:
+      - {title: "Premiere — Video dissolve transitions", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/effects-and-transitions-library/list-of-video-dissolve-transitions.html", locator: "Dip to White"}
+
+  - id: cap.transition.wipe
+    category: transition
+    name: Wipe
+    description: "A moving edge reveals the next shot across the frame (linear, clock, barn door, etc.)."
+    parameters:
+      - {name: direction, type: enum, values: [left, right, up, down, diagonal, clock]}
+      - {name: duration, type: float, typical_range: "0.2–0.6", unit: s}
+      - {name: edge_softness, type: float, typical_range: "0–0.2", unit: frame_fraction}
+    nle_names: {premiere: "Wipe / Linear Wipe", resolve: "Edge Wipe / Clock Wipe", after_effects: "Linear Wipe", final_cut: "Wipe"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: xfade wipeleft/wiperight/wipeup/wipedown, radial, diag*."
+    sources:
+      - {title: "Premiere — Video transitions", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/effects-and-transitions-library/list-of-video-transitions.html", locator: "Wipe"}
+
+  - id: cap.transition.slide_push
+    category: transition
+    name: Slide / push
+    description: "The incoming shot slides in and pushes the outgoing shot off-frame; feels like a swipe on a phone."
+    parameters:
+      - {name: direction, type: enum, values: [left, right, up, down]}
+      - {name: duration, type: float, typical_range: "0.2–0.5", unit: s}
+      - {name: easing, type: enum, values: [linear, ease_in_out, ease_out]}
+    nle_names: {premiere: "Push / Slide", resolve: "Push / Slide", final_cut: "Push / Slide"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: xfade slideleft/smoothleft, or overlay with animated x for custom easing."
+    sources:
+      - {title: "Premiere — Video transitions", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/effects-and-transitions-library/list-of-video-transitions.html", locator: "Slide"}
+
+  - id: cap.transition.zoom
+    category: transition
+    name: Zoom transition
+    description: "Rapidly scale into the outgoing shot and out of the incoming one (often with blur) for an energetic punch between scenes."
+    parameters:
+      - {name: duration, type: float, typical_range: "0.2–0.5", unit: s}
+      - {name: peak_scale, type: float, typical_range: "1.5–3", unit: x}
+      - {name: blur, type: float, typical_range: "0–20", unit: px}
+    nle_names: {resolve: "Zoom", final_cut: "Zoom"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: xfade zoomin, or per-frame scale+crop expressions on both sides plus gblur."
+    sources:
+      - {title: "Premiere — Modern transitions", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/types-of-effects/transitions.html", locator: "Modern transitions"}
+      - {title: "CapCut — Video transitions", url: "https://www.capcut.com/tools/video-transition", locator: "feature page"}
+
+  - id: cap.transition.whip_pan
+    category: transition
+    name: Whip pan
+    description: "Simulate a fast camera swish: both shots slide quickly with heavy directional blur at the cut."
+    parameters:
+      - {name: direction, type: enum, values: [left, right, up, down]}
+      - {name: duration, type: float, typical_range: "0.15–0.35", unit: s}
+      - {name: blur_length, type: float, typical_range: "40–200", unit: px}
+    nle_names: {}
+    renderer_owner: ffmpeg
+    notes: "Both shots' pixels are needed, so ffmpeg (renderer-split). Build from animated offset + dblur; pair with a whoosh SFX."
+    sources:
+      - {title: "Premiere — Modern transitions", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/types-of-effects/transitions.html", locator: "Modern transitions"}
+      - {title: "FFmpeg Filters — dblur", url: "https://ffmpeg.org/ffmpeg-filters.html#dblur", locator: "dblur"}
+
+  - id: cap.transition.spin
+    category: transition
+    name: Spin / roll transition
+    description: "Rotate the frame quickly through the cut so the next shot spins into place."
+    parameters:
+      - {name: angle, type: float, typical_range: "90–360", unit: deg}
+      - {name: duration, type: float, typical_range: "0.2–0.5", unit: s}
+    nle_names: {resolve: "Spin"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: rotate filter with time expression on each side + xfade; scale up to hide corners."
+    sources:
+      - {title: "Premiere — Video transitions", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/effects-and-transitions-library/list-of-video-transitions.html", locator: "Spin / 3D motion"}
+
+  - id: cap.transition.blur_dissolve
+    category: transition
+    name: Blur dissolve
+    description: "Defocus the outgoing shot while dissolving to the incoming shot as it sharpens; a soft, dreamy change."
+    parameters:
+      - {name: duration, type: float, typical_range: "0.3–0.8", unit: s}
+      - {name: max_blur, type: float, typical_range: "10–40", unit: px}
+    nle_names: {resolve: "Blur Dissolve", capcut: "Blur"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: xfade=transition=hblur, or gblur with time-varying sigma + fade."
+    sources:
+      - {title: "Premiere — Modern transitions", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/types-of-effects/transitions.html", locator: "Modern transitions"}
+
+  - id: cap.transition.glitch
+    category: transition
+    name: Glitch transition
+    description: "A brief burst of digital corruption (RGB split, block shifts, noise) bridging two shots."
+    parameters:
+      - {name: duration, type: float, typical_range: "0.1–0.4", unit: s}
+      - {name: intensity, type: float, typical_range: "0.2–1.0", unit: normalized}
+    nle_names: {capcut: "Glitch"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: rgbashift + noise + random crop offsets on frames around the cut."
+    sources:
+      - {title: "Premiere — Modern transitions", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/types-of-effects/transitions.html", locator: "Modern transitions"}
+      - {title: "FFmpeg Filters — rgbashift", url: "https://ffmpeg.org/ffmpeg-filters.html#rgbashift", locator: "rgbashift"}
+
+  - id: cap.transition.morph_cut
+    category: transition
+    name: Morph cut
+    description: "Hide a jump cut in a static talking-head shot by synthesizing in-between frames that morph one pose into the next."
+    parameters:
+      - {name: duration, type: float, typical_range: "0.3–0.7 (10–20 frames)", unit: s}
+    nle_names: {premiere: "Morph Cut", resolve: "Smooth Cut", final_cut: "Flow"}
+    renderer_owner: unsupported
+    notes: "Needs face tracking + optical-flow warping between non-adjacent frames; not available in ffmpeg/Remotion. Use a punch-in alternation instead."
+    sources:
+      - {title: "Premiere — Morph Cut overview", url: "https://helpx.adobe.com/premiere-pro/using/morph-cut.html", locator: "Morph Cut"}
+
+  - id: cap.transition.light_leak
+    category: transition
+    name: Light-leak transition
+    description: "A warm burst of film-style light washes over the cut, masking the change between shots."
+    parameters:
+      - {name: duration, type: float, typical_range: "0.4–1.2", unit: s}
+      - {name: opacity, type: float, typical_range: "0.5–1.0", unit: normalized}
+      - {name: tint, type: enum, values: [warm, cool, rainbow]}
+    nle_names: {premiere: "Film Impact light leaks (modern)", resolve: "Light leak / Burn"}
+    renderer_owner: remotion
+    notes: "Per renderer-split table (overlay). The overlay is composited with plain alpha-over; a true screen/add look needs an ffmpeg blend step at composite time."
+    sources:
+      - {title: "Premiere — Modern transitions", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/types-of-effects/transitions.html", locator: "Modern transitions"}
+
+  - id: cap.transition.flash_cut
+    category: transition
+    name: Flash on cut
+    description: "A few frames of white or colour flash over a hard cut to add impact, often on a beat."
+    parameters:
+      - {name: duration, type: float, typical_range: "0.05–0.25", unit: s}
+      - {name: peak_opacity, type: float, typical_range: "0.6–1.0", unit: normalized}
+      - {name: color, type: string, typical_range: "#FFFFFF"}
+    nle_names: {premiere: "Dip to White (short) / Color Matte", resolve: "Dip to Color"}
+    renderer_owner: remotion
+    notes: "Overlay only (renderer-split: white flash = Remotion). Pairs with cap.audio.sfx_add hit."
+    sources:
+      - {title: "Premiere — How to create a color-dissolve transition", url: "https://helpx.adobe.com/premiere-pro/how-to/color-dissolve-transition.html", locator: "Color dissolve"}
+
+  # ───────────────────────────── TRANSFORM ─────────────────────────────
+  - id: cap.transform.position
+    category: transform
+    name: Position
+    description: "Move the image within the frame, statically or animated with keyframes."
+    parameters:
+      - {name: x, type: float, typical_range: "-540–540 from centre (1080 w)", unit: px}
+      - {name: y, type: float, typical_range: "-960–960 from centre (1920 h)", unit: px}
+    nle_names: {premiere: "Motion > Position", resolve: "Transform > Position", capcut: "Position", after_effects: "Position", final_cut: "Transform > Position"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: crop x/y expressions or overlay x/y on a canvas."
+    sources:
+      - {title: "Premiere — Apply Motion effect to clips", url: "https://helpx.adobe.com/premiere-pro/using/motion-position-scale-rotate-clip.html", locator: "Position"}
+
+  - id: cap.transform.scale
+    category: transform
+    name: Scale
+    description: "Enlarge or shrink the image; above 100% crops in, below 100% shows background."
+    parameters:
+      - {name: scale, type: float, typical_range: "0.5–2.0", unit: x}
+      - {name: uniform, type: bool, typical_range: "true"}
+    nle_names: {premiere: "Motion > Scale", resolve: "Zoom", capcut: "Scale", after_effects: "Scale", final_cut: "Scale"}
+    renderer_owner: ffmpeg
+    notes: "Upscaling past ~1.3x on 1080p sources visibly softens; prefer 4K sources for big punch-ins."
+    sources:
+      - {title: "Premiere — Apply Motion effect to clips", url: "https://helpx.adobe.com/premiere-pro/using/motion-position-scale-rotate-clip.html", locator: "Scale"}
+
+  - id: cap.transform.rotation
+    category: transform
+    name: Rotation
+    description: "Turn the image around its anchor point, to level a horizon or as an animated move."
+    parameters:
+      - {name: angle, type: float, typical_range: "-5–5 (levelling), any (animation)", unit: deg}
+    nle_names: {premiere: "Motion > Rotation", resolve: "Rotation Angle", capcut: "Rotate", after_effects: "Rotation", final_cut: "Rotation"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: rotate (angle in radians, ow/oh, fillcolor). Scale up slightly to hide corners."
+    sources:
+      - {title: "Premiere — Apply Motion effect to clips", url: "https://helpx.adobe.com/premiere-pro/using/motion-position-scale-rotate-clip.html", locator: "Rotation"}
+      - {title: "FFmpeg Filters — rotate", url: "https://ffmpeg.org/ffmpeg-filters.html#rotate", locator: "rotate"}
+
+  - id: cap.transform.crop
+    category: transform
+    name: Crop
+    description: "Cut away edges of the image, to remove distractions or prepare a region for reframing."
+    parameters:
+      - {name: left, type: float, typical_range: "0–40", unit: percent}
+      - {name: right, type: float, typical_range: "0–40", unit: percent}
+      - {name: top, type: float, typical_range: "0–40", unit: percent}
+      - {name: bottom, type: float, typical_range: "0–40", unit: percent}
+      - {name: feather, type: float, typical_range: "0–50", unit: px}
+    nle_names: {premiere: "Crop effect", resolve: "Cropping", capcut: "Crop", after_effects: "Region of interest / mask", final_cut: "Crop"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: crop."
+    sources:
+      - {title: "CapCut — Crop video", url: "https://www.capcut.com/tools/crop-video", locator: "feature page"}
+      - {title: "FFmpeg Filters — crop", url: "https://ffmpeg.org/ffmpeg-filters.html#crop", locator: "crop"}
+
+  - id: cap.transform.reframe_vertical
+    category: transform
+    name: Reframe to 9:16 (static)
+    description: "Convert landscape footage to vertical by choosing a fixed 9:16 window inside the frame."
+    parameters:
+      - {name: target_aspect, type: enum, values: ["9:16", "4:5", "1:1"]}
+      - {name: window_x, type: float, typical_range: "0–1 (0.5 = centre)", unit: normalized}
+    nle_names: {premiere: "Sequence settings + Position", resolve: "Timeline resolution + Inspector Position", capcut: "Ratio 9:16", final_cut: "Project format / Smart Conform"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: crop=ih*9/16:ih:x:0 then scale=1080:1920."
+    sources:
+      - {title: "CapCut — TikTok video cropper", url: "https://www.capcut.com/tools/tiktok-video-cropper", locator: "feature page"}
+
+  - id: cap.transform.auto_reframe
+    category: transform
+    name: Auto reframe (subject follow)
+    description: "Move a vertical crop window over time to keep the main subject in frame when converting aspect ratio."
+    parameters:
+      - {name: target_aspect, type: enum, values: ["9:16", "4:5", "1:1"]}
+      - {name: motion_preset, type: enum, values: [slow, default, fast]}
+      - {name: smoothing, type: float, typical_range: "0.5–2 (time constant)", unit: s}
+    nle_names: {premiere: "Auto Reframe Sequence", resolve: "Smart Reframe", capcut: "Auto reframe", final_cut: "Smart Conform"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg executes a keyframed crop path (renderer-split: follow face = ffmpeg). The path itself needs cap.analysis.subject_tracking (unsupported in-stack)."
+    sources:
+      - {title: "Premiere Pro — Auto Reframe", url: "https://helpx.adobe.com/premiere-pro/using/auto-reframe.html", locator: "Auto Reframe"}
+      - {title: "CapCut — Auto reframe", url: "https://www.capcut.com/tools/auto-reframe", locator: "feature page"}
+      - {title: "Final Cut Pro release notes", url: "https://support.apple.com/en-us/102825", locator: "10.6 — Smart Conform"}
+
+  - id: cap.transform.punch_in
+    category: transform
+    name: Punch-in (digital zoom)
+    description: "Scale up a shot to tighten framing or add emphasis, instantly on a cut or as a slow push."
+    parameters:
+      - {name: scale, type: float, typical_range: "1.05–1.25", unit: x}
+      - {name: duration, type: float, typical_range: "0–0.3 (instant) or 1–4 (slow push)", unit: s}
+      - {name: easing, type: enum, values: [linear, ease_in, ease_out, ease_in_out]}
+    nle_names: {premiere: "Scale (Effect Controls)", resolve: "Zoom (Inspector)", capcut: "Scale / Keyframe", after_effects: "Scale", final_cut: "Transform > Scale"}
+    renderer_owner: ffmpeg
+    notes: "Supersample (scale up 2x first) for slow push-ins to avoid whole-pixel stepping."
+    sources:
+      - {title: "Premiere — Apply Motion effect to clips", url: "https://helpx.adobe.com/premiere-pro/using/motion-position-scale-rotate-clip.html", locator: "Scale"}
+
+  - id: cap.transform.ken_burns
+    category: transform
+    name: Ken Burns pan & zoom
+    description: "Slowly pan and zoom across a still or a static shot to create camera movement."
+    parameters:
+      - {name: start_rect, type: string, typical_range: "x,y,w,h normalized"}
+      - {name: end_rect, type: string, typical_range: "x,y,w,h normalized"}
+      - {name: zoom_change, type: float, typical_range: "1.0→1.1–1.3", unit: x}
+    nle_names: {premiere: "Motion keyframes", resolve: "Dynamic Zoom", capcut: "Keyframe", final_cut: "Ken Burns (Crop)"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: zoompan (stills) or crop/scale expressions (video)."
+    sources:
+      - {title: "DaVinci Resolve 20 Reference Manual", url: "https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf", locator: "Inspector — Dynamic Zoom"}
+      - {title: "FFmpeg Filters — zoompan", url: "https://ffmpeg.org/ffmpeg-filters.html#zoompan", locator: "zoompan"}
+
+  - id: cap.transform.flip_mirror
+    category: transform
+    name: Flip / mirror
+    description: "Mirror the image horizontally or vertically, e.g. to change screen direction or fix a selfie camera."
+    parameters:
+      - {name: axis, type: enum, values: [horizontal, vertical]}
+    nle_names: {premiere: "Horizontal Flip", resolve: "Flip Horizontal/Vertical", capcut: "Mirror", after_effects: "Scale -100%", final_cut: "Flipped"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: hflip / vflip. Never flip shots containing readable text or logos."
+    sources:
+      - {title: "CapCut — Mirror video", url: "https://www.capcut.com/tools/mirror-video-online", locator: "feature page"}
+
+  - id: cap.transform.stabilize
+    category: transform
+    name: Stabilize
+    description: "Analyse camera shake and counter-move the frame to smooth it, cropping in to hide moving edges."
+    parameters:
+      - {name: smoothness, type: float, typical_range: "50–75 (Premiere default 50)", unit: percent}
+      - {name: result, type: enum, values: [smooth_motion, no_motion]}
+      - {name: framing, type: enum, values: [crop_auto_scale, crop, synthesize_edges]}
+    nle_names: {premiere: "Warp Stabilizer", resolve: "Stabilization (Inspector/Color)", capcut: "Stabilize", after_effects: "Warp Stabilizer", final_cut: "Stabilization"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: vidstabdetect/vidstabtransform (needs libvidstab — absent in the local Homebrew build) or deshake (present, lower quality)."
+    sources:
+      - {title: "Premiere — Stabilize shaky footage with Warp Stabilizer", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/commonly-used-effects/stabilize-shaky-footage-using-warp-stabilizer.html", locator: "Warp Stabilizer"}
+      - {title: "FFmpeg Filters — vidstabdetect", url: "https://ffmpeg.org/ffmpeg-filters.html#vidstabdetect", locator: "vidstabdetect"}
+
+  - id: cap.transform.lens_correction
+    category: transform
+    name: Lens distortion correction
+    description: "Remove barrel or fisheye bending from action-cam or wide-lens footage."
+    parameters:
+      - {name: k1, type: float, typical_range: "-0.5–0", unit: coeff}
+      - {name: k2, type: float, typical_range: "-0.2–0.2", unit: coeff}
+    nle_names: {premiere: "Lens Distortion", resolve: "Lens Distortion / Lens Correction", after_effects: "Optics Compensation"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: lenscorrection (k1,k2)."
+    sources:
+      - {title: "Premiere — Distort effects", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/effects-and-transitions-library/distort-effects.html", locator: "Lens Distortion"}
+      - {title: "FFmpeg Filters — lenscorrection", url: "https://ffmpeg.org/ffmpeg-filters.html#lenscorrection", locator: "lenscorrection"}
+
+  - id: cap.transform.perspective
+    category: transform
+    name: Perspective / corner pin / 3D tilt
+    description: "Warp the image by moving its four corners or tilting it in 3D, e.g. to fake a tilted screen."
+    parameters:
+      - {name: corners, type: string, typical_range: "4 x,y pairs"}
+      - {name: tilt, type: float, typical_range: "-30–30", unit: deg}
+    nle_names: {premiere: "Corner Pin", resolve: "Pitch / Yaw (3D transform)", after_effects: "Corner Pin", final_cut: "Distort"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: perspective filter (static or per-frame via sendcmd)."
+    sources:
+      - {title: "Premiere — Distort effects", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/effects-and-transitions-library/distort-effects.html", locator: "Corner Pin"}
+      - {title: "FFmpeg Filters — perspective", url: "https://ffmpeg.org/ffmpeg-filters.html#perspective", locator: "perspective"}
+
+  - id: cap.transform.keyframe_easing
+    category: transform
+    name: Keyframed animation with easing
+    description: "Animate any transform property between keyframes using an interpolation curve (linear, ease, bezier, hold)."
+    parameters:
+      - {name: interpolation, type: enum, values: [linear, bezier, ease_in, ease_out, ease_in_out, hold]}
+      - {name: influence, type: float, typical_range: "33–90", unit: percent}
+    nle_names: {premiere: "Temporal Interpolation / Bezier", resolve: "Keyframe curves (Ease)", capcut: "Keyframe + Graphs", after_effects: "Easy Ease / Graph Editor", final_cut: "Video Animation"}
+    renderer_owner: ffmpeg
+    notes: "For base-video transforms the compiler bakes curves into ffmpeg expressions. Overlay animations use Remotion interpolate/spring."
+    sources:
+      - {title: "Premiere — Edit keyframe graphs", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/control-effects-and-transitions-using-keyframes/edit-keyframes-graphs.html", locator: "Keyframe graphs"}
+      - {title: "After Effects — Keyframe interpolation", url: "https://helpx.adobe.com/after-effects/using/keyframe-interpolation.html", locator: "Interpolation types"}
+
+  - id: cap.transform.blurred_fill
+    category: transform
+    name: Blurred-background fill
+    description: "Fit a non-vertical shot inside 9:16 and fill the empty space with a blurred, enlarged copy of itself."
+    parameters:
+      - {name: blur_sigma, type: float, typical_range: "20–60", unit: px}
+      - {name: bg_scale, type: float, typical_range: "1.8–3.2", unit: x}
+      - {name: bg_dim, type: float, typical_range: "0–0.4", unit: normalized}
+    nle_names: {premiere: "Duplicate + Gaussian Blur", resolve: "Duplicate + Blur"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: split → scale+crop+gblur (bg) / scale (fg) → overlay."
+    sources:
+      - {title: "CapCut — Blur video background", url: "https://www.capcut.com/tools/blur-video-background", locator: "feature page"}
+
+  - id: cap.transform.pad_letterbox
+    category: transform
+    name: Pad / fit with solid background
+    description: "Fit the shot inside the vertical frame and fill the remaining area with a solid colour."
+    parameters:
+      - {name: color, type: string, typical_range: "#000000 or brand colour"}
+      - {name: v_align, type: enum, values: [top, center, bottom]}
+    nle_names: {premiere: "Scale to fit + color matte", final_cut: "Spatial Conform: Fit"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: scale=...:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color."
+    sources:
+      - {title: "FFmpeg Filters — pad", url: "https://ffmpeg.org/ffmpeg-filters.html#pad", locator: "pad"}
+      - {title: "CapCut — Resize video", url: "https://www.capcut.com/tools/resize-video-online", locator: "feature page"}
+
+  - id: cap.transform.beat_zoom_pulse
+    category: transform
+    name: Beat zoom pulse
+    description: "A quick scale bump (in and back out) timed to a beat or emphasised word."
+    parameters:
+      - {name: peak_scale, type: float, typical_range: "1.03–1.12", unit: x}
+      - {name: attack, type: float, typical_range: "0.03–0.08", unit: s}
+      - {name: release, type: float, typical_range: "0.15–0.4", unit: s}
+    nle_names: {premiere: "Scale keyframes", after_effects: "Scale keyframes"}
+    renderer_owner: ffmpeg
+    notes: "Triggered from beat grid or caption emphasis timestamps."
+    sources:
+      - {title: "CapCut — Keyframe animation", url: "https://www.capcut.com/tools/keyframe-animation", locator: "feature page"}
+
+  # ───────────────────────────── SPEED ─────────────────────────────
+  - id: cap.speed.constant
+    category: speed
+    name: Constant speed change
+    description: "Play a whole clip faster or slower by a fixed factor (time-lapse, slow motion, trimming slack)."
+    parameters:
+      - {name: rate, type: float, typical_range: "0.25–4 (talking head 1.05–1.25)", unit: x}
+      - {name: preserve_pitch, type: bool, typical_range: "true"}
+    nle_names: {premiere: "Speed/Duration", resolve: "Change Clip Speed", capcut: "Speed > Normal", after_effects: "Time Stretch", final_cut: "Retime > Custom Speed"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: setpts=PTS/rate + atempo=rate (chain atempo outside 0.5–2)."
+    sources:
+      - {title: "Premiere — Change clip speed and duration", url: "https://helpx.adobe.com/premiere-pro/using/duration-speed.html", locator: "Speed/Duration"}
+      - {title: "CapCut — Change video speed", url: "https://www.capcut.com/tools/change-video-speed", locator: "feature page"}
+
+  - id: cap.speed.ramp
+    category: speed
+    name: Speed ramp
+    description: "Vary playback speed within a clip, easing between fast and slow sections to accent an action or beat."
+    parameters:
+      - {name: keyframes, type: string, typical_range: "list of (t, rate)"}
+      - {name: rate_range, type: string, typical_range: "0.2–5", unit: x}
+      - {name: ramp_duration, type: float, typical_range: "0.1–0.5", unit: s}
+      - {name: preset, type: enum, values: [montage, hero, bullet, jump_cut, flash_in, flash_out, custom]}
+    nle_names: {premiere: "Time Remapping", resolve: "Retime Curve", capcut: "Speed > Curve", after_effects: "Time Remapping", final_cut: "Speed Ramp"}
+    renderer_owner: ffmpeg
+    notes: "Resolved in renderer-split: ffmpeg setpts (segmented or expression). Audio usually muted/replaced on ramped sections."
+    sources:
+      - {title: "Premiere — Change clip speed with Time Remapping", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/change-clip-speed/change-clip-speed-and-duration-using-time-remapping.html", locator: "Speed transitions"}
+      - {title: "CapCut — Speed ramp", url: "https://www.capcut.com/tools/speed-ramp", locator: "feature page"}
+
+  - id: cap.speed.freeze_frame
+    category: speed
+    name: Freeze frame
+    description: "Hold a single frame for a period inside a clip, then continue; good for intros, labels and dramatic pauses."
+    parameters:
+      - {name: at, type: float, typical_range: "any", unit: s}
+      - {name: hold, type: float, typical_range: "0.5–3", unit: s}
+    nle_names: {premiere: "Insert Frame Hold Segment", resolve: "Freeze Frame", capcut: "Freeze", after_effects: "Freeze Frame (Time Remap)", final_cut: "Add Freeze Frame / Hold"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: split clip, loop/tpad the boundary frame, concat."
+    sources:
+      - {title: "Premiere — Freeze frames using Time Remapping", url: "https://helpx.adobe.com/premiere/desktop/organize-media/file-organization/freeze-a-frame-for-a-portion-of-a-clip-using-time-remapping.html", locator: "Freeze a frame"}
+      - {title: "CapCut — Freeze frame", url: "https://www.capcut.com/tools/freeze-frame-video", locator: "feature page"}
+
+  - id: cap.speed.reverse
+    category: speed
+    name: Reverse
+    description: "Play a clip or section backwards."
+    parameters:
+      - {name: range, type: string, typical_range: "0.5–3 s section"}
+      - {name: reverse_audio, type: bool, typical_range: "false (usually mute)"}
+    nle_names: {premiere: "Reverse Speed", resolve: "Reverse Segment", capcut: "Reverse", after_effects: "Time-Reverse Layer", final_cut: "Reverse Clip"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: reverse / areverse buffer the whole segment in RAM; keep reversed sections short."
+    sources:
+      - {title: "Premiere — Change clip speed and duration", url: "https://helpx.adobe.com/premiere-pro/using/duration-speed.html", locator: "Reverse Speed"}
+      - {title: "FFmpeg Filters — reverse", url: "https://ffmpeg.org/ffmpeg-filters.html#reverse", locator: "reverse"}
+
+  - id: cap.speed.boomerang
+    category: speed
+    name: Boomerang / ping-pong loop
+    description: "Play a short section forward then backward (repeatedly) for a looping, playful beat."
+    parameters:
+      - {name: section, type: float, typical_range: "0.5–1.5", unit: s}
+      - {name: repeats, type: int, typical_range: "1–3"}
+    nle_names: {capcut: "Reverse + duplicate", premiere: "Time Remapping (backward segment)"}
+    renderer_owner: ffmpeg
+    sources:
+      - {title: "Premiere — Change clip speed with Time Remapping", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/change-clip-speed/change-clip-speed-and-duration-using-time-remapping.html", locator: "Reverse playback"}
+
+  - id: cap.speed.fit_to_duration
+    category: speed
+    name: Fit clip to duration
+    description: "Retime a clip so it exactly fills a target length, e.g. a beat-length gap."
+    parameters:
+      - {name: target_duration, type: float, typical_range: "0.5–10", unit: s}
+      - {name: max_rate_change, type: float, typical_range: "0.8–1.25 (invisible)", unit: x}
+    nle_names: {premiere: "Rate Stretch tool (R)", resolve: "Fit to Fill", final_cut: "Retime to fit"}
+    renderer_owner: ffmpeg
+    sources:
+      - {title: "Premiere — Change clip speed and duration", url: "https://helpx.adobe.com/premiere-pro/using/duration-speed.html", locator: "Rate Stretch"}
+
+  - id: cap.speed.optical_flow
+    category: speed
+    name: Optical-flow frame interpolation
+    description: "Generate in-between frames from motion vectors so slowed footage looks smooth rather than stuttery."
+    parameters:
+      - {name: target_fps, type: int, typical_range: "60–120 then conform"}
+      - {name: mode, type: enum, values: [frame_sampling, frame_blending, optical_flow]}
+    nle_names: {premiere: "Time Interpolation > Optical Flow", resolve: "Retime Process > Optical Flow", capcut: "Optical flow", after_effects: "Pixel Motion", final_cut: "Video Quality > Optical Flow"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: minterpolate=mi_mode=mci (slow, artefacts on occlusions). ML retiming quality is cap.speed.ml_interpolation."
+    sources:
+      - {title: "Premiere — Change clip speed and duration", url: "https://helpx.adobe.com/premiere-pro/using/duration-speed.html", locator: "Time Interpolation > Optical Flow"}
+      - {title: "FFmpeg Filters — minterpolate", url: "https://ffmpeg.org/ffmpeg-filters.html#minterpolate", locator: "minterpolate"}
+
+  - id: cap.speed.ml_interpolation
+    category: speed
+    name: AI (ML) frame interpolation
+    description: "Neural retiming that synthesises very clean slow motion from normal-frame-rate footage."
+    parameters:
+      - {name: factor, type: float, typical_range: "2–8", unit: x}
+    nle_names: {resolve: "Speed Warp", capcut: "Super slow motion"}
+    renderer_owner: unsupported
+    notes: "Needs an ML model (e.g. RIFE/FILM) outside ffmpeg/Remotion. Fallback: cap.speed.optical_flow."
+    sources:
+      - {title: "DaVinci Resolve 21.1 Studio Features", url: "https://documents.blackmagicdesign.com/SupportNotes/DaVinci_Resolve_Studio_21_Features.pdf", locator: "Speed Warp"}
+      - {title: "CapCut — Super slow motion video", url: "https://www.capcut.com/tools/super-slow-motion-video", locator: "feature page"}
+
+  - id: cap.speed.hfr_conform
+    category: speed
+    name: High-frame-rate conform (true slow-mo)
+    description: "Play 60/120/240 fps footage at the 30 fps timeline rate so every captured frame is shown, giving clean slow motion."
+    parameters:
+      - {name: source_fps, type: int, typical_range: "60–240"}
+      - {name: timeline_fps, type: int, typical_range: "30"}
+    nle_names: {premiere: "Interpret Footage", resolve: "Clip Attributes > Frame rate", final_cut: "Automatic Speed"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: setpts=PTS*(source_fps/timeline_fps), -r 30."
+    sources:
+      - {title: "Premiere — Change clip speed and duration", url: "https://helpx.adobe.com/premiere-pro/using/duration-speed.html", locator: "Interpret footage"}
+
+  - id: cap.speed.posterize_time
+    category: speed
+    name: Posterize time / stutter
+    description: "Drop the effective frame rate (e.g. 8–12 fps) for a choppy, stop-motion or strobe look."
+    parameters:
+      - {name: effective_fps, type: int, typical_range: "6–15"}
+    nle_names: {premiere: "Posterize Time", after_effects: "Posterize Time", resolve: "Stop Motion"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: fps=10,fps=30 (duplicate frames back to timeline rate)."
+    sources:
+      - {title: "After Effects — Time effects", url: "https://helpx.adobe.com/after-effects/desktop/apply-effects-and-animation-presets/list-of-effects/time-effects.html", locator: "Posterize Time"}
+  # ───────────────────────────── COLOR ─────────────────────────────
+  - id: cap.color.auto_balance
+    category: color
+    name: Auto color / auto balance
+    description: "One-click correction that neutralises casts and sets black and white levels automatically."
+    parameters:
+      - {name: strength, type: float, typical_range: "0.5–1.0", unit: normalized}
+    nle_names: {premiere: "Auto (Basic Correction)", resolve: "Auto Balance", capcut: "Auto adjust", final_cut: "Balance Color"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg has no single auto-grade; approximate with signalstats-derived colorlevels / normalize filter."
+    sources:
+      - {title: "Premiere — Adjust basic color correction", url: "https://helpx.adobe.com/premiere/desktop/correct-color/color-correction-fundamentals/basic-color-correction-options.html", locator: "Auto"}
+      - {title: "FFmpeg Filters — normalize", url: "https://ffmpeg.org/ffmpeg-filters.html#normalize", locator: "normalize"}
+
+  - id: cap.color.white_balance
+    category: color
+    name: White balance (temperature / tint)
+    description: "Shift the image warmer/cooler and greener/magenta so neutrals look neutral, or to set a mood."
+    parameters:
+      - {name: temperature, type: float, typical_range: "-30–30 (slider) or 3000–8000 K target", unit: relative}
+      - {name: tint, type: float, typical_range: "-20–20", unit: relative}
+    nle_names: {premiere: "WB Selector / Temperature / Tint", resolve: "Temp / Tint (Primaries)", capcut: "Adjust > Temp / Tint", after_effects: "Lumetri Color", final_cut: "White Balance"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: colortemperature, colorbalance."
+    sources:
+      - {title: "Premiere — Adjust basic color correction", url: "https://helpx.adobe.com/premiere/desktop/correct-color/color-correction-fundamentals/basic-color-correction-options.html", locator: "White balance"}
+      - {title: "FFmpeg Filters — colortemperature", url: "https://ffmpeg.org/ffmpeg-filters.html#colortemperature", locator: "colortemperature"}
+
+  - id: cap.color.exposure
+    category: color
+    name: Exposure / brightness
+    description: "Raise or lower overall image brightness."
+    parameters:
+      - {name: exposure, type: float, typical_range: "-1.5–1.5", unit: stops}
+    nle_names: {premiere: "Exposure", resolve: "Offset / Gain", capcut: "Adjust > Brightness / Exposure", after_effects: "Exposure", final_cut: "Color Wheels > Master"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: exposure (linear-light) or eq=brightness."
+    sources:
+      - {title: "Premiere — Adjust basic color correction", url: "https://helpx.adobe.com/premiere/desktop/correct-color/color-correction-fundamentals/basic-color-correction-options.html", locator: "Tone — Exposure"}
+      - {title: "FFmpeg Filters — exposure", url: "https://ffmpeg.org/ffmpeg-filters.html#exposure", locator: "exposure"}
+
+  - id: cap.color.contrast
+    category: color
+    name: Contrast
+    description: "Expand or compress the difference between dark and bright tones."
+    parameters:
+      - {name: contrast, type: float, typical_range: "-30–40", unit: relative}
+      - {name: pivot, type: float, typical_range: "0.4–0.5", unit: normalized}
+    nle_names: {premiere: "Contrast", resolve: "Contrast / Pivot", capcut: "Adjust > Contrast", final_cut: "Color Wheels"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: eq=contrast or curves."
+    sources:
+      - {title: "Premiere — Adjust basic color correction", url: "https://helpx.adobe.com/premiere/desktop/correct-color/color-correction-fundamentals/basic-color-correction-options.html", locator: "Tone — Contrast"}
+
+  - id: cap.color.highlights_shadows
+    category: color
+    name: Highlights / shadows / whites / blacks
+    description: "Adjust specific tonal ranges separately, e.g. recover a bright sky or lift dark faces."
+    parameters:
+      - {name: highlights, type: float, typical_range: "-50–20", unit: relative}
+      - {name: shadows, type: float, typical_range: "-20–50", unit: relative}
+      - {name: whites, type: float, typical_range: "-30–30", unit: relative}
+      - {name: blacks, type: float, typical_range: "-30–30", unit: relative}
+    nle_names: {premiere: "Highlights / Shadows / Whites / Blacks", resolve: "Shadows / Highlights (Primaries)", capcut: "Adjust > Highlight / Shadow", final_cut: "Color Wheels"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: curves (per-range control points) or colorlevels."
+    sources:
+      - {title: "Premiere — Adjust basic color correction", url: "https://helpx.adobe.com/premiere/desktop/correct-color/color-correction-fundamentals/basic-color-correction-options.html", locator: "Tone"}
+
+  - id: cap.color.saturation_vibrance
+    category: color
+    name: Saturation / vibrance
+    description: "Intensify or mute colours; vibrance boosts dull colours more than already-saturated ones and protects skin."
+    parameters:
+      - {name: saturation, type: float, typical_range: "80–130", unit: percent}
+      - {name: vibrance, type: float, typical_range: "-20–40", unit: relative}
+    nle_names: {premiere: "Saturation / Vibrance", resolve: "Sat / Color Boost", capcut: "Adjust > Saturation", after_effects: "Vibrance", final_cut: "Saturation"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: eq=saturation, vibrance."
+    sources:
+      - {title: "Premiere — Adjust basic color correction", url: "https://helpx.adobe.com/premiere/desktop/correct-color/color-correction-fundamentals/basic-color-correction-options.html", locator: "Saturation"}
+      - {title: "FFmpeg Filters — vibrance", url: "https://ffmpeg.org/ffmpeg-filters.html#vibrance", locator: "vibrance"}
+
+  - id: cap.color.color_wheels
+    category: color
+    name: Color wheels (lift / gamma / gain / offset)
+    description: "Tint and level shadows, midtones and highlights separately; the core primary grading control."
+    parameters:
+      - {name: lift, type: string, typical_range: "small RGB offsets ±0.05"}
+      - {name: gamma, type: string, typical_range: "±0.05"}
+      - {name: gain, type: string, typical_range: "±0.1"}
+    nle_names: {premiere: "Color Wheels & Match", resolve: "Primaries — Color Wheels", capcut: "Color wheel", final_cut: "Color Wheels"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: colorbalance (rs/gs/bs, rm/gm/bm, rh/gh/bh) or lut3d from a generated cube."
+    sources:
+      - {title: "DaVinci Resolve 20 Reference Manual", url: "https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf", locator: "Color page — Primaries palette"}
+      - {title: "CapCut — Color wheel", url: "https://www.capcut.com/tools/color-wheel", locator: "feature page"}
+
+  - id: cap.color.rgb_curves
+    category: color
+    name: RGB / luma curves
+    description: "Reshape tone and per-channel colour response with a curve; e.g. S-curve for contrast or faded blacks."
+    parameters:
+      - {name: master_points, type: string, typical_range: "0/0.03 0.25/0.22 0.75/0.8 1/0.97"}
+      - {name: channel, type: enum, values: [master, red, green, blue]}
+    nle_names: {premiere: "RGB Curves", resolve: "Curves — Custom", capcut: "Curves", after_effects: "Curves", final_cut: "Color Curves"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: curves (also accepts Photoshop .acv)."
+    sources:
+      - {title: "Premiere — Color correction workflow", url: "https://helpx.adobe.com/premiere/desktop/correct-color/color-correction-fundamentals/color-correction-workflow.html", locator: "Curves"}
+      - {title: "FFmpeg Filters — curves", url: "https://ffmpeg.org/ffmpeg-filters.html#curves", locator: "curves"}
+
+  - id: cap.color.hue_sat_curves
+    category: color
+    name: Hue / saturation curves
+    description: "Change hue, saturation or brightness of one colour range only, e.g. desaturate greens or shift orange skin."
+    parameters:
+      - {name: curve, type: enum, values: [hue_vs_hue, hue_vs_sat, hue_vs_luma, luma_vs_sat, sat_vs_sat]}
+      - {name: hue_center, type: float, typical_range: "0–360", unit: deg}
+      - {name: amount, type: float, typical_range: "-50–50", unit: relative}
+    nle_names: {premiere: "Hue Saturation Curves", resolve: "Curves — Hue vs Hue/Sat/Lum", capcut: "HSL", final_cut: "Hue/Saturation Curves"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: huesaturation (per-colour ranges) or a generated LUT."
+    sources:
+      - {title: "Premiere — Correct color using Hue and Saturation curves", url: "https://helpx.adobe.com/premiere/desktop/correct-color/add-color-effects/correct-color-using-hue-and-saturation-curves.html", locator: "Hue vs Sat"}
+      - {title: "CapCut — HSL color", url: "https://www.capcut.com/tools/hsl-color", locator: "feature page"}
+
+  - id: cap.color.creative_lut
+    category: color
+    name: Creative LUT / look
+    description: "Apply a 3D lookup table to give footage a stylised grade (teal-orange, film, moody) in one step."
+    parameters:
+      - {name: lut_file, type: string, typical_range: ".cube 33 or 65 point"}
+      - {name: intensity, type: float, typical_range: "0.3–1.0", unit: normalized}
+    nle_names: {premiere: "Creative > Look", resolve: "LUTs", capcut: "Filters / LUT", after_effects: "Apply Color LUT", final_cut: "Custom LUT"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: lut3d (+ blend for intensity <1). Apply after correction."
+    sources:
+      - {title: "Premiere — Add Look-up Tables", url: "https://helpx.adobe.com/premiere-pro/using/looks-and-luts.html", locator: "Looks and LUTs"}
+      - {title: "FFmpeg Filters — lut3d", url: "https://ffmpeg.org/ffmpeg-filters.html#lut3d", locator: "lut3d"}
+
+  - id: cap.color.technical_lut
+    category: color
+    name: Log-to-Rec.709 conversion (technical LUT / CST)
+    description: "Convert flat log or wide-gamut camera footage to standard display colour before grading."
+    parameters:
+      - {name: input, type: enum, values: [slog3, vlog, clog3, applelog, dlog, rec709]}
+      - {name: output, type: enum, values: [rec709_g24]}
+    nle_names: {premiere: "Input LUT", resolve: "Color Space Transform", after_effects: "Color management / LUT", final_cut: "Camera LUT / Log processing"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: lut3d with the manufacturer's conversion LUT; zscale for gamut transforms (zscale absent in local build)."
+    sources:
+      - {title: "Premiere — Install custom Look-up Table files", url: "https://helpx.adobe.com/premiere/desktop/correct-color/add-color-effects/install-custom-look-up-table-files.html", locator: "Input LUT"}
+      - {title: "DaVinci Resolve 20 Reference Manual", url: "https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf", locator: "Resolve FX Color — Color Space Transform"}
+
+  - id: cap.color.hsl_qualifier
+    category: color
+    name: HSL qualifier (secondary correction)
+    description: "Key a colour range (hue/sat/luma) and grade only that selection, e.g. make a jacket pop."
+    parameters:
+      - {name: hue_range, type: string, typical_range: "centre ±10–30°"}
+      - {name: sat_range, type: string, typical_range: "0.2–1.0"}
+      - {name: luma_range, type: string, typical_range: "0.1–0.9"}
+      - {name: softness, type: float, typical_range: "5–20", unit: percent}
+    nle_names: {premiere: "HSL Secondary", resolve: "Qualifier", capcut: "HSL", after_effects: "Lumetri HSL Secondary", final_cut: "Color Mask"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: hsvkey/colorkey to build a matte, then maskedmerge graded vs original."
+    sources:
+      - {title: "Premiere — Color grading workflows (Lumetri HSL Secondary)", url: "https://helpx.adobe.com/premiere-pro/using/color-workflows.html", locator: "HSL Secondary"}
+      - {title: "DaVinci Resolve 20 Reference Manual", url: "https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf", locator: "Color page — Qualifiers"}
+
+  - id: cap.color.power_window
+    category: color
+    name: Shape-limited correction (power window)
+    description: "Grade inside or outside a soft shape, e.g. brighten a face or darken edges."
+    parameters:
+      - {name: shape, type: enum, values: [ellipse, rectangle, polygon, gradient]}
+      - {name: softness, type: float, typical_range: "5–30", unit: percent}
+      - {name: tracked, type: bool, typical_range: "false (true needs tracking)"}
+    nle_names: {premiere: "Lumetri mask / isolated adjustment", resolve: "Power Window", after_effects: "Mask on adjustment layer", final_cut: "Shape Mask"}
+    renderer_owner: ffmpeg
+    notes: "Static shapes OK in ffmpeg (geq/alphamerge + maskedmerge). Tracked windows need cap.compositing.point_tracking (unsupported)."
+    sources:
+      - {title: "Premiere — Create isolated adjustments using masks", url: "https://helpx.adobe.com/premiere/desktop/correct-color/color-mode-fundamentals/isolated-adjustments-using-masks.html", locator: "Masks"}
+      - {title: "DaVinci Resolve 20 Reference Manual", url: "https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf", locator: "Color page — Window palette"}
+
+  - id: cap.color.skin_tone
+    category: color
+    name: Skin-tone correction
+    description: "Bring faces toward a natural skin hue and density while leaving the rest of the grade alone."
+    parameters:
+      - {name: target_hue, type: float, typical_range: "~20–30 (skin line on vectorscope)", unit: deg}
+      - {name: protect_skin, type: bool, typical_range: "true when applying strong looks"}
+    nle_names: {premiere: "HSL Secondary (skin) / Vectorscope skin line", resolve: "Color Warper / Face Refinement", capcut: "HSL / Retouch"}
+    renderer_owner: ffmpeg
+    notes: "Approximate via hue-range qualifier on orange; face-aware isolation (Resolve Face Refinement) needs a face mask — unsupported."
+    sources:
+      - {title: "DaVinci Resolve 20 Reference Manual", url: "https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf", locator: "Resolve FX Refine — Face Refinement; Color Warper"}
+      - {title: "Premiere — Color grading workflows (Lumetri HSL Secondary)", url: "https://helpx.adobe.com/premiere-pro/using/color-workflows.html", locator: "HSL Secondary"}
+
+  - id: cap.color.shot_match
+    category: color
+    name: Color match between shots
+    description: "Make one shot's colour and exposure match a reference shot so cuts feel continuous."
+    parameters:
+      - {name: reference_frame, type: string, typical_range: "clip id + time"}
+      - {name: strength, type: float, typical_range: "0.5–1.0", unit: normalized}
+    nle_names: {premiere: "Color Match", resolve: "Shot Match / Color Match", capcut: "Match color", final_cut: "Match Color"}
+    renderer_owner: ffmpeg
+    notes: "Compute per-channel stats (signalstats) offline, derive colorlevels/colorbalance per clip. Quality below NLE AI matching."
+    sources:
+      - {title: "CapCut — Match color with AI", url: "https://www.capcut.com/tools/match-color-with-ai", locator: "feature page"}
+      - {title: "DaVinci Resolve 20 Reference Manual", url: "https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf", locator: "Color page — Shot Match"}
+
+  - id: cap.color.black_white
+    category: color
+    name: Black & white / monochrome
+    description: "Remove colour entirely, optionally with a tint or channel mix for contrast."
+    parameters:
+      - {name: channel_mix, type: string, typical_range: "R0.3 G0.59 B0.11 default"}
+      - {name: tint, type: string, typical_range: "none / sepia"}
+    nle_names: {premiere: "Black & White / Saturation 0", resolve: "Monochrome (RGB Mixer)", capcut: "Filters > B&W", after_effects: "Black & White", final_cut: "Black & White"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: hue=s=0, monochrome, or colorchannelmixer."
+    sources:
+      - {title: "Premiere — Color correction effects", url: "https://helpx.adobe.com/premiere/desktop/correct-color/add-color-effects/available-color-correction-effects.html", locator: "Black & White"}
+
+  - id: cap.color.film_look
+    category: color
+    name: Film emulation look
+    description: "Emulate a film stock: toe/shoulder contrast, colour crossover, halation, grain and gate weave."
+    parameters:
+      - {name: halation, type: float, typical_range: "0–0.4", unit: normalized}
+      - {name: grain, type: float, typical_range: "0–0.3", unit: normalized}
+      - {name: stock, type: string, typical_range: "LUT name"}
+    nle_names: {resolve: "Film Look Creator", premiere: "Creative look + Noise"}
+    renderer_owner: ffmpeg
+    notes: "Chain lut3d + gblur-thresholded red glow (halation) + noise."
+    sources:
+      - {title: "DaVinci Resolve 20 Reference Manual", url: "https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf", locator: "Resolve FX — Film Look Creator"}
+
+  - id: cap.color.hdr_tonemap
+    category: color
+    name: HDR → SDR tone mapping
+    description: "Convert phone HDR (HLG/Dolby Vision/PQ) footage to SDR Rec.709 without washed-out or clipped highlights."
+    parameters:
+      - {name: algorithm, type: enum, values: [hable, mobius, reinhard, bt2390]}
+      - {name: peak, type: float, typical_range: "100–1000", unit: nits}
+    nle_names: {premiere: "Color management / Tone mapping", resolve: "Color Space Transform tone mapping / HDR palette", final_cut: "HDR Tools"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: zscale+tonemap or libplacebo — neither zscale nor libplacebo is in the local Homebrew build; needs a fuller build. Very common for iPhone sources."
+    sources:
+      - {title: "FFmpeg Filters — tonemap", url: "https://ffmpeg.org/ffmpeg-filters.html#tonemap", locator: "tonemap"}
+      - {title: "DaVinci Resolve 20 Reference Manual", url: "https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf", locator: "HDR grading / Color Space Transform"}
+
+  - id: cap.color.relight
+    category: color
+    name: AI relight
+    description: "Add virtual light sources to a shot based on estimated depth and surface normals."
+    parameters:
+      - {name: light_position, type: string, typical_range: "x,y,z"}
+      - {name: intensity, type: float, typical_range: "0–1", unit: normalized}
+    nle_names: {resolve: "Relight", capcut: "Relight"}
+    renderer_owner: unsupported
+    notes: "Requires depth/normal estimation models. Approximation: static power window brightening (cap.color.power_window)."
+    sources:
+      - {title: "CapCut — Relight videos with AI", url: "https://www.capcut.com/tools/relight-videos-with-ai", locator: "feature page"}
+      - {title: "DaVinci Resolve 21.1 Studio Features", url: "https://documents.blackmagicdesign.com/SupportNotes/DaVinci_Resolve_Studio_21_Features.pdf", locator: "Relight"}
+
+  # ───────────────────────────── AUDIO ─────────────────────────────
+  - id: cap.audio.clip_gain
+    category: audio
+    name: Clip gain / volume
+    description: "Raise or lower a clip's level as a whole."
+    parameters:
+      - {name: gain, type: float, typical_range: "-20–+12", unit: dB}
+    nle_names: {premiere: "Audio Gain / Volume", resolve: "Clip Volume", capcut: "Volume", after_effects: "Audio Levels", final_cut: "Volume"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: volume=XdB."
+    sources:
+      - {title: "Premiere — Audio editing concepts", url: "https://helpx.adobe.com/premiere-pro/using/bestpractices-audio.html", locator: "Gain and volume"}
+
+  - id: cap.audio.volume_automation
+    category: audio
+    name: Volume keyframes (automation)
+    description: "Change level over time with keyframes, e.g. dip music under a line then bring it back."
+    parameters:
+      - {name: keyframes, type: string, typical_range: "list of (t, dB)"}
+      - {name: ramp, type: float, typical_range: "0.1–0.5", unit: s}
+    nle_names: {premiere: "Volume keyframes", resolve: "Volume curve keyframes", capcut: "Audio keyframes", final_cut: "Volume keyframes"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: volume with eval=frame and an expression."
+    sources:
+      - {title: "Premiere — Audio editing concepts", url: "https://helpx.adobe.com/premiere-pro/using/bestpractices-audio.html", locator: "Keyframes"}
+
+  - id: cap.audio.loudness_normalize
+    category: audio
+    name: Loudness normalization
+    description: "Measure integrated loudness and adjust so the mix hits a platform-friendly target without clipping."
+    parameters:
+      - {name: integrated, type: float, typical_range: "-16 to -13 (social), -14 common", unit: LUFS}
+      - {name: true_peak, type: float, typical_range: "-2 to -1", unit: dBTP}
+      - {name: lra, type: float, typical_range: "7–11", unit: LU}
+    nle_names: {premiere: "Loudness > Auto-Match", resolve: "Normalize Audio Levels", capcut: "Normalize loudness", final_cut: "Loudness"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: loudnorm two-pass (measure, then apply linear)."
+    sources:
+      - {title: "Premiere — Auto-match audio loudness", url: "https://helpx.adobe.com/premiere/desktop/add-audio-effects/adjust-volume-and-levels/auto-match-audio-loudness.html", locator: "Auto-Match"}
+      - {title: "FFmpeg Filters — loudnorm", url: "https://ffmpeg.org/ffmpeg-filters.html#loudnorm", locator: "loudnorm"}
+
+  - id: cap.audio.eq
+    category: audio
+    name: Parametric EQ
+    description: "Boost or cut frequency bands to shape tone: add presence to voice, remove mud, tame harshness."
+    parameters:
+      - {name: frequency, type: float, typical_range: "80–12000", unit: Hz}
+      - {name: gain, type: float, typical_range: "-12–6", unit: dB}
+      - {name: q, type: float, typical_range: "0.5–4 (notch up to 30+)", unit: Q}
+    nle_names: {premiere: "Parametric Equalizer", resolve: "Fairlight EQ", capcut: "Equalizer", after_effects: "Parametric EQ", final_cut: "Channel EQ"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: equalizer (peaking), highshelf/lowshelf. Typical voice: -3 dB @250–400 Hz, +2–3 dB @3–5 kHz."
+    sources:
+      - {title: "Premiere — Apply audio effects (library)", url: "https://helpx.adobe.com/premiere/desktop/add-audio-effects/apply-audio-effects/audio-effects-library.html", locator: "Parametric Equalizer"}
+      - {title: "FFmpeg Filters — equalizer", url: "https://ffmpeg.org/ffmpeg-filters.html#equalizer", locator: "equalizer"}
+
+  - id: cap.audio.high_pass
+    category: audio
+    name: High-pass (low-cut) filter
+    description: "Remove rumble, handling noise and wind below the voice range."
+    parameters:
+      - {name: cutoff, type: float, typical_range: "70–120 (voice)", unit: Hz}
+      - {name: slope, type: enum, values: ["12dB_oct", "24dB_oct"]}
+    nle_names: {premiere: "Highpass", resolve: "EQ band 1 HPF", capcut: "Equalizer (low cut)", final_cut: "Channel EQ HPF"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: highpass=f=90 (poles=2)."
+    sources:
+      - {title: "Premiere — Apply audio effects (library)", url: "https://helpx.adobe.com/premiere/desktop/add-audio-effects/apply-audio-effects/audio-effects-library.html", locator: "Highpass"}
+      - {title: "FFmpeg Filters — highpass", url: "https://ffmpeg.org/ffmpeg-filters.html#highpass", locator: "highpass"}
+
+  - id: cap.audio.compression
+    category: audio
+    name: Compression
+    description: "Reduce the gap between loud and quiet parts of a voice so it sits evenly and reads on phone speakers."
+    parameters:
+      - {name: threshold, type: float, typical_range: "-24 to -12", unit: dBFS}
+      - {name: ratio, type: float, typical_range: "2–4", unit: ":1"}
+      - {name: attack, type: float, typical_range: "5–20", unit: ms}
+      - {name: release, type: float, typical_range: "60–200", unit: ms}
+      - {name: makeup, type: float, typical_range: "0–8", unit: dB}
+    nle_names: {premiere: "Dynamics / Single-band Compressor", resolve: "Dynamics (Compressor)", final_cut: "Compressor"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: acompressor."
+    sources:
+      - {title: "Premiere — Apply audio effects (library)", url: "https://helpx.adobe.com/premiere/desktop/add-audio-effects/apply-audio-effects/audio-effects-library.html", locator: "Dynamics"}
+      - {title: "FFmpeg Filters — acompressor", url: "https://ffmpeg.org/ffmpeg-filters.html#acompressor", locator: "acompressor"}
+
+  - id: cap.audio.limiter
+    category: audio
+    name: Limiter
+    description: "Hard ceiling that stops peaks exceeding a set level; last stage of the master chain."
+    parameters:
+      - {name: ceiling, type: float, typical_range: "-2 to -1", unit: dBTP}
+      - {name: release, type: float, typical_range: "50–200", unit: ms}
+    nle_names: {premiere: "Hard Limiter", resolve: "Limiter (Dynamics)", final_cut: "Limiter / Adaptive Limiter"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: alimiter (loudnorm also enforces true peak)."
+    sources:
+      - {title: "Premiere — Apply audio effects (library)", url: "https://helpx.adobe.com/premiere/desktop/add-audio-effects/apply-audio-effects/audio-effects-library.html", locator: "Hard Limiter"}
+
+  - id: cap.audio.noise_reduction
+    category: audio
+    name: Noise reduction
+    description: "Lower steady background noise such as hiss, fans and traffic under dialogue."
+    parameters:
+      - {name: amount, type: float, typical_range: "6–20", unit: dB}
+      - {name: noise_floor, type: float, typical_range: "-60 to -40", unit: dBFS}
+    nle_names: {premiere: "DeNoise", resolve: "Noise Reduction (Fairlight FX)", capcut: "Reduce noise", final_cut: "Noise Removal"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: afftdn (spectral) or anlmdn; arnndn (RNN, needs model file) for speech. Over-processing causes watery artefacts."
+    sources:
+      - {title: "Premiere — Apply audio effects (library)", url: "https://helpx.adobe.com/premiere/desktop/add-audio-effects/apply-audio-effects/audio-effects-library.html", locator: "DeNoise"}
+      - {title: "CapCut — Remove background noise from audio", url: "https://www.capcut.com/tools/remove-background-noise-from-audio", locator: "feature page"}
+      - {title: "FFmpeg Filters — afftdn", url: "https://ffmpeg.org/ffmpeg-filters.html#afftdn", locator: "afftdn"}
+
+  - id: cap.audio.voice_enhance
+    category: audio
+    name: AI speech enhancement / voice isolation
+    description: "Model-based cleanup that isolates the voice from noise and room and makes it sound studio-recorded."
+    parameters:
+      - {name: mix, type: float, typical_range: "50–90", unit: percent}
+    nle_names: {premiere: "Enhance Speech", resolve: "Voice Isolation", capcut: "Enhance voice", final_cut: "Voice Isolation"}
+    renderer_owner: ffmpeg
+    notes: "In-stack approximation: arnndn + EQ + compression. Studio-grade AI enhancement is not available; blend ≤ 80% to keep natural tone."
+    sources:
+      - {title: "Premiere — Enhance speech", url: "https://helpx.adobe.com/premiere/desktop/add-audio-effects/adjust-volume-and-levels/enhance-speech.html", locator: "Enhance Speech"}
+      - {title: "CapCut — Voice enhancer", url: "https://www.capcut.com/tools/voice-enhancer", locator: "feature page"}
+
+  - id: cap.audio.de_reverb
+    category: audio
+    name: De-reverb
+    description: "Reduce room echo and reverberation on dialogue recorded in hard-surfaced rooms."
+    parameters:
+      - {name: amount, type: float, typical_range: "20–70", unit: percent}
+    nle_names: {premiere: "DeReverb", resolve: "De-Reverb (Fairlight FX)", final_cut: "Voice Isolation (partial)"}
+    renderer_owner: unsupported
+    notes: "ffmpeg has no dereverb filter; needs an external DSP/ML tool. Partial mitigation: gate + EQ cut 200–500 Hz."
+    sources:
+      - {title: "Premiere — Apply audio effects (library)", url: "https://helpx.adobe.com/premiere/desktop/add-audio-effects/apply-audio-effects/audio-effects-library.html", locator: "DeReverb"}
+
+  - id: cap.audio.de_ess
+    category: audio
+    name: De-esser
+    description: "Tame harsh 's' and 'sh' sibilance on voice."
+    parameters:
+      - {name: frequency, type: float, typical_range: "5000–8000", unit: Hz}
+      - {name: reduction, type: float, typical_range: "3–8", unit: dB}
+    nle_names: {premiere: "DeEsser", resolve: "De-Esser", final_cut: "DeEsser"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: deesser."
+    sources:
+      - {title: "Premiere — Apply audio effects (library)", url: "https://helpx.adobe.com/premiere/desktop/add-audio-effects/apply-audio-effects/audio-effects-library.html", locator: "DeEsser"}
+      - {title: "FFmpeg Filters — deesser", url: "https://ffmpeg.org/ffmpeg-filters.html#deesser", locator: "deesser"}
+
+  - id: cap.audio.dialogue_leveler
+    category: audio
+    name: Dialogue leveling
+    description: "Automatically even out level differences between words, sentences and speakers."
+    parameters:
+      - {name: target, type: float, typical_range: "-20 to -16 short-term", unit: LUFS}
+      - {name: max_gain, type: float, typical_range: "6–12", unit: dB}
+    nle_names: {premiere: "Essential Sound > Dialogue > Loudness", resolve: "Dialogue Leveler", capcut: "Normalize loudness"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: speechnorm or dynaudnorm."
+    sources:
+      - {title: "Premiere — Edit audio with Essential Sound panel", url: "https://helpx.adobe.com/premiere/desktop/add-audio-effects/adjust-volume-and-levels/audio-editing-with-essential-sound-panel.html", locator: "Dialogue"}
+      - {title: "FFmpeg Filters — speechnorm", url: "https://ffmpeg.org/ffmpeg-filters.html#speechnorm", locator: "speechnorm"}
+
+  - id: cap.audio.ducking
+    category: audio
+    name: Ducking (music under voice)
+    description: "Automatically lower music whenever someone speaks and raise it again in the gaps."
+    parameters:
+      - {name: duck_amount, type: float, typical_range: "-18 to -8", unit: dB}
+      - {name: sensitivity, type: float, typical_range: "medium", unit: relative}
+      - {name: fade, type: float, typical_range: "0.2–0.8", unit: s}
+    nle_names: {premiere: "Essential Sound > Ducking", resolve: "Sidechain / Ducking (Fairlight)", final_cut: "Audio ducking (Volume keyframes)"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: sidechaincompress (voice as key) or volume automation from VAD/transcript timings."
+    sources:
+      - {title: "Premiere — Automatic audio ducking", url: "https://helpx.adobe.com/premiere-pro/how-to/automatic-audio-ducking.html", locator: "Auto Ducking"}
+      - {title: "FFmpeg Filters — sidechaincompress", url: "https://ffmpeg.org/ffmpeg-filters.html#sidechaincompress", locator: "sidechaincompress"}
+
+  - id: cap.audio.fade
+    category: audio
+    name: Audio fade in / out
+    description: "Ramp a clip's level from or to silence at its start or end."
+    parameters:
+      - {name: duration, type: float, typical_range: "0.01–0.05 (de-click), 0.5–3 (music)", unit: s}
+      - {name: curve, type: enum, values: [linear, log, exp, qsin]}
+    nle_names: {premiere: "Fade handles / Constant Power", resolve: "Fade handles", capcut: "Fade in / Fade out", final_cut: "Fade handles"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: afade. Add 5–10 ms fades at every speech cut to prevent clicks."
+    sources:
+      - {title: "Premiere — Fade in or fade out clip audio", url: "https://helpx.adobe.com/premiere/desktop/add-audio-effects/apply-audio-transitions/fade-in-or-fade-out-clip-audio.html", locator: "Fades"}
+      - {title: "CapCut Help — Add a fade-in effect", url: "https://www.capcut.com/help/add-a-fade-in-effect", locator: "help article"}
+
+  - id: cap.audio.crossfade
+    category: audio
+    name: Audio crossfade
+    description: "Overlap two audio clips with one fading out as the other fades in, hiding the join."
+    parameters:
+      - {name: duration, type: float, typical_range: "0.02–0.2 (dialogue), 1–4 (music)", unit: s}
+      - {name: curve, type: enum, values: [constant_power, constant_gain, exponential]}
+    nle_names: {premiere: "Constant Power / Constant Gain / Exponential Fade", resolve: "Cross Fade +3 dB / 0 dB", final_cut: "Crossfade"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: acrossfade (c1/c2 = qsin approximates constant power)."
+    sources:
+      - {title: "Premiere — Create audio crossfades", url: "https://helpx.adobe.com/premiere-pro/using/audio-transitions.html", locator: "Crossfades"}
+      - {title: "FFmpeg Filters — acrossfade", url: "https://ffmpeg.org/ffmpeg-filters.html#acrossfade", locator: "acrossfade"}
+
+  - id: cap.audio.room_tone
+    category: audio
+    name: Room-tone fill
+    description: "Fill gaps created by cuts with a bed of the location's ambient noise so silence doesn't sound like dropouts."
+    parameters:
+      - {name: source, type: string, typical_range: "1–3 s of clean ambience from the same take"}
+      - {name: level, type: float, typical_range: "-6–0 relative to source", unit: dB}
+    nle_names: {premiere: "Manual (loop ambience clip)", resolve: "Manual (Fairlight fill)", final_cut: "Manual"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: aloop + amix under dialogue track."
+    sources:
+      - {title: "Premiere — Audio editing concepts", url: "https://helpx.adobe.com/premiere-pro/using/bestpractices-audio.html", locator: "Audio editing concepts"}
+
+  - id: cap.audio.pitch_shift
+    category: audio
+    name: Pitch shift
+    description: "Raise or lower pitch without changing duration (voice character, matching music key)."
+    parameters:
+      - {name: semitones, type: float, typical_range: "-6–6", unit: st}
+    nle_names: {premiere: "Pitch Shifter", resolve: "Pitch (Fairlight FX)", capcut: "Pitch changer", final_cut: "Pitch"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: rubberband (absent in local build) or asetrate+atempo+aresample."
+    sources:
+      - {title: "Premiere — Apply audio effects (library)", url: "https://helpx.adobe.com/premiere/desktop/add-audio-effects/apply-audio-effects/audio-effects-library.html", locator: "Pitch Shifter"}
+      - {title: "CapCut — Pitch changer", url: "https://www.capcut.com/tools/pitch-changer", locator: "feature page"}
+
+  - id: cap.audio.voice_effect
+    category: audio
+    name: Voice effects (robot, phone, megaphone, echo)
+    description: "Stylise a voice with filtering, modulation or echo for comedic or narrative effect."
+    parameters:
+      - {name: preset, type: enum, values: [telephone, radio, megaphone, robot, echo, chipmunk, deep]}
+      - {name: mix, type: float, typical_range: "50–100", unit: percent}
+    nle_names: {capcut: "Voice changer / Voice effects", resolve: "Fairlight FX (Modulation, Echo)", premiere: "Audio effects chain"}
+    renderer_owner: ffmpeg
+    notes: "Classic DSP presets in ffmpeg (bandpass, aecho, vibrato, flanger). AI 'character' voice conversion is unsupported."
+    sources:
+      - {title: "CapCut — Voice changer", url: "https://www.capcut.com/tools/voice-changer", locator: "feature page"}
+      - {title: "CapCut — Voice effects", url: "https://www.capcut.com/tools/voice-effects-online", locator: "feature page"}
+
+  - id: cap.audio.music_bed
+    category: audio
+    name: Add background music
+    description: "Lay a music track under the edit, trimmed and faded to the reel's length."
+    parameters:
+      - {name: level_under_voice, type: float, typical_range: "-24 to -18 relative to dialogue", unit: dB}
+      - {name: start_offset, type: float, typical_range: "0–30 into song", unit: s}
+    nle_names: {premiere: "Audio track + Essential Sound Music", resolve: "Audio track", capcut: "Audio > Music", final_cut: "Background music"}
+    renderer_owner: ffmpeg
+    notes: "Licensing is a platform concern; trending audio is usually added in-app, not baked."
+    sources:
+      - {title: "CapCut — Add music to video", url: "https://www.capcut.com/tools/add-music-to-video", locator: "feature page"}
+
+  - id: cap.audio.music_retime
+    category: audio
+    name: Music remix / retime to length
+    description: "Rearrange a song's sections automatically so it ends naturally at a target duration."
+    parameters:
+      - {name: target_duration, type: float, typical_range: "7–90", unit: s}
+      - {name: segments, type: int, typical_range: "low–high"}
+    nle_names: {premiere: "Remix"}
+    renderer_owner: unsupported
+    notes: "Needs structural music analysis (beats/bars/sections). Manual fallback in ffmpeg: cut on bar boundaries from an external beat grid + acrossfade, or fade the ending."
+    sources:
+      - {title: "Premiere — Remix audio using AI", url: "https://helpx.adobe.com/premiere/desktop/add-audio-effects/apply-audio-effects/remix-audio-in-premiere.html", locator: "Remix"}
+
+  - id: cap.audio.stem_separation
+    category: audio
+    name: Stem separation / vocal removal
+    description: "Split a mix into voice, music, effects and ambience stems, or remove vocals from a song."
+    parameters:
+      - {name: stems, type: enum, values: [vocals, music, drums, bass, ambience, sfx]}
+    nle_names: {premiere: "Enhance Audio (dialogue/music/ambience split)", resolve: "Music Remixer / Dialogue separator", capcut: "Vocal remover"}
+    renderer_owner: unsupported
+    notes: "Needs a separation model (e.g. Demucs) outside the stack."
+    sources:
+      - {title: "Premiere — Enhance Audio overview", url: "https://helpx.adobe.com/premiere/desktop/add-audio-effects/adjust-volume-and-levels/enhance-audio-overview.html", locator: "Enhance Audio"}
+      - {title: "CapCut — Vocal remover", url: "https://www.capcut.com/tools/vocal-remover", locator: "feature page"}
+
+  - id: cap.audio.sfx_add
+    category: audio
+    name: Sound effects (whoosh, hit, riser, pop)
+    description: "Place short sound effects on cuts, transitions, text pops and actions to add energy and polish."
+    parameters:
+      - {name: type, type: enum, values: [whoosh, hit, riser, pop, click, swoosh, ding, bass_drop, typing]}
+      - {name: level, type: float, typical_range: "-18 to -8 relative to voice", unit: dB}
+      - {name: lead, type: float, typical_range: "0–0.1 before the visual event", unit: s}
+    nle_names: {premiere: "Stock audio / SFX on track", resolve: "Sound Library", capcut: "Audio > Sound effects", final_cut: "Sound Effects browser"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: adelay + amix. Risers should end exactly on the cut."
+    sources:
+      - {title: "CapCut — Sound effects", url: "https://www.capcut.com/tools/sound-effects", locator: "feature page"}
+      - {title: "DaVinci Resolve 20 Reference Manual", url: "https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf", locator: "Fairlight — Sound Library"}
+
+  - id: cap.audio.tts_voiceover
+    category: audio
+    name: Text-to-speech voiceover
+    description: "Generate a narrated voice track from written text."
+    parameters:
+      - {name: voice, type: string, typical_range: "voice id"}
+      - {name: rate, type: float, typical_range: "0.9–1.2", unit: x}
+    nle_names: {capcut: "Text to speech"}
+    renderer_owner: unsupported
+    notes: "Needs an external TTS service; once generated it is just an audio file mixed by ffmpeg."
+    sources:
+      - {title: "CapCut Help — Text to speech feature", url: "https://www.capcut.com/help/text-to-speech-feature", locator: "help article"}
+
+  - id: cap.audio.dubbing_translate
+    category: audio
+    name: AI dubbing / voice translation
+    description: "Translate speech into another language and re-voice it, sometimes in a clone of the speaker's voice."
+    parameters:
+      - {name: target_language, type: string, typical_range: "ISO code"}
+    nle_names: {capcut: "Video translator"}
+    renderer_owner: unsupported
+    notes: "Requires ASR + MT + voice cloning services. Captions-only translation is cap.text.translated_captions."
+    sources:
+      - {title: "CapCut — Video translator", url: "https://www.capcut.com/tools/video-translator", locator: "feature page"}
+  # ───────────────────────────── TEXT ─────────────────────────────
+  - id: cap.text.title
+    category: text
+    name: Title / hook text
+    description: "On-screen headline text, typically the hook in the first seconds or a section label."
+    parameters:
+      - {name: words, type: int, typical_range: "3–8"}
+      - {name: font_size, type: float, typical_range: "64–120 at 1080 w", unit: px}
+      - {name: duration, type: float, typical_range: "1.5–4", unit: s}
+      - {name: position, type: enum, values: [upper_third, center, lower_safe]}
+    nle_names: {premiere: "Type tool / Properties panel", resolve: "Text+ / Text", capcut: "Text > Add text", after_effects: "Text layer", final_cut: "Titles"}
+    renderer_owner: remotion
+    sources:
+      - {title: "Premiere — Create titles with the Essential Graphics/Properties panel", url: "https://helpx.adobe.com/premiere-pro/using/essential-graphics-panel.html", locator: "Titles"}
+      - {title: "CapCut — Add text to video", url: "https://www.capcut.com/tools/add-text-to-video", locator: "feature page"}
+
+  - id: cap.text.auto_captions
+    category: text
+    name: Auto captions (burned-in subtitles)
+    description: "Generate timed on-screen captions from speech and render them into the video."
+    parameters:
+      - {name: words_per_line, type: int, typical_range: "1–5 (reels), up to 7"}
+      - {name: lines, type: int, typical_range: "1–2"}
+      - {name: max_chars_per_line, type: int, typical_range: "16–32"}
+      - {name: position_y, type: float, typical_range: "0.55–0.75 of height", unit: normalized}
+    nle_names: {premiere: "Captions > Create captions from transcript", resolve: "Create Subtitles from Audio", capcut: "Auto captions", final_cut: "Transcribe to Captions"}
+    renderer_owner: remotion
+    notes: "Word timings from cap.analysis.transcription. Keep above platform UI (bottom ~20% and right rail)."
+    sources:
+      - {title: "Premiere — Create captions", url: "https://helpx.adobe.com/premiere/desktop/add-text-images/insert-captions/create-captions.html", locator: "Create captions"}
+      - {title: "CapCut — Auto caption generator", url: "https://www.capcut.com/tools/auto-caption-generator", locator: "feature page"}
+      - {title: "Final Cut Pro release notes", url: "https://support.apple.com/en-us/102825", locator: "11.0 — Transcribe to Captions"}
+
+  - id: cap.text.caption_style
+    category: text
+    name: Caption styling
+    description: "Font, weight, colour, stroke, shadow, case and background box applied to captions for legibility and brand."
+    parameters:
+      - {name: font_weight, type: int, typical_range: "700–900"}
+      - {name: stroke_width, type: float, typical_range: "4–12", unit: px}
+      - {name: shadow_blur, type: float, typical_range: "0–20", unit: px}
+      - {name: case, type: enum, values: [upper, sentence, lower]}
+    nle_names: {premiere: "Caption styles (Properties)", resolve: "Subtitle track style", capcut: "Text > Style / Caption templates", final_cut: "Caption Inspector"}
+    renderer_owner: remotion
+    sources:
+      - {title: "Premiere — Overview of captions", url: "https://helpx.adobe.com/premiere/desktop/add-text-images/insert-captions/about-captions.html", locator: "Caption styles"}
+
+  - id: cap.text.word_highlight
+    category: text
+    name: Active-word highlight (karaoke captions)
+    description: "Highlight each word as it is spoken (colour, scale or box) within the caption line."
+    parameters:
+      - {name: highlight_style, type: enum, values: [color, scale_pop, box, underline]}
+      - {name: highlight_color, type: string, typical_range: "brand accent e.g. #FFD400"}
+      - {name: pop_scale, type: float, typical_range: "1.05–1.2", unit: x}
+    nle_names: {resolve: "Animated Subtitles"}
+    renderer_owner: remotion
+    sources:
+      - {title: "DaVinci Resolve 20 New Features Guide", url: "https://documents.blackmagicdesign.com/SupportNotes/DaVinci_Resolve_20_New_Features_Guide.pdf", locator: "AI Animated Subtitles"}
+
+  - id: cap.text.kinetic
+    category: text
+    name: Kinetic typography
+    description: "Animate text per word or character (position, scale, rotation, opacity) in sync with speech or music."
+    parameters:
+      - {name: unit, type: enum, values: [character, word, line]}
+      - {name: stagger, type: float, typical_range: "0.02–0.08", unit: s}
+      - {name: easing, type: enum, values: [spring, ease_out, back_out, linear]}
+    nle_names: {after_effects: "Text Animators + Range Selector", premiere: "Motion Graphics templates", resolve: "Text+ (Fusion) / Character Level Styling", capcut: "Text animation"}
+    renderer_owner: remotion
+    sources:
+      - {title: "After Effects — Animating text", url: "https://helpx.adobe.com/after-effects/using/animating-text.html", locator: "Text animators and selectors"}
+
+  - id: cap.text.animation_preset
+    category: text
+    name: Text in/out/loop animation presets
+    description: "Apply a ready-made entrance, exit or looping motion to a text layer (typewriter, pop, slide, bounce)."
+    parameters:
+      - {name: in_preset, type: enum, values: [pop, fade_up, slide, typewriter, blur_in, bounce, scale_in]}
+      - {name: out_preset, type: enum, values: [fade, pop_out, slide, none]}
+      - {name: in_duration, type: float, typical_range: "0.15–0.5", unit: s}
+    nle_names: {capcut: "Animation > In / Out / Loop", after_effects: "Animation Presets > Text", premiere: "Motion Graphics templates", final_cut: "Title build in/out"}
+    renderer_owner: remotion
+    sources:
+      - {title: "After Effects — Examples and resources for text animation", url: "https://helpx.adobe.com/after-effects/desktop/animating-text/text-animation-examples/examples-resources-text-animation.html", locator: "Text animation presets"}
+
+  - id: cap.text.keyword_emphasis
+    category: text
+    name: Keyword emphasis
+    description: "Make key words stand out in captions or titles via colour, size, weight, emoji or a shake."
+    parameters:
+      - {name: words_per_line_emphasized, type: int, typical_range: "0–1"}
+      - {name: method, type: enum, values: [color, scale, emoji, underline, shake]}
+    nle_names: {premiere: "Per-word styling in Properties", resolve: "Character Level Styling"}
+    renderer_owner: remotion
+    notes: "Claude picks keywords from the transcript; renderer applies styling."
+    sources:
+      - {title: "CapCut — AI caption generator", url: "https://www.capcut.com/tools/ai-caption-generator", locator: "feature page"}
+
+  - id: cap.text.background_box
+    category: text
+    name: Text background box / pill
+    description: "Place a solid or rounded box behind text for legibility over busy footage."
+    parameters:
+      - {name: padding, type: float, typical_range: "8–24", unit: px}
+      - {name: radius, type: float, typical_range: "8–24", unit: px}
+      - {name: opacity, type: float, typical_range: "0.6–1.0", unit: normalized}
+    nle_names: {premiere: "Background (text appearance)", resolve: "Text+ Shading", capcut: "Text > Background", final_cut: "Title background"}
+    renderer_owner: remotion
+    notes: "Frosted-glass (backdrop blur) boxes need base pixels → would require ffmpeg-side blur of the region; plain boxes only in Remotion."
+    sources:
+      - {title: "Premiere — Overview of captions", url: "https://helpx.adobe.com/premiere/desktop/add-text-images/insert-captions/about-captions.html", locator: "Appearance"}
+
+  - id: cap.text.translated_captions
+    category: text
+    name: Translated captions
+    description: "Show captions in another language (or bilingual lines) from a translated transcript."
+    parameters:
+      - {name: target_language, type: string, typical_range: "ISO code"}
+      - {name: bilingual, type: bool, typical_range: "false"}
+    nle_names: {premiere: "Translate captions", capcut: "Subtitle translator"}
+    renderer_owner: remotion
+    notes: "Translation by Claude; renderer just draws the text."
+    sources:
+      - {title: "Premiere — Translate captions", url: "https://helpx.adobe.com/premiere-pro/using/translate-captions.html", locator: "Translate captions"}
+      - {title: "CapCut — Subtitle translator", url: "https://www.capcut.com/tools/subtitle-translator", locator: "feature page"}
+
+  - id: cap.text.tracked_text
+    category: text
+    name: Text attached to a moving object
+    description: "Pin a label or title to a moving subject so it follows it around the frame."
+    parameters:
+      - {name: track_source, type: string, typical_range: "tracking data id"}
+      - {name: offset, type: string, typical_range: "x,y px"}
+    nle_names: {after_effects: "Track Motion > Apply to layer", capcut: "Tracking", final_cut: "Object Tracker", resolve: "Fusion Tracker"}
+    renderer_owner: remotion
+    notes: "Remotion draws the text from a per-frame position list, but generating that list requires cap.compositing.point_tracking (unsupported)."
+    sources:
+      - {title: "Final Cut Pro User Guide — How does object tracking work", url: "https://support.apple.com/guide/final-cut-pro/vere9b794f29/mac", locator: "Object tracking"}
+      - {title: "CapCut — Motion tracking", url: "https://www.capcut.com/tools/motion-tracking", locator: "feature page"}
+
+  - id: cap.text.safe_zone
+    category: text
+    name: Platform safe-zone placement
+    description: "Keep text and graphics clear of platform UI (caption area, buttons, username) on Reels, TikTok and Shorts."
+    parameters:
+      - {name: bottom_margin, type: float, typical_range: "0.18–0.25 of height", unit: normalized}
+      - {name: right_margin, type: float, typical_range: "0.12–0.15 of width", unit: normalized}
+      - {name: top_margin, type: float, typical_range: "0.08–0.12 of height", unit: normalized}
+    nle_names: {premiere: "Safe margins / guides", capcut: "Safe zone guides"}
+    renderer_owner: remotion
+    notes: "Margins are practitioner estimates; confirm per platform in platform knowledge files."
+    sources:
+      - {title: "Premiere — Create efficient Motion Graphics templates", url: "https://helpx.adobe.com/premiere/desktop/add-text-images/insert-images-and-graphics/tips-for-authoring-motion-graphics-templates.html", locator: "Safe margins"}
+
+  - id: cap.text.template
+    category: text
+    name: Title templates
+    description: "Reusable pre-designed text graphics whose words, colours and fonts can be swapped per video."
+    parameters:
+      - {name: template_id, type: string, typical_range: "library id"}
+      - {name: editable_fields, type: string, typical_range: "text, color, font"}
+    nle_names: {premiere: "Motion Graphics templates (.mogrt)", resolve: "Fusion Titles", capcut: "Text templates", after_effects: "Essential Properties", final_cut: "Titles browser"}
+    renderer_owner: remotion
+    notes: "Map to parameterised Remotion components."
+    sources:
+      - {title: "Premiere — Create efficient Motion Graphics templates", url: "https://helpx.adobe.com/premiere/desktop/add-text-images/insert-images-and-graphics/tips-for-authoring-motion-graphics-templates.html", locator: "Templates"}
+
+  - id: cap.text.number_counter
+    category: text
+    name: Animated number counter
+    description: "Count a number up or down on screen (stats, prices, followers) for emphasis."
+    parameters:
+      - {name: from, type: float, typical_range: "0"}
+      - {name: to, type: float, typical_range: "any"}
+      - {name: duration, type: float, typical_range: "0.6–2", unit: s}
+    nle_names: {after_effects: "Slider Control + Numbers effect", resolve: "Text+ with expression"}
+    renderer_owner: remotion
+    sources:
+      - {title: "After Effects — Generate effects", url: "https://helpx.adobe.com/after-effects/desktop/apply-effects-and-animation-presets/list-of-effects/generate-effects.html", locator: "Numbers"}
+
+  # ───────────────────────────── GRAPHICS ─────────────────────────────
+  - id: cap.graphics.shape
+    category: graphics
+    name: Shapes
+    description: "Rectangles, ellipses, lines and custom paths used as boxes, dividers, highlights or animated accents."
+    parameters:
+      - {name: shape, type: enum, values: [rectangle, rounded_rect, ellipse, line, polygon, path]}
+      - {name: fill, type: string, typical_range: "hex colour"}
+      - {name: stroke_width, type: float, typical_range: "0–12", unit: px}
+    nle_names: {premiere: "Rectangle / Ellipse tool", resolve: "Fusion shapes / Shape generators", capcut: "Shapes (stickers)", after_effects: "Shape layer", final_cut: "Shapes generator"}
+    renderer_owner: remotion
+    sources:
+      - {title: "Premiere — Create a shape", url: "https://helpx.adobe.com/premiere/desktop/add-text-images/draw-objects/create-a-shape.html", locator: "Shapes"}
+      - {title: "After Effects — Managing and animating shape paths and masks", url: "https://helpx.adobe.com/after-effects/using/animating-shape-paths-masks.html", locator: "Shape paths"}
+
+  - id: cap.graphics.sticker
+    category: graphics
+    name: Stickers (animated)
+    description: "Animated or static decorative graphics (GIF/Lottie style) placed on top of the video."
+    parameters:
+      - {name: asset, type: string, typical_range: "sticker id / file"}
+      - {name: scale, type: float, typical_range: "0.15–0.4 of width", unit: normalized}
+      - {name: duration, type: float, typical_range: "0.8–3", unit: s}
+    nle_names: {capcut: "Stickers", premiere: "Graphics templates", final_cut: "Generators"}
+    renderer_owner: remotion
+    notes: "Remotion supports Lottie (@remotion/lottie) and GIF (@remotion/gif)."
+    sources:
+      - {title: "CapCut — Custom stickers", url: "https://www.capcut.com/tools/custom-stickers-online", locator: "feature page"}
+
+  - id: cap.graphics.emoji
+    category: graphics
+    name: Emoji overlays
+    description: "Single emoji popping in near the speaker or next to captions to reinforce emotion or a keyword."
+    parameters:
+      - {name: size, type: float, typical_range: "80–200", unit: px}
+      - {name: entrance, type: enum, values: [pop, bounce, fade, spin]}
+      - {name: frequency, type: string, typical_range: "≤ 1 per 3–5 s"}
+    nle_names: {capcut: "Stickers > Emoji", premiere: "Text layer with emoji font"}
+    renderer_owner: remotion
+    notes: "Use an emoji image set (e.g. Noto/Twemoji) rather than system fonts for consistent rendering."
+    sources:
+      - {title: "CapCut — Custom stickers", url: "https://www.capcut.com/tools/custom-stickers-online", locator: "feature page"}
+
+  - id: cap.graphics.lower_third
+    category: graphics
+    name: Lower third
+    description: "Name/title or context bar in the lower part of the frame identifying a speaker or place."
+    parameters:
+      - {name: lines, type: int, typical_range: "1–2"}
+      - {name: duration, type: float, typical_range: "2.5–5", unit: s}
+      - {name: y, type: float, typical_range: "0.6–0.75 of height (above platform UI)", unit: normalized}
+    nle_names: {premiere: "Motion Graphics template (Lower third)", resolve: "Fusion Titles (Lower 3rd)", capcut: "Text templates", final_cut: "Lower Thirds titles"}
+    renderer_owner: remotion
+    sources:
+      - {title: "Premiere — Create titles with the Essential Graphics/Properties panel", url: "https://helpx.adobe.com/premiere-pro/using/essential-graphics-panel.html", locator: "Lower thirds"}
+
+  - id: cap.graphics.progress_bar
+    category: graphics
+    name: Progress bar
+    description: "A thin bar that fills across the video's duration, signalling how much is left to encourage watch-through."
+    parameters:
+      - {name: thickness, type: float, typical_range: "6–14", unit: px}
+      - {name: position, type: enum, values: [top, bottom_above_ui]}
+      - {name: color, type: string, typical_range: "brand accent"}
+    nle_names: {after_effects: "Shape layer + Trim Paths / scale keyframes", premiere: "Shape + scale keyframes"}
+    renderer_owner: remotion
+    sources:
+      - {title: "After Effects — Managing and animating shape paths and masks", url: "https://helpx.adobe.com/after-effects/using/animating-shape-paths-masks.html", locator: "Shape animation"}
+
+  - id: cap.graphics.logo_watermark
+    category: graphics
+    name: Logo / watermark
+    description: "A brand logo or handle shown in a corner, constantly or at start/end."
+    parameters:
+      - {name: opacity, type: float, typical_range: "0.5–0.9", unit: normalized}
+      - {name: size, type: float, typical_range: "0.08–0.15 of width", unit: normalized}
+      - {name: corner, type: enum, values: [top_left, top_right, bottom_left]}
+    nle_names: {premiere: "Graphic layer", resolve: "Image on track", capcut: "Overlay image", final_cut: "Connected image"}
+    renderer_owner: remotion
+    sources:
+      - {title: "Premiere — Animate layers using Effect Controls", url: "https://helpx.adobe.com/premiere/desktop/add-text-images/insert-images-and-graphics/animate-layers-using-the-effect-controls-panel.html", locator: "Graphic layers"}
+
+  - id: cap.graphics.image_overlay
+    category: graphics
+    name: Image overlay / screenshot callout
+    description: "Place a still (screenshot, product photo, tweet) over the video with an entrance animation."
+    parameters:
+      - {name: scale, type: float, typical_range: "0.5–0.9 of width", unit: normalized}
+      - {name: corner_radius, type: float, typical_range: "12–32", unit: px}
+      - {name: shadow, type: bool, typical_range: "true"}
+    nle_names: {premiere: "Still on upper track", resolve: "Still on V2", capcut: "Overlay", final_cut: "Connected clip"}
+    renderer_owner: remotion
+    sources:
+      - {title: "CapCut — Online photo editor / overlay", url: "https://www.capcut.com/tools/online-photo-editor", locator: "feature page"}
+
+  - id: cap.graphics.arrow_callout
+    category: graphics
+    name: Arrows, circles and callouts
+    description: "Hand-drawn or clean arrows, circles and underlines that point at something in the frame."
+    parameters:
+      - {name: style, type: enum, values: [hand_drawn, clean, neon]}
+      - {name: draw_on_duration, type: float, typical_range: "0.2–0.6", unit: s}
+    nle_names: {after_effects: "Shape layer + Trim Paths", capcut: "Stickers (arrows)", final_cut: "Shapes"}
+    renderer_owner: remotion
+    notes: "Pointing at a moving object needs tracking data (unsupported); static targets fine."
+    sources:
+      - {title: "After Effects — Managing and animating shape paths and masks", url: "https://helpx.adobe.com/after-effects/using/animating-shape-paths-masks.html", locator: "Trim paths"}
+
+  - id: cap.graphics.frame_border
+    category: graphics
+    name: Frame / border
+    description: "Decorative frame or border around the edge of the video."
+    parameters:
+      - {name: width, type: float, typical_range: "8–40", unit: px}
+      - {name: style, type: enum, values: [solid, film, polaroid, phone]}
+    nle_names: {premiere: "Graphic layer"}
+    renderer_owner: remotion
+    sources:
+      - {title: "CapCut — Video effects and filters", url: "https://www.capcut.com/tools/video-effect-and-filter", locator: "feature page"}
+
+  - id: cap.graphics.countdown
+    category: graphics
+    name: Countdown / timer
+    description: "Visible timer or countdown that builds anticipation or structures a list."
+    parameters:
+      - {name: from, type: int, typical_range: "3–10"}
+      - {name: style, type: enum, values: [digits, ring, bar]}
+    nle_names: {after_effects: "Numbers / Timecode effect"}
+    renderer_owner: remotion
+    sources:
+      - {title: "After Effects — Generate effects", url: "https://helpx.adobe.com/after-effects/desktop/apply-effects-and-animation-presets/list-of-effects/generate-effects.html", locator: "Numbers"}
+
+  - id: cap.graphics.cta_card
+    category: graphics
+    name: CTA / follow / end card
+    description: "Call-to-action graphic (follow, comment, link in bio) shown at the end or a key moment."
+    parameters:
+      - {name: duration, type: float, typical_range: "1.5–3", unit: s}
+      - {name: text, type: string, typical_range: "≤ 6 words"}
+    nle_names: {premiere: "Motion Graphics template", capcut: "Text templates / Stickers", final_cut: "Titles"}
+    renderer_owner: remotion
+    sources:
+      - {title: "Premiere — Create efficient Motion Graphics templates", url: "https://helpx.adobe.com/premiere/desktop/add-text-images/insert-images-and-graphics/tips-for-authoring-motion-graphics-templates.html", locator: "Templates"}
+
+  - id: cap.graphics.gradient_scrim
+    category: graphics
+    name: Gradient scrim for legibility
+    description: "Semi-transparent dark gradient at top or bottom so white text stays readable over bright footage."
+    parameters:
+      - {name: opacity, type: float, typical_range: "0.3–0.7", unit: normalized}
+      - {name: height, type: float, typical_range: "0.2–0.4 of frame", unit: normalized}
+    nle_names: {after_effects: "Gradient Ramp", premiere: "Ramp effect on graphic", final_cut: "Gradient generator"}
+    renderer_owner: remotion
+    notes: "Normal alpha-over; survives the composite."
+    sources:
+      - {title: "After Effects — Generate effects", url: "https://helpx.adobe.com/after-effects/desktop/apply-effects-and-animation-presets/list-of-effects/generate-effects.html", locator: "Gradient Ramp"}
+
+  - id: cap.graphics.full_screen_card
+    category: graphics
+    name: Full-screen graphic card
+    description: "An opaque designed card (list, quote, stat) covering the video briefly, with voice continuing."
+    parameters:
+      - {name: duration, type: float, typical_range: "1–3", unit: s}
+      - {name: background, type: string, typical_range: "brand colour / gradient"}
+    nle_names: {premiere: "Color Matte + text", resolve: "Solid Color generator", capcut: "Background + text", final_cut: "Solids generator"}
+    renderer_owner: remotion
+    sources:
+      - {title: "After Effects — Generate effects", url: "https://helpx.adobe.com/after-effects/desktop/apply-effects-and-animation-presets/list-of-effects/generate-effects.html", locator: "Fill / Gradient"}
+
+  - id: cap.graphics.chart
+    category: graphics
+    name: Animated chart / data graphic
+    description: "Bar, line or pie charts that draw on to illustrate a number."
+    parameters:
+      - {name: type, type: enum, values: [bar, line, pie, number_stat]}
+      - {name: draw_duration, type: float, typical_range: "0.6–1.5", unit: s}
+    nle_names: {after_effects: "Create Nulls/Charts from data (Data-driven animation)"}
+    renderer_owner: remotion
+    sources:
+      - {title: "After Effects — Assorted animation tools", url: "https://helpx.adobe.com/after-effects/desktop/animate-in-after-effects/assorted-animation-tools/assorted-animation-tools.html", locator: "Animation tools"}
+
+  - id: cap.graphics.letterbox_bars
+    category: graphics
+    name: Cinematic letterbox bars
+    description: "Black bars at top and bottom for a widescreen 'cinematic' moment inside the vertical frame."
+    parameters:
+      - {name: bar_height, type: float, typical_range: "0.08–0.2 of height", unit: normalized}
+      - {name: animate_in, type: float, typical_range: "0.3–0.6", unit: s}
+    nle_names: {premiere: "Crop / matte", resolve: "Output Blanking"}
+    renderer_owner: remotion
+    notes: "Opaque bars sit on top, so overlay is fine."
+    sources:
+      - {title: "DaVinci Resolve 20 Reference Manual", url: "https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf", locator: "Timeline > Output Blanking"}
+  # ───────────────────────────── COMPOSITING ─────────────────────────────
+  - id: cap.compositing.opacity
+    category: compositing
+    name: Opacity
+    description: "Make a layer partly transparent so the layer beneath shows through."
+    parameters:
+      - {name: opacity, type: float, typical_range: "0–100", unit: percent}
+    nle_names: {premiere: "Opacity", resolve: "Composite > Opacity", capcut: "Opacity", after_effects: "Opacity", final_cut: "Compositing > Opacity"}
+    renderer_owner: ffmpeg
+    notes: "Between two video layers (base) = ffmpeg overlay/blend; on overlay graphics = Remotion CSS opacity (same field lives on the graphic)."
+    sources:
+      - {title: "Premiere — Using blending modes", url: "https://helpx.adobe.com/premiere-pro/using/blending-modes.html", locator: "Opacity"}
+
+  - id: cap.compositing.blend_mode
+    category: compositing
+    name: Blend modes
+    description: "Combine a layer with what's below using maths such as screen, multiply, overlay or add instead of normal stacking."
+    parameters:
+      - {name: mode, type: enum, values: [normal, screen, multiply, overlay, add, soft_light, lighten, darken, difference]}
+      - {name: opacity, type: float, typical_range: "30–100", unit: percent}
+    nle_names: {premiere: "Blend Mode", resolve: "Composite Mode", capcut: "Blend", after_effects: "Blending Mode", final_cut: "Blend Mode"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg blend/overlay. Remotion mix-blend-mode is lost at the alpha-over composite, so any non-normal mode must be done by ffmpeg."
+    sources:
+      - {title: "Premiere — Using blending modes", url: "https://helpx.adobe.com/premiere-pro/using/blending-modes.html", locator: "Blend modes"}
+      - {title: "After Effects — Blending modes and layer styles", url: "https://helpx.adobe.com/after-effects/using/blending-modes-layer-styles.html", locator: "Blending modes"}
+      - {title: "FFmpeg Filters — blend", url: "https://ffmpeg.org/ffmpeg-filters.html#blend", locator: "blend"}
+
+  - id: cap.compositing.shape_mask
+    category: compositing
+    name: Shape mask (feathered)
+    description: "Limit a layer or effect to a drawn shape with feathered edges, e.g. blur everything except a box."
+    parameters:
+      - {name: shape, type: enum, values: [ellipse, rectangle, bezier]}
+      - {name: feather, type: float, typical_range: "10–80", unit: px}
+      - {name: invert, type: bool, typical_range: "false"}
+      - {name: expansion, type: float, typical_range: "-20–20", unit: px}
+    nle_names: {premiere: "Opacity mask (Ellipse/4-point/Pen)", resolve: "Power Window / Fusion mask", capcut: "Mask", after_effects: "Mask", final_cut: "Draw Mask / Shape Mask"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: generate matte (geq or a Remotion-rendered alpha PNG), then alphamerge/maskedmerge. Static or keyframed shapes only."
+    sources:
+      - {title: "Premiere — Refine and combine masks", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/work-with-masks/refining-and-combining-masks.html", locator: "Masks"}
+      - {title: "CapCut — Mask video online", url: "https://www.capcut.com/tools/mask-video-online", locator: "feature page"}
+
+  - id: cap.compositing.chroma_key
+    category: compositing
+    name: Chroma key (green/blue screen)
+    description: "Remove a solid green or blue background to place the subject over new footage."
+    parameters:
+      - {name: key_color, type: string, typical_range: "#00B140 green / #0047BB blue"}
+      - {name: similarity, type: float, typical_range: "0.08–0.2", unit: normalized}
+      - {name: blend, type: float, typical_range: "0.02–0.1", unit: normalized}
+      - {name: spill_suppression, type: float, typical_range: "0.3–1.0", unit: normalized}
+    nle_names: {premiere: "Ultra Key", resolve: "3D Keyer / Qualifier", capcut: "Chroma key", after_effects: "Keylight", final_cut: "Keyer"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: chromakey + despill, then overlay on new background."
+    sources:
+      - {title: "Premiere — Apply and customize Ultra Key", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/effects-and-transitions-library/apply-and-customize-chromakey-using-the-ultra-key-effect.html", locator: "Ultra Key"}
+      - {title: "CapCut Help — Chroma key feature", url: "https://www.capcut.com/help/chroma-key-feature", locator: "help article"}
+      - {title: "FFmpeg Filters — chromakey", url: "https://ffmpeg.org/ffmpeg-filters.html#chromakey", locator: "chromakey"}
+
+  - id: cap.compositing.luma_key
+    category: compositing
+    name: Luma key
+    description: "Make dark or bright areas transparent, e.g. drop a black background from fire or light-leak footage."
+    parameters:
+      - {name: threshold, type: float, typical_range: "0.05–0.2", unit: normalized}
+      - {name: softness, type: float, typical_range: "0.05–0.2", unit: normalized}
+    nle_names: {premiere: "Luma Key", resolve: "Luma qualifier / Luma Keyer", after_effects: "Extract / Luma Key", final_cut: "Luma Keyer"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: lumakey; or blend=screen for black-background overlays."
+    sources:
+      - {title: "Premiere — Keying effects", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/effects-and-transitions-library/keying-effects.html", locator: "Luma Key"}
+
+  - id: cap.compositing.background_removal
+    category: compositing
+    name: AI background removal (person matte)
+    description: "Separate a person from any background without a green screen, producing an alpha matte."
+    parameters:
+      - {name: edge_refine, type: float, typical_range: "0–1", unit: normalized}
+      - {name: output, type: enum, values: [matte, cutout, replace_background, blur_background]}
+    nle_names: {premiere: "Object Masking (beta)", resolve: "Magic Mask", capcut: "Remove background / Auto removal", after_effects: "Roto Brush", final_cut: "Magnetic Mask"}
+    renderer_owner: unsupported
+    notes: "Needs a segmentation/matting model (e.g. RVM, SAM 2, MediaPipe) run outside the stack. ffmpeg backgroundkey only handles static backgrounds. Blocks text-behind-subject."
+    sources:
+      - {title: "CapCut — Video background remover", url: "https://www.capcut.com/tools/video-background-remover", locator: "feature page"}
+      - {title: "Final Cut Pro 11 — Apple Newsroom", url: "https://www.apple.com/newsroom/2024/11/final-cut-pro-11-begins-a-new-chapter-for-video-editing-on-mac/", locator: "Magnetic Mask"}
+      - {title: "Premiere — Object Masking", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/work-with-masks/object-masking.html", locator: "Object masking"}
+
+  - id: cap.compositing.rotoscope
+    category: compositing
+    name: Rotoscoping / object mask
+    description: "Isolate any object (not only people) across frames by painting or clicking, refining hair and soft edges."
+    parameters:
+      - {name: refine_edge, type: bool, typical_range: "true for hair"}
+      - {name: feather, type: float, typical_range: "0–10", unit: px}
+    nle_names: {after_effects: "Roto Brush & Refine Edge", resolve: "Magic Mask (Object)", premiere: "Object Masking", final_cut: "Magnetic Mask"}
+    renderer_owner: unsupported
+    notes: "Requires interactive or ML segmentation (SAM 2 class). No in-stack equivalent."
+    sources:
+      - {title: "After Effects — Roto Brush and Refine Matte", url: "https://helpx.adobe.com/after-effects/desktop/roto-brush-and-refine-matte/roto-brush/roto-brush-refine-matte.html", locator: "Roto Brush"}
+      - {title: "DaVinci Resolve 20 New Features Guide", url: "https://documents.blackmagicdesign.com/SupportNotes/DaVinci_Resolve_20_New_Features_Guide.pdf", locator: "Magic Mask v2"}
+
+  - id: cap.compositing.point_tracking
+    category: compositing
+    name: Motion tracking (point / object)
+    description: "Follow a feature or object through the shot and apply its motion to text, graphics, masks or blur."
+    parameters:
+      - {name: track_type, type: enum, values: [position, position_scale, position_scale_rotation]}
+      - {name: target, type: string, typical_range: "region box at start frame"}
+    nle_names: {premiere: "Mask tracking", resolve: "Tracker (Color/Fusion)", capcut: "Tracking", after_effects: "Track Motion", final_cut: "Object Tracker"}
+    renderer_owner: unsupported
+    notes: "Needs a tracker (e.g. OpenCV CSRT, CoTracker) outside the stack; output would be keyframes consumed by ffmpeg or Remotion."
+    sources:
+      - {title: "After Effects — Tracking and stabilization workflows", url: "https://helpx.adobe.com/after-effects/using/tracking-stabilizing-motion-cs5.html", locator: "Motion tracking"}
+      - {title: "Premiere — Track masks", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/work-with-masks/track-masks.html", locator: "Tracking"}
+      - {title: "Final Cut Pro User Guide — How does object tracking work", url: "https://support.apple.com/guide/final-cut-pro/vere9b794f29/mac", locator: "Object tracking"}
+
+  - id: cap.compositing.planar_screen_replace
+    category: compositing
+    name: Planar tracking / screen replacement
+    description: "Track a flat surface (phone screen, sign) and pin new content onto it with perspective."
+    parameters:
+      - {name: surface, type: string, typical_range: "4-corner region"}
+    nle_names: {after_effects: "Mocha AE / Corner Pin tracking", resolve: "Planar Tracker (Fusion)"}
+    renderer_owner: unsupported
+    notes: "Needs planar tracking; static screens could use cap.transform.perspective with fixed corners."
+    sources:
+      - {title: "After Effects — Tracking and stabilization workflows", url: "https://helpx.adobe.com/after-effects/using/tracking-stabilizing-motion-cs5.html", locator: "Perspective corner pin"}
+
+  - id: cap.compositing.camera_track_3d
+    category: compositing
+    name: 3D camera tracking
+    description: "Solve the real camera's 3D motion so text or objects can be placed in the scene's space."
+    parameters:
+      - {name: solve_method, type: enum, values: [auto, typical, mostly_flat, tripod_pan]}
+    nle_names: {after_effects: "3D Camera Tracker", resolve: "Camera Tracker (Fusion)"}
+    renderer_owner: unsupported
+    notes: "Needs structure-from-motion; out of scope for ffmpeg/Remotion."
+    sources:
+      - {title: "After Effects — Tracking 3D camera movement", url: "https://helpx.adobe.com/after-effects/using/tracking-3d-camera-movement.html", locator: "3D Camera Tracker"}
+
+  - id: cap.compositing.text_behind_subject
+    category: compositing
+    name: Text behind subject
+    description: "Large text placed behind a person but in front of the background, so the subject appears to stand in front of it."
+    parameters:
+      - {name: text_scale, type: float, typical_range: "0.6–1.0 of width", unit: normalized}
+      - {name: duration, type: float, typical_range: "1–3", unit: s}
+    nle_names: {capcut: "Text + Remove background overlay", after_effects: "Roto Brush + text layer", premiere: "Object Masking + titles", resolve: "Magic Mask + Text+"}
+    renderer_owner: both
+    notes: "Renderer-split: Remotion draws the text; ffmpeg composites the person matte back over it. The matte comes from cap.compositing.background_removal (unsupported in-stack today)."
+    sources:
+      - {title: "After Effects — Roto Brush and Refine Matte", url: "https://helpx.adobe.com/after-effects/desktop/roto-brush-and-refine-matte/roto-brush/roto-brush-refine-matte.html", locator: "Roto Brush"}
+      - {title: "CapCut — Video background remover", url: "https://www.capcut.com/tools/video-background-remover", locator: "feature page"}
+
+  - id: cap.compositing.picture_in_picture
+    category: compositing
+    name: Picture-in-picture card
+    description: "A smaller video window (b-roll, screen recording, reaction) floating over the main shot."
+    parameters:
+      - {name: scale, type: float, typical_range: "0.35–0.6 of width", unit: normalized}
+      - {name: corner_radius, type: float, typical_range: "16–40", unit: px}
+      - {name: border, type: float, typical_range: "0–8", unit: px}
+      - {name: entrance, type: enum, values: [pop, slide, fade]}
+    nle_names: {premiere: "Scale + Position on V2", resolve: "Transform on V2", capcut: "Overlay", after_effects: "Precomp layer", final_cut: "Connected clip + Transform"}
+    renderer_owner: remotion
+    notes: "Renderer-split: b-roll card = Remotion (the b-roll file is a separate asset, not base pixels)."
+    sources:
+      - {title: "Premiere — Apply Motion effect to clips", url: "https://helpx.adobe.com/premiere-pro/using/motion-position-scale-rotate-clip.html", locator: "Picture-in-picture via Motion"}
+
+  - id: cap.compositing.split_screen
+    category: compositing
+    name: Split screen / stacked layout
+    description: "Show two or more videos at once, e.g. top/bottom reaction format or side-by-side comparison."
+    parameters:
+      - {name: layout, type: enum, values: [top_bottom, left_right, grid_2x2, custom]}
+      - {name: gutter, type: float, typical_range: "0–16", unit: px}
+    nle_names: {premiere: "Crop + Position", resolve: "Video Collage", capcut: "Layout / Split screen", final_cut: "Transform + Crop"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: vstack/hstack/xstack. Base footage is being re-laid out, so ffmpeg not Remotion."
+    sources:
+      - {title: "CapCut — Split scene", url: "https://www.capcut.com/tools/split-scene", locator: "feature page"}
+      - {title: "FFmpeg Filters — xstack", url: "https://ffmpeg.org/ffmpeg-filters.html#xstack", locator: "xstack"}
+
+  - id: cap.compositing.track_matte
+    category: compositing
+    name: Track matte (video inside text/shape)
+    description: "Use one layer's alpha or luminance to cut out another, e.g. footage visible only inside big letters."
+    parameters:
+      - {name: matte_type, type: enum, values: [alpha, alpha_inverted, luma, luma_inverted]}
+    nle_names: {premiere: "Track Matte Key", resolve: "Composite (Alpha/Luma) / Fusion MatteControl", after_effects: "Track Matte", final_cut: "Image Mask"}
+    renderer_owner: both
+    notes: "Remotion renders the matte (text/shape alpha); ffmpeg alphamerge/maskedmerge applies it to base footage."
+    sources:
+      - {title: "After Effects — Track mattes and traveling mattes", url: "https://helpx.adobe.com/after-effects/desktop/work-with-transparency-and-compositing/work-with-track-mattes-and-traveling-mattes/track-mattes-and-traveling-mattes.html", locator: "Track mattes"}
+
+  - id: cap.compositing.adjustment_layer
+    category: compositing
+    name: Adjustment layer (effect over a range)
+    description: "Apply an effect or grade to everything below for a span of time without touching individual clips."
+    parameters:
+      - {name: range, type: string, typical_range: "in–out"}
+      - {name: effects, type: string, typical_range: "list of cap ids"}
+    nle_names: {premiere: "Adjustment Layer", resolve: "Adjustment Clip", capcut: "Adjustment layer", after_effects: "Adjustment Layer", final_cut: "Adjustment clip (title-based)"}
+    renderer_owner: ffmpeg
+    notes: "Compiler expands to per-segment ffmpeg filters on the base layer."
+    sources:
+      - {title: "After Effects — Use alpha channels, masks, and mattes", url: "https://helpx.adobe.com/after-effects/desktop/work-with-transparency-and-compositing/work-with-alpha-channels-and-masks/alpha-channels-masks-mattes.html", locator: "Adjustment layers"}
+
+  - id: cap.compositing.object_removal
+    category: compositing
+    name: Object removal (content-aware fill)
+    description: "Erase an unwanted object or person from moving footage and fill the hole plausibly."
+    parameters:
+      - {name: region, type: string, typical_range: "mask"}
+    nle_names: {after_effects: "Content-Aware Fill", resolve: "Object Removal / Patch Replacer", capcut: "Remove people (AI)"}
+    renderer_owner: unsupported
+    notes: "Needs video inpainting. ffmpeg delogo/removelogo only smear a small static area (see cap.effect.censor_blur)."
+    sources:
+      - {title: "DaVinci Resolve 21.1 Studio Features", url: "https://documents.blackmagicdesign.com/SupportNotes/DaVinci_Resolve_Studio_21_Features.pdf", locator: "Object Removal"}
+      - {title: "CapCut — AI people remover", url: "https://www.capcut.com/tools/ai-people-remover", locator: "feature page"}
+
+  # ───────────────────────────── EFFECT ─────────────────────────────
+  - id: cap.effect.gaussian_blur
+    category: effect
+    name: Gaussian blur
+    description: "Soften the whole image or a masked area; used for focus pulls, backgrounds behind text, or transitions."
+    parameters:
+      - {name: sigma, type: float, typical_range: "2–40", unit: px}
+    nle_names: {premiere: "Gaussian Blur", resolve: "Gaussian Blur", after_effects: "Gaussian Blur", final_cut: "Gaussian"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: gblur. Remotion cannot blur base pixels."
+    sources:
+      - {title: "After Effects — Effect list", url: "https://helpx.adobe.com/after-effects/desktop/apply-effects-and-animation-presets/effects-and-animation-presets/effect-list.html", locator: "Blur & Sharpen"}
+      - {title: "FFmpeg Filters — gblur", url: "https://ffmpeg.org/ffmpeg-filters.html#gblur", locator: "gblur"}
+
+  - id: cap.effect.zoom_blur
+    category: effect
+    name: Radial / zoom blur
+    description: "Blur streaking outward from a centre point, giving a rushing-forward feel on impacts and zoom transitions."
+    parameters:
+      - {name: amount, type: float, typical_range: "5–50", unit: relative}
+      - {name: center, type: string, typical_range: "0.5,0.5"}
+    nle_names: {resolve: "Zoom Blur / Radial Blur", after_effects: "Radial Blur (Zoom)"}
+    renderer_owner: ffmpeg
+    notes: "No native radial blur in ffmpeg; approximate by averaging several progressively scaled copies (tmix/blend)."
+    sources:
+      - {title: "After Effects — Effect list", url: "https://helpx.adobe.com/after-effects/desktop/apply-effects-and-animation-presets/effects-and-animation-presets/effect-list.html", locator: "Radial Blur"}
+
+  - id: cap.effect.depth_background_blur
+    category: effect
+    name: Portrait-mode background blur
+    description: "Blur only the background behind the subject to fake shallow depth of field."
+    parameters:
+      - {name: blur, type: float, typical_range: "8–30", unit: px}
+    nle_names: {resolve: "Depth Map + Lens Blur"}
+    renderer_owner: unsupported
+    notes: "Needs a depth or person matte (unsupported). Static vignette-shaped blur is a weak fallback."
+    sources:
+      - {title: "DaVinci Resolve 21.1 Studio Features", url: "https://documents.blackmagicdesign.com/SupportNotes/DaVinci_Resolve_Studio_21_Features.pdf", locator: "Depth Map"}
+
+  - id: cap.effect.glow
+    category: effect
+    name: Glow / bloom
+    description: "Bright areas bleed soft light into their surroundings for a dreamy or neon look."
+    parameters:
+      - {name: threshold, type: float, typical_range: "0.6–0.9", unit: normalized}
+      - {name: radius, type: float, typical_range: "10–60", unit: px}
+      - {name: intensity, type: float, typical_range: "0.2–1.0", unit: normalized}
+    nle_names: {resolve: "Glow", after_effects: "Glow", final_cut: "Bloom"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: split → threshold (curves/lutyuv) → gblur → blend=screen."
+    sources:
+      - {title: "After Effects — Stylize effects", url: "https://helpx.adobe.com/after-effects/desktop/apply-effects-and-animation-presets/list-of-effects/stylize-effects.html", locator: "Glow"}
+
+  - id: cap.effect.film_grain
+    category: effect
+    name: Film grain / noise
+    description: "Add fine random texture to give an organic film feel or to mask banding and compression."
+    parameters:
+      - {name: strength, type: float, typical_range: "4–15 (ffmpeg alls)", unit: relative}
+      - {name: temporal, type: bool, typical_range: "true"}
+    nle_names: {premiere: "Noise", resolve: "Film Grain", capcut: "Adjust > Grain", after_effects: "Add Grain", final_cut: "Film Grain / Noise"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: noise=alls=8:allf=t+u. Grain raises bitrate needs; reels compression may smear it."
+    sources:
+      - {title: "After Effects — Noise and Grain effects", url: "https://helpx.adobe.com/after-effects/using/noise-grain-effects.html", locator: "Add Grain"}
+      - {title: "FFmpeg Filters — noise", url: "https://ffmpeg.org/ffmpeg-filters.html#noise", locator: "noise"}
+
+  - id: cap.effect.light_leak
+    category: effect
+    name: Light leak overlay
+    description: "Warm streaks of light drifting over the picture for a nostalgic or energetic film feel."
+    parameters:
+      - {name: opacity, type: float, typical_range: "0.3–0.8", unit: normalized}
+      - {name: duration, type: float, typical_range: "0.5–2", unit: s}
+    nle_names: {resolve: "Light leak (Resolve FX / stock)", premiere: "Overlay clip in Screen mode"}
+    renderer_owner: remotion
+    notes: "Renderer-split lists light leak as Remotion. Plain alpha-over looks flatter than screen blend; if a screen look is needed, flag for ffmpeg blend at composite."
+    sources:
+      - {title: "CapCut — Video effects and filters", url: "https://www.capcut.com/tools/video-effect-and-filter", locator: "feature page"}
+
+  - id: cap.effect.glitch
+    category: effect
+    name: Glitch / digital distortion
+    description: "RGB channel splits, block displacement, scan lines and jitter for a tech or chaotic feel."
+    parameters:
+      - {name: rgb_shift, type: float, typical_range: "4–30", unit: px}
+      - {name: duration, type: float, typical_range: "0.1–0.6", unit: s}
+    nle_names: {after_effects: "Wave Warp + channel offsets"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: rgbashift, noise, random crop offsets; base pixels required."
+    sources:
+      - {title: "Premiere — Modern effects", url: "https://helpx.adobe.com/premiere/desktop/add-video-effects/types-of-effects/effects.html", locator: "Modern effects"}
+      - {title: "FFmpeg Filters — rgbashift", url: "https://ffmpeg.org/ffmpeg-filters.html#rgbashift", locator: "rgbashift"}
+
+  - id: cap.effect.camera_shake
+    category: effect
+    name: Camera shake
+    description: "Add jittery handheld or impact shake to the footage on hits, drops or punchlines."
+    parameters:
+      - {name: amplitude, type: float, typical_range: "4–30", unit: px}
+      - {name: frequency, type: float, typical_range: "6–20", unit: Hz}
+      - {name: duration, type: float, typical_range: "0.15–0.6", unit: s}
+    nle_names: {resolve: "Camera Shake", after_effects: "wiggle() expression"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: overscale then crop with random/noise-driven x,y. Shaking only a text overlay is a Remotion text animation instead."
+    sources:
+      - {title: "DaVinci Resolve 20 Reference Manual", url: "https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf", locator: "Resolve FX Transform — Camera Shake"}
+
+  - id: cap.effect.motion_blur
+    category: effect
+    name: Motion blur on base footage
+    description: "Blur that follows movement of animated transforms or fast footage, making motion smoother and more natural."
+    parameters:
+      - {name: shutter_angle, type: float, typical_range: "180–360", unit: deg}
+      - {name: samples, type: int, typical_range: "4–16"}
+    nle_names: {after_effects: "Motion Blur switch / Pixel Motion Blur", resolve: "Motion Blur (Resolve FX)", capcut: "Motion blur", premiere: "Transform > Shutter Angle"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: render transform at higher fps then tmix down. For animated overlay graphics see cap.effect.overlay_motion_blur."
+    sources:
+      - {title: "CapCut — Motion blur", url: "https://www.capcut.com/tools/motion-blur", locator: "feature page"}
+      - {title: "FFmpeg Filters — tmix", url: "https://ffmpeg.org/ffmpeg-filters.html#tmix", locator: "tmix"}
+
+  - id: cap.effect.overlay_motion_blur
+    category: effect
+    name: Motion blur on animated graphics
+    description: "Blur trailing moving text and graphics so fast overlay animations don't strobe."
+    parameters:
+      - {name: shutter_angle, type: float, typical_range: "180", unit: deg}
+      - {name: samples, type: int, typical_range: "6–10"}
+    nle_names: {after_effects: "Motion Blur switch"}
+    renderer_owner: remotion
+    notes: "Remotion @remotion/motion-blur (CameraMotionBlur/Trail). Raises overlay render time."
+    sources:
+      - {title: "Remotion docs — Motion blur", url: "https://www.remotion.dev/docs/motion-blur", locator: "CameraMotionBlur / Trail"}
+
+  - id: cap.effect.vignette
+    category: effect
+    name: Vignette
+    description: "Darken (or lighten) the frame edges to draw the eye to the centre."
+    parameters:
+      - {name: amount, type: float, typical_range: "0.1–0.4", unit: normalized}
+      - {name: feather, type: float, typical_range: "0.3–0.8", unit: normalized}
+    nle_names: {premiere: "Vignette (Lumetri)", resolve: "Vignette", capcut: "Adjust > Vignette", after_effects: "Lumetri Vignette", final_cut: "Vignette"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: vignette."
+    sources:
+      - {title: "Premiere — Color correction workflow", url: "https://helpx.adobe.com/premiere/desktop/correct-color/color-correction-fundamentals/color-correction-workflow.html", locator: "Vignette"}
+      - {title: "FFmpeg Filters — vignette", url: "https://ffmpeg.org/ffmpeg-filters.html#vignette", locator: "vignette"}
+
+  - id: cap.effect.lens_distortion
+    category: effect
+    name: Fisheye / lens warp
+    description: "Bulge or pinch the image like a wide or fisheye lens, often animated on impacts."
+    parameters:
+      - {name: k1, type: float, typical_range: "0.1–0.6 (bulge)", unit: coeff}
+    nle_names: {premiere: "Lens Distortion", resolve: "Lens Distortion / Dent", after_effects: "Bulge / Optics Compensation"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: lenscorrection with positive k1, or v360 fisheye remap."
+    sources:
+      - {title: "After Effects — Distort effects", url: "https://helpx.adobe.com/after-effects/using/distort-effects.html", locator: "Bulge / Optics Compensation"}
+
+  - id: cap.effect.chromatic_aberration
+    category: effect
+    name: Chromatic aberration / RGB split
+    description: "Offset colour channels slightly at edges to mimic cheap lenses or add tension."
+    parameters:
+      - {name: offset, type: float, typical_range: "1–8", unit: px}
+    nle_names: {resolve: "Chromatic Aberration", after_effects: "Channel offset (Shift Channels)"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: chromashift / rgbashift."
+    sources:
+      - {title: "After Effects — Channel effects", url: "https://helpx.adobe.com/after-effects/using/channel-effects.html", locator: "Shift Channels"}
+      - {title: "FFmpeg Filters — chromashift", url: "https://ffmpeg.org/ffmpeg-filters.html#chromashift", locator: "chromashift"}
+
+  - id: cap.effect.lens_flare
+    category: effect
+    name: Lens flare
+    description: "Simulated flare streaks and orbs from a bright light source."
+    parameters:
+      - {name: position, type: string, typical_range: "x,y normalized"}
+      - {name: brightness, type: float, typical_range: "50–130", unit: percent}
+    nle_names: {premiere: "Lens Flare", resolve: "Lens Flare", after_effects: "Lens Flare", final_cut: "Lens Flare"}
+    renderer_owner: remotion
+    notes: "Generated graphic on top; normal alpha-over is acceptable, screen blend needs ffmpeg."
+    sources:
+      - {title: "After Effects — Generate effects", url: "https://helpx.adobe.com/after-effects/desktop/apply-effects-and-animation-presets/list-of-effects/generate-effects.html", locator: "Lens Flare"}
+
+  - id: cap.effect.retro_vhs
+    category: effect
+    name: Retro / VHS look
+    description: "Combine softness, colour bleed, scan lines, noise and tracking wobble to mimic old video."
+    parameters:
+      - {name: intensity, type: float, typical_range: "0.3–1.0", unit: normalized}
+    nle_names: {resolve: "Analog Damage", premiere: "Effect stack"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg chain: scale down/up, chromashift, noise, eq, drawgrid-like scanlines via geq."
+    sources:
+      - {title: "DaVinci Resolve 20 Reference Manual", url: "https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf", locator: "Resolve FX Texture — Analog Damage"}
+
+  - id: cap.effect.sharpen
+    category: effect
+    name: Sharpen
+    description: "Increase edge contrast to make soft footage look crisper; overuse creates halos."
+    parameters:
+      - {name: amount, type: float, typical_range: "0.3–1.0 (unsharp luma)", unit: relative}
+    nle_names: {premiere: "Unsharp Mask / Sharpen", resolve: "Sharpen (Blur palette)", capcut: "Adjust > Sharpen", after_effects: "Unsharp Mask", final_cut: "Sharpen"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: unsharp or cas."
+    sources:
+      - {title: "After Effects — Effect list", url: "https://helpx.adobe.com/after-effects/desktop/apply-effects-and-animation-presets/effects-and-animation-presets/effect-list.html", locator: "Unsharp Mask"}
+      - {title: "FFmpeg Filters — unsharp", url: "https://ffmpeg.org/ffmpeg-filters.html#unsharp", locator: "unsharp"}
+
+  - id: cap.effect.censor_blur
+    category: effect
+    name: Censor (pixelate / blur region)
+    description: "Obscure a face, plate, logo or text with pixelation or blur in a fixed region."
+    parameters:
+      - {name: method, type: enum, values: [pixelate, blur, solid]}
+      - {name: block_size, type: int, typical_range: "12–40 px"}
+    nle_names: {premiere: "Mosaic + mask", resolve: "Mosaic Blur", capcut: "Mosaic effect", after_effects: "Mosaic", final_cut: "Censor"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: crop region → pixelize/boxblur → overlay; delogo for small logos. Moving targets need tracking (unsupported)."
+    sources:
+      - {title: "After Effects — Stylize effects", url: "https://helpx.adobe.com/after-effects/desktop/apply-effects-and-animation-presets/list-of-effects/stylize-effects.html", locator: "Mosaic"}
+      - {title: "FFmpeg Filters — pixelize", url: "https://ffmpeg.org/ffmpeg-filters.html#pixelize", locator: "pixelize"}
+
+  - id: cap.effect.flash_white
+    category: effect
+    name: White flash
+    description: "Brief full-frame white flash to punctuate a beat, reveal or cut."
+    parameters:
+      - {name: duration, type: float, typical_range: "0.05–0.2", unit: s}
+      - {name: peak_opacity, type: float, typical_range: "0.6–1.0", unit: normalized}
+    nle_names: {premiere: "White color matte + opacity", resolve: "Solid + opacity"}
+    renderer_owner: remotion
+    notes: "Listed as Remotion in renderer-split."
+    sources:
+      - {title: "CapCut — Video effects and filters", url: "https://www.capcut.com/tools/video-effect-and-filter", locator: "feature page"}
+
+  - id: cap.effect.exposure_pulse
+    category: effect
+    name: Beat brightness pulse
+    description: "Momentarily brighten or contrast-boost the footage itself on a beat for rhythmic energy."
+    parameters:
+      - {name: boost, type: float, typical_range: "0.1–0.3 brightness", unit: relative}
+      - {name: decay, type: float, typical_range: "0.1–0.3", unit: s}
+    nle_names: {after_effects: "Exposure keyframes"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: eq with time expression or sendcmd. Distinct from white flash (overlay)."
+    sources:
+      - {title: "FFmpeg Filters — eq", url: "https://ffmpeg.org/ffmpeg-filters.html#eq", locator: "eq"}
+
+  - id: cap.effect.video_denoise
+    category: effect
+    name: Video noise reduction
+    description: "Reduce digital noise in low-light footage before grading and compression."
+    parameters:
+      - {name: strength, type: float, typical_range: "2–6 (hqdn3d luma)", unit: relative}
+      - {name: method, type: enum, values: [temporal, spatial, both]}
+    nle_names: {premiere: "Median / Noise reduction", resolve: "Noise Reduction (Temporal/Spatial)", capcut: "Denoise video", after_effects: "Remove Grain"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: hqdn3d (fast), nlmeans (slow, better)."
+    sources:
+      - {title: "CapCut — Denoise video with AI", url: "https://www.capcut.com/tools/denoise-video-with-ai", locator: "feature page"}
+      - {title: "FFmpeg Filters — hqdn3d", url: "https://ffmpeg.org/ffmpeg-filters.html#hqdn3d", locator: "hqdn3d"}
+
+  - id: cap.effect.deflicker
+    category: effect
+    name: Deflicker
+    description: "Remove brightness flicker from artificial lights or timelapses."
+    parameters:
+      - {name: window, type: int, typical_range: "5–15 frames"}
+    nle_names: {resolve: "Deflicker", capcut: "Remove flickers"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: deflicker."
+    sources:
+      - {title: "CapCut — Remove video flicker", url: "https://www.capcut.com/tools/remove-video-flicker", locator: "feature page"}
+      - {title: "FFmpeg Filters — deflicker", url: "https://ffmpeg.org/ffmpeg-filters.html#deflicker", locator: "deflicker"}
+
+  - id: cap.effect.beauty_retouch
+    category: effect
+    name: Face retouch / beauty
+    description: "Smooth skin, brighten eyes and even complexion on detected faces."
+    parameters:
+      - {name: smoothing, type: float, typical_range: "10–40", unit: percent}
+    nle_names: {resolve: "Face Refinement / Beauty", capcut: "Retouch"}
+    renderer_owner: unsupported
+    notes: "Needs face landmarks/masks. Global bilateral/smartblur would soften everything — not equivalent."
+    sources:
+      - {title: "CapCut — Face retouching", url: "https://www.capcut.com/tools/face-retouching", locator: "feature page"}
+
+  - id: cap.effect.lip_sync
+    category: effect
+    name: AI lip sync
+    description: "Regenerate mouth movements so a face matches new or translated audio."
+    parameters:
+      - {name: audio, type: string, typical_range: "audio asset"}
+    nle_names: {capcut: "Lip sync"}
+    renderer_owner: unsupported
+    notes: "Generative face model required; also consent-sensitive."
+    sources:
+      - {title: "CapCut Help — Lip sync feature", url: "https://www.capcut.com/help/lip-sync-feature", locator: "help article"}
+
+  - id: cap.effect.ai_upscale
+    category: effect
+    name: AI upscale / enhance
+    description: "Increase resolution and detail of low-res footage with a super-resolution model."
+    parameters:
+      - {name: factor, type: float, typical_range: "1.5–4", unit: x}
+    nle_names: {resolve: "Super Scale", capcut: "AI video enhancer"}
+    renderer_owner: unsupported
+    notes: "ffmpeg only offers classic scalers (scale=flags=lanczos); ML super-resolution needs an external model."
+    sources:
+      - {title: "CapCut — AI video enhancer", url: "https://www.capcut.com/tools/ai-video-enhancer", locator: "feature page"}
+      - {title: "DaVinci Resolve 21.1 Studio Features", url: "https://documents.blackmagicdesign.com/SupportNotes/DaVinci_Resolve_Studio_21_Features.pdf", locator: "Super Scale"}
+
+  # ───────────────────────────── EXPORT ─────────────────────────────
+  - id: cap.export.h264_mp4
+    category: export
+    name: H.264 MP4 delivery
+    description: "Encode the final reel as H.264 video with AAC audio in an MP4 container, the universally accepted upload format."
+    parameters:
+      - {name: profile, type: enum, values: [high, main]}
+      - {name: crf, type: int, typical_range: "16–20 (libx264)"}
+      - {name: audio_bitrate, type: int, typical_range: "192–320", unit: kbps}
+      - {name: faststart, type: bool, typical_range: "true"}
+    nle_names: {premiere: "Export > H.264", resolve: "Deliver > MP4 H.264", capcut: "Export", after_effects: "Media Encoder H.264", final_cut: "Share > Apple Devices / H.264"}
+    renderer_owner: ffmpeg
+    notes: "-c:v libx264 (or h264_videotoolbox) -pix_fmt yuv420p -movflags +faststart -c:a aac."
+    sources:
+      - {title: "Premiere — Export settings reference", url: "https://helpx.adobe.com/premiere/desktop/render-and-export/export-files/overview-of-export-settings.html", locator: "Video settings — H.264"}
+
+  - id: cap.export.hevc
+    category: export
+    name: HEVC (H.265) delivery
+    description: "Encode with HEVC for smaller files at equal quality, or when 10-bit/HDR is required."
+    parameters:
+      - {name: crf, type: int, typical_range: "20–24 (libx265)"}
+      - {name: bit_depth, type: enum, values: ["8", "10"]}
+    nle_names: {premiere: "Export > HEVC (H.265)", resolve: "Deliver > H.265", capcut: "Export > HEVC", final_cut: "HEVC 8/10-bit"}
+    renderer_owner: ffmpeg
+    notes: "Tag hvc1 for Apple compatibility (-tag:v hvc1)."
+    sources:
+      - {title: "Premiere — Export settings reference", url: "https://helpx.adobe.com/premiere/desktop/render-and-export/export-files/overview-of-export-settings.html", locator: "Format"}
+
+  - id: cap.export.aspect_ratio
+    category: export
+    name: Aspect ratio & resolution preset
+    description: "Set output frame size for the target placement: 9:16 Reels/Shorts/TikTok, 4:5 feed, 1:1 square."
+    parameters:
+      - {name: aspect, type: enum, values: ["9:16", "4:5", "1:1", "16:9"]}
+      - {name: resolution, type: enum, values: ["1080x1920", "2160x3840", "1080x1350", "1080x1080"]}
+    nle_names: {premiere: "Sequence settings / Auto Reframe", resolve: "Timeline resolution", capcut: "Ratio", final_cut: "Project format"}
+    renderer_owner: ffmpeg
+    sources:
+      - {title: "CapCut — Video resizer", url: "https://www.capcut.com/tools/video-resizer", locator: "feature page"}
+      - {title: "Premiere Pro — Auto Reframe", url: "https://helpx.adobe.com/premiere-pro/using/auto-reframe.html", locator: "Aspect ratio"}
+
+  - id: cap.export.frame_rate
+    category: export
+    name: Output frame rate
+    description: "Choose the delivery frame rate, normally matching the dominant source (30 or 60 fps)."
+    parameters:
+      - {name: fps, type: enum, values: ["24", "25", "30", "60"]}
+    nle_names: {premiere: "Frame Rate (export)", resolve: "Timeline frame rate", capcut: "Export > Frame rate", final_cut: "Project frame rate"}
+    renderer_owner: ffmpeg
+    notes: "Remotion overlay must be rendered at the same fps as the base."
+    sources:
+      - {title: "CapCut — Video frame rate", url: "https://www.capcut.com/tools/video-frame-rate", locator: "feature page"}
+
+  - id: cap.export.bitrate_quality
+    category: export
+    name: Bitrate / quality control
+    description: "Choose constant-quality or target-bitrate encoding to balance file size against artefacts after platform re-encode."
+    parameters:
+      - {name: mode, type: enum, values: [crf, vbr_1pass, vbr_2pass, cbr]}
+      - {name: target_bitrate, type: float, typical_range: "8–20 (1080x1920)", unit: Mbps}
+    nle_names: {premiere: "Bitrate Settings", resolve: "Quality / Restrict to", capcut: "Export > Bitrate", final_cut: "Quality"}
+    renderer_owner: ffmpeg
+    sources:
+      - {title: "Premiere — Export settings reference", url: "https://helpx.adobe.com/premiere/desktop/render-and-export/export-files/overview-of-export-settings.html", locator: "Bitrate settings"}
+
+  - id: cap.export.loudness_target
+    category: export
+    name: Delivery loudness target
+    description: "Final-mix loudness and true-peak check before export so the reel isn't quieter or clipping relative to the feed."
+    parameters:
+      - {name: integrated, type: float, typical_range: "-14 ±1", unit: LUFS}
+      - {name: true_peak, type: float, typical_range: "≤ -1", unit: dBTP}
+    nle_names: {premiere: "Effects > Loudness Normalization (export)", resolve: "Deliver > Audio normalize", final_cut: "Loudness"}
+    renderer_owner: ffmpeg
+    notes: "Same machinery as cap.audio.loudness_normalize applied to the master."
+    sources:
+      - {title: "Premiere — Export settings reference", url: "https://helpx.adobe.com/premiere/desktop/render-and-export/export-files/overview-of-export-settings.html", locator: "Effects — Loudness Normalization"}
+
+  - id: cap.export.captions_sidecar
+    category: export
+    name: Caption sidecar file (SRT/VTT)
+    description: "Write captions as a separate text file for platform-native captions or accessibility."
+    parameters:
+      - {name: format, type: enum, values: [srt, vtt, scc, stl]}
+      - {name: max_chars_per_line, type: int, typical_range: "32–42"}
+    nle_names: {premiere: "Captions > Create Sidecar File", resolve: "Deliver > Subtitle export", capcut: "Export captions (SRT)", final_cut: "Export Captions"}
+    renderer_owner: ffmpeg
+    notes: "Generated from transcript JSON; ffmpeg can convert/mux (e.g. -c:s mov_text). Not pixels — trivially producible."
+    sources:
+      - {title: "Premiere — Export caption tracks", url: "https://helpx.adobe.com/premiere/desktop/render-and-export/export-files/export-caption-tracks.html", locator: "Sidecar"}
+      - {title: "Premiere — Supported caption file formats", url: "https://helpx.adobe.com/premiere/desktop/add-text-images/insert-captions/supported-file-formats-for-captions.html", locator: "Formats"}
+
+  - id: cap.export.captions_burn_in
+    category: export
+    name: Burned-in captions
+    description: "Render captions permanently into the picture so they show on every platform and autoplay muted."
+    parameters:
+      - {name: style_ref, type: string, typical_range: "caption style id"}
+    nle_names: {premiere: "Captions > Burn Captions Into Video", resolve: "Burn into video", capcut: "Export (captions on)", final_cut: "Burn In Captions"}
+    renderer_owner: remotion
+    notes: "Drawn in the Remotion overlay (local ffmpeg lacks libass/drawtext anyway)."
+    sources:
+      - {title: "Premiere — Export caption tracks", url: "https://helpx.adobe.com/premiere/desktop/render-and-export/export-files/export-caption-tracks.html", locator: "Burn captions"}
+
+  - id: cap.export.cover_frame
+    category: export
+    name: Cover / thumbnail frame
+    description: "Export a still to use as the reel's cover, optionally with title text."
+    parameters:
+      - {name: at, type: float, typical_range: "hook frame", unit: s}
+      - {name: size, type: enum, values: ["1080x1920", "1080x1440"]}
+    nle_names: {premiere: "Export Frame", resolve: "Grab Still", capcut: "Cover", final_cut: "Save Current Frame"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg -ss T -frames:v 1 from the composited output (so text is included)."
+    sources:
+      - {title: "DaVinci Resolve 20 Reference Manual", url: "https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_20_Reference_Manual.pdf", locator: "Gallery — Grab Still / Export"}
+
+  - id: cap.export.color_tagging
+    category: export
+    name: Colour metadata tagging
+    description: "Write correct colour primaries, transfer and range tags (Rec.709, limited range) so phones display colours as graded."
+    parameters:
+      - {name: primaries, type: enum, values: [bt709]}
+      - {name: range, type: enum, values: [tv, pc]}
+    nle_names: {premiere: "Color management (export)", resolve: "Color space tag / Gamma tag", final_cut: "Color space"}
+    renderer_owner: ffmpeg
+    notes: "-colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv. Mismatches cause washed-out uploads."
+    sources:
+      - {title: "Premiere — Export settings reference", url: "https://helpx.adobe.com/premiere/desktop/render-and-export/export-files/overview-of-export-settings.html", locator: "Color settings"}
+
+  - id: cap.export.alpha_overlay
+    category: export
+    name: Alpha-channel overlay render
+    description: "Render graphics on a transparent background for compositing (ProRes 4444 / VP9 with alpha)."
+    parameters:
+      - {name: codec, type: enum, values: [prores_4444, vp9_alpha, png_sequence]}
+    nle_names: {after_effects: "Render Queue > RGB + Alpha", resolve: "Export Alpha", premiere: "Render alpha (ProRes 4444)", final_cut: "ProRes 4444 with alpha"}
+    renderer_owner: remotion
+    notes: "This is the internal hand-off of approach B (Remotion overlay → ffmpeg composite)."
+    sources:
+      - {title: "Premiere — Export settings reference", url: "https://helpx.adobe.com/premiere/desktop/render-and-export/export-files/overview-of-export-settings.html", locator: "Render alpha channel"}
+
+  - id: cap.export.multi_version
+    category: export
+    name: Multi-format versioning
+    description: "Produce several deliverables (aspect ratios, with/without captions, lengths) from one edit."
+    parameters:
+      - {name: versions, type: string, typical_range: "list of {aspect, captions, max_len}"}
+    nle_names: {premiere: "Auto Reframe Sequence copies", resolve: "Render queue jobs", final_cut: "Duplicate project as / Smart Conform"}
+    renderer_owner: ffmpeg
+    notes: "Re-run the compile per version; overlays may need re-layout per aspect."
+    sources:
+      - {title: "Premiere Pro — Auto Reframe", url: "https://helpx.adobe.com/premiere-pro/using/auto-reframe.html", locator: "Duplicated sequences"}
+
+  - id: cap.export.hdr_delivery
+    category: export
+    name: HDR delivery
+    description: "Export HDR10/HLG/Dolby Vision files with metadata for HDR-capable phones."
+    parameters:
+      - {name: format, type: enum, values: [hdr10, hlg, dolby_vision]}
+    nle_names: {premiere: "HDR export", resolve: "Deliver HDR", final_cut: "HEVC 10-bit HDR"}
+    renderer_owner: unsupported
+    notes: "Remotion overlays are sRGB/SDR; compositing them correctly into PQ/HLG needs a colour-managed composite we lack, and Dolby Vision metadata authoring is unavailable. Deliver SDR."
+    sources:
+      - {title: "Premiere — Export settings reference", url: "https://helpx.adobe.com/premiere/desktop/render-and-export/export-files/overview-of-export-settings.html", locator: "HDR"}
+
+  # ───────────────────────────── ANALYSIS ─────────────────────────────
+  - id: cap.analysis.scene_detection
+    category: analysis
+    name: Scene / shot-change detection
+    description: "Find where cuts occur in pre-edited or long footage so shots can be split, logged or reused."
+    parameters:
+      - {name: threshold, type: float, typical_range: "8–15 (scdet), 0.3–0.4 (select scene)", unit: relative}
+    nle_names: {premiere: "Scene Edit Detection", resolve: "Scene Cut Detection", capcut: "Cut scene / Scene detection", after_effects: "Scene Edit Detection"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: scdet or select='gt(scene,0.35)'. Fades/flash cuts cause misses/false positives."
+    sources:
+      - {title: "Premiere — Detect edit points using Scene Edit Detection", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/change-clip-sequence/detect-edit-points-using-scene-edit-detection.html", locator: "Scene Edit Detection"}
+      - {title: "FFmpeg Filters — scdet", url: "https://ffmpeg.org/ffmpeg-filters.html#scdet", locator: "scdet"}
+
+  - id: cap.analysis.silence_detection
+    category: analysis
+    name: Silence / pause detection
+    description: "Locate quiet stretches in the audio to drive pause removal and pacing."
+    parameters:
+      - {name: noise, type: float, typical_range: "-40 to -30", unit: dB}
+      - {name: duration, type: float, typical_range: "0.3–0.6", unit: s}
+    nle_names: {premiere: "Text-Based Editing > Pauses"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: silencedetect."
+    sources:
+      - {title: "FFmpeg Filters — silencedetect", url: "https://ffmpeg.org/ffmpeg-filters.html#silencedetect", locator: "silencedetect"}
+      - {title: "Premiere — Detect and delete pauses in transcripts", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/edit-video-using-text-based-editing/detect-and-delete-pauses-in-transcripts.html", locator: "Pauses"}
+
+  - id: cap.analysis.loudness_measurement
+    category: analysis
+    name: Loudness measurement
+    description: "Measure integrated, short-term and true-peak loudness to verify the mix."
+    parameters:
+      - {name: standard, type: enum, values: [ebu_r128, itu_bs1770]}
+    nle_names: {premiere: "Loudness Radar", resolve: "Loudness meter (Fairlight)", final_cut: "Loudness meter"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: ebur128=peak=true or loudnorm print_format=json."
+    sources:
+      - {title: "FFmpeg Filters — ebur128", url: "https://ffmpeg.org/ffmpeg-filters.html#ebur128", locator: "ebur128"}
+
+  - id: cap.analysis.transcription
+    category: analysis
+    name: Transcription (word-level timestamps)
+    description: "Convert speech to text with per-word timing, the basis for captions, text editing and filler removal."
+    parameters:
+      - {name: model, type: string, typical_range: "whisper medium/large"}
+      - {name: language, type: string, typical_range: "auto or ISO code"}
+    nle_names: {premiere: "Speech to Text / Transcribe", resolve: "Transcribe Audio", capcut: "Auto captions / Transcribe", final_cut: "Transcribe to Captions"}
+    renderer_owner: remotion
+    notes: "Owner set to remotion because @remotion/install-whisper-cpp provides it; it is a pre-render analysis step. ffmpeg's whisper filter needs a whisper.cpp build (absent locally)."
+    sources:
+      - {title: "Premiere — Text-Based Editing overview", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/edit-video-using-text-based-editing/overview-of-text-based-editing.html", locator: "Transcription"}
+      - {title: "CapCut — Transcribe video to text", url: "https://www.capcut.com/tools/transcribe-video-to-text", locator: "feature page"}
+      - {title: "FFmpeg Filters — whisper", url: "https://ffmpeg.org/ffmpeg-filters.html#whisper", locator: "whisper"}
+
+  - id: cap.analysis.filler_detection
+    category: analysis
+    name: Filler-word detection
+    description: "Flag 'um', 'uh' and similar disfluencies with timestamps in the transcript."
+    parameters:
+      - {name: lexicon, type: string, typical_range: "language-specific filler list"}
+    nle_names: {premiere: "Transcript filter > Filler words", capcut: "Filler words"}
+    renderer_owner: remotion
+    notes: "Derived from cap.analysis.transcription tokens (Whisper often omits fillers unless prompted)."
+    sources:
+      - {title: "Premiere — Text-Based Editing overview", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/edit-video-using-text-based-editing/overview-of-text-based-editing.html", locator: "Filler words"}
+
+  - id: cap.analysis.speaker_diarization
+    category: analysis
+    name: Speaker identification (diarization)
+    description: "Label which speaker says each word, for multi-person captions and camera switching."
+    parameters:
+      - {name: max_speakers, type: int, typical_range: "2–4"}
+    nle_names: {premiere: "Transcript speakers", resolve: "Speaker detection (transcription)"}
+    renderer_owner: unsupported
+    notes: "Needs a diarization model (e.g. pyannote) outside the stack."
+    sources:
+      - {title: "Premiere — Text-Based Editing overview", url: "https://helpx.adobe.com/premiere/desktop/edit-projects/edit-video-using-text-based-editing/overview-of-text-based-editing.html", locator: "Speakers"}
+
+  - id: cap.analysis.beat_detection
+    category: analysis
+    name: Beat / bar detection
+    description: "Find beats, downbeats and song sections in music to sync cuts and effects."
+    parameters:
+      - {name: output, type: enum, values: [beats, downbeats, sections]}
+      - {name: bpm_range, type: string, typical_range: "70–180"}
+    nle_names: {resolve: "Detect Music Beats", final_cut: "Beat Detection"}
+    renderer_owner: unsupported
+    notes: "ffmpeg has no beat tracker; needs an external analyser (e.g. librosa, aubio, madmom)."
+    sources:
+      - {title: "Final Cut Pro release notes", url: "https://support.apple.com/en-us/102825", locator: "12.0 — Beat Detection"}
+      - {title: "DaVinci Resolve 20 New Features Guide", url: "https://documents.blackmagicdesign.com/SupportNotes/DaVinci_Resolve_20_New_Features_Guide.pdf", locator: "Detect music beats"}
+
+  - id: cap.analysis.subject_tracking
+    category: analysis
+    name: Face / subject tracking for reframing
+    description: "Detect and follow faces or the salient subject over time to produce a crop path for vertical reframing."
+    parameters:
+      - {name: target, type: enum, values: [largest_face, active_speaker, salient_object]}
+      - {name: sample_rate, type: float, typical_range: "5–10 fps"}
+    nle_names: {premiere: "Auto Reframe analysis", resolve: "Smart Reframe", capcut: "Auto reframe", final_cut: "Smart Conform"}
+    renderer_owner: unsupported
+    notes: "Needs face/saliency detection (MediaPipe/OpenCV) outside the stack; its output feeds cap.transform.auto_reframe (ffmpeg)."
+    sources:
+      - {title: "Premiere Pro — Auto Reframe", url: "https://helpx.adobe.com/premiere-pro/using/auto-reframe.html", locator: "Analysis"}
+      - {title: "Final Cut Pro User Guide — How does object tracking work", url: "https://support.apple.com/guide/final-cut-pro/vere9b794f29/mac", locator: "Machine-learning analysis"}
+
+  - id: cap.analysis.crop_detection
+    category: analysis
+    name: Letterbox / crop detection
+    description: "Detect baked-in black bars in a source so they can be cropped before reframing."
+    parameters:
+      - {name: limit, type: float, typical_range: "0.08–0.12", unit: normalized}
+    nle_names: {}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: cropdetect."
+    sources:
+      - {title: "FFmpeg Filters — cropdetect", url: "https://ffmpeg.org/ffmpeg-filters.html#cropdetect", locator: "cropdetect"}
+
+  - id: cap.analysis.scopes
+    category: analysis
+    name: Video scopes / signal stats
+    description: "Measure luminance, saturation and colour balance (waveform, vectorscope, histogram) to guide correction objectively."
+    parameters:
+      - {name: scope, type: enum, values: [waveform, vectorscope, histogram, parade, stats]}
+    nle_names: {premiere: "Lumetri Scopes", resolve: "Scopes", after_effects: "Lumetri Scopes", final_cut: "Video Scopes"}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: signalstats (numeric, ideal for Claude), waveform, vectorscope, histogram."
+    sources:
+      - {title: "Premiere — Color correction workflow", url: "https://helpx.adobe.com/premiere/desktop/correct-color/color-correction-fundamentals/color-correction-workflow.html", locator: "Scopes"}
+      - {title: "FFmpeg Filters — signalstats", url: "https://ffmpeg.org/ffmpeg-filters.html#signalstats", locator: "signalstats"}
+
+  - id: cap.analysis.highlight_detection
+    category: analysis
+    name: Highlight / long-to-short clip finding
+    description: "Pick the most engaging segments of a long video to cut into shorts."
+    parameters:
+      - {name: target_length, type: float, typical_range: "15–60", unit: s}
+      - {name: clips, type: int, typical_range: "3–10"}
+    nle_names: {capcut: "Long video to shorts"}
+    renderer_owner: unsupported
+    notes: "Not a renderer function: done by the Claude planner over transcript + analysis signals; no ffmpeg/Remotion owner."
+    sources:
+      - {title: "CapCut — Long video to shorts", url: "https://www.capcut.com/tools/long-video-to-shorts", locator: "feature page"}
+
+  - id: cap.analysis.visual_search
+    category: analysis
+    name: Visual content search / shot tagging
+    description: "Find shots by what they show (objects, actions, shot type) to choose b-roll."
+    parameters:
+      - {name: query, type: string, typical_range: "natural language"}
+    nle_names: {premiere: "Media Intelligence / Search panel"}
+    renderer_owner: unsupported
+    notes: "Needs a vision model (CLIP-class or Claude vision on sampled frames) outside the renderers."
+    sources:
+      - {title: "Premiere — Search media using AI (media intelligence)", url: "https://helpx.adobe.com/premiere-pro/using/media-intelligence-and-search-panel.html", locator: "Visual search"}
+
+  - id: cap.analysis.photosensitivity
+    category: analysis
+    name: Flash / photosensitivity check
+    description: "Detect rapid flashing that could trigger photosensitive viewers, and optionally damp it."
+    parameters:
+      - {name: frames, type: int, typical_range: "30"}
+      - {name: threshold, type: float, typical_range: "1", unit: relative}
+    nle_names: {}
+    renderer_owner: ffmpeg
+    notes: "ffmpeg: photosensitivity filter. Relevant when stacking flash cuts and strobe effects."
+    sources:
+      - {title: "FFmpeg Filters — photosensitivity", url: "https://ffmpeg.org/ffmpeg-filters.html#photosensitivity", locator: "photosensitivity"}
