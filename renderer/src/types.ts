@@ -2,7 +2,8 @@
 
 export type CaptionWord = { i: number; text: string; start_f: number; end_f: number; emph: boolean };
 export type CaptionPage = { start_f: number; end_f: number; words: CaptionWord[] };
-export type CaptionTrack = { family: string; tokens: Record<string, string>; script: string; pages: CaptionPage[] };
+// timing "phrase": word times are unreliable (e.g. smeared Hinglish ASR) — show pages without per-word highlight
+export type CaptionTrack = { family: string; tokens: Record<string, string>; script: string; timing?: string; pages: CaptionPage[] };
 export type Title = { id: string; text: string; start_f: number; end_f: number; role: string };
 export type Flash = { id: string; at_f: number; frames: number };
 export type Box = { x: number; y: number; w: number; h: number }; // normalised to the output frame

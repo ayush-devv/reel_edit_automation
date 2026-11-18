@@ -86,6 +86,45 @@ def _source_range(item_words: list[Word], clip_words: list[Word], clip: ClipInfo
     return start, end
 
 
+UNRELIABLE_SHARE = 0.15  # above this share of suspect/zero-length kept words, captions fall back to phrases
+
+
+def caption_text(text: str, script: str) -> str:
+    """Caption script (brief): latin → Devanagari words romanised; devanagari/mixed → as transcribed."""
+    from reel import script as sc
+
+    return sc.deva_to_roman(text) if script == "latin" and sc.script_of(text) == "devanagari" else text
+
+
+def unreliable_timing(words: list[Word]) -> bool:
+    """Word-by-word highlighting needs trustworthy word times; Hinglish ASR sometimes smears them."""
+    if not words:
+        return False
+    bad = sum(1 for w in words if w.suspect or w.end_us - w.start_us <= 20_000)
+    return bad / len(words) > UNRELIABLE_SHARE
+
+
+def proof_list(tl: Timeline, story: StoryPlan, words: WordTable) -> list[dict]:
+    """Kept words the ASR was unsure of, with output timecodes, for the owner's ~30 s check (ADR-0021).
+    Uses the same word → output-frame mapping as the compiler."""
+    fps = tb.parse_rate(tl.fps)
+    by = words.by_index()
+    clips = {c.src.item: c for c in tl.video if c.id.startswith("v_")}
+    out = []
+    for it in story.items:
+        c = clips[it.id]
+        in_f = tb.us_to_frame(c.src_in_us, fps)
+        for i in range(it.word_start, it.word_end + 1):
+            w = by[i]
+            if w.filler or not (w.low_conf or w.vocab_suspect or w.suspect):
+                continue
+            f = c.at_f + max(0, min(round((tb.us_to_frame(w.start_us, fps, mode="floor") - in_f) / c.speed), c.dur_f))
+            t = float(Fraction(f) / fps)
+            why = ", ".join(r for r, flag in (("unconfirmed name", w.vocab_suspect), ("low confidence", w.low_conf), ("timing", w.suspect)) if flag)
+            out.append({"i": w.i, "text": w.text, "suggestion": w.vocab_suggestion, "frame": f, "at": f"{int(t // 60)}:{t % 60:05.2f}", "why": why})
+    return out
+
+
 def music_offset_us(meta: dict, cut_us: int, total_us: int) -> int:
     """Where to start the track so a beat (a downbeat if known) lands on the first cut, keeping
     enough track left to cover the reel when possible."""
@@ -207,12 +246,16 @@ def compile_timeline(
     editor_tokens = {tok.key: tok.value for tok in finish.captions.tokens} if family == finish.captions.family else {}
     tokens = {**(fam.get("tokens") or {}), **editor_tokens, **(brand_tokens or {})}
     emph = set(finish.captions.emphasis_words)
+    cap_script = finish.captions.script
+    kept = [by[i] for it in story.items for i in range(it.word_start, it.word_end + 1) if not by[i].filler]
+    timing = "phrase" if unreliable_timing(kept) else "word"
     pages: list[CaptionPage] = []
     for it in story.items:
         ws = [by[i] for i in range(it.word_start, it.word_end + 1) if not by[i].filler]
         for k in range(0, len(ws), max_words):
             group = ws[k:k + max_words]
-            cw = [CaptionWord(i=w.i, text=w.text, start_f=word_out_frame(w, it.id), end_f=word_out_frame(w, it.id, end=True), emph=w.i in emph)
+            cw = [CaptionWord(i=w.i, text=caption_text(w.text, cap_script), start_f=word_out_frame(w, it.id),
+                              end_f=word_out_frame(w, it.id, end=True), emph=w.i in emph)
                   for w in group]
             start_f = cw[0].start_f
             end_f = max(cw[-1].end_f, start_f + tb.us_to_frame(MIN_CAPTION_US, fps, mode="ceil"))
@@ -220,7 +263,7 @@ def compile_timeline(
     for a, b in zip(pages, pages[1:]):  # no overlapping pages
         if a.end_f > b.start_f:
             a.end_f = b.start_f
-    captions = CaptionTrack(family=family, tokens=tokens, script=finish.captions.script, pages=pages)
+    captions = CaptionTrack(family=family, tokens=tokens, script=cap_script, timing=timing, pages=pages)
 
     # ---- SFX, peak-aligned
     for c in finish.sfx:

@@ -74,7 +74,9 @@ const Captions: React.FC<{ track: CaptionTrack; p: OverlayProps }> = ({ track, p
   if (!page) return null;
   const span = spanAt(p.faces, page.start_f);
   const face = span?.box ?? null;
-  const t = track.tokens;
+  const phrase = track.timing === "phrase";
+  // phrase fallback: no per-word highlight / pop / reveal — the page fades in as a unit
+  const t = phrase ? { ...track.tokens, highlight: "none", anim: "fade" } : track.tokens;
   const sentence = t.case === "sentence";
   const words = displayWords(page.words, sentence);
   const heavy = num(t.weight, 700) >= 800;

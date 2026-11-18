@@ -14,7 +14,7 @@ from pathlib import Path
 
 from reel import brief as brief_mod
 from reel import claude_call, decide, mix, overlay, project, render
-from reel.compile import compile_timeline
+from reel.compile import compile_timeline, proof_list
 from reel.runner import Stage, StageContext
 from reel.schemas.plan import FinishPlan, StoryPlan
 from reel.schemas.timeline import FFMPEG_FIELDS, REMOTION_FIELDS, Timeline, part
@@ -119,10 +119,13 @@ def _compile(ctx: StageContext) -> dict:
     tl = compile_timeline(story, fin, inp.words, inp.clips, inp.fps, inp.idx, edges=inp.edges, brand_family=family, brand_tokens=tokens,
                           brand_look=inp.brand.look if inp.brand else None)
     atomic_write_json(ctx.ws.path("timeline", "timeline.json"), tl.model_dump(mode="json"))
-    return {"frames": tl.duration_f, "fps": tl.fps, "clips": len(tl.video), "caption_pages": len(tl.captions.pages if tl.captions else [])}
+    proof = proof_list(tl, story, inp.words)
+    atomic_write_json(ctx.ws.path("qa", "proof_list.json"), proof)
+    return {"proof_words": len(proof), "caption_timing": tl.captions.timing if tl.captions else None, "frames": tl.duration_f, "fps": tl.fps, "clips": len(tl.video), "caption_pages": len(tl.captions.pages if tl.captions else [])}
 
 
-COMPILE = Stage(name="compile", input_hash=_compile_hash, outputs=lambda ctx: [ctx.ws.path("timeline", "timeline.json")], run=_compile)
+COMPILE = Stage(name="compile", input_hash=_compile_hash,
+                outputs=lambda ctx: [ctx.ws.path("timeline", "timeline.json"), ctx.ws.path("qa", "proof_list.json")], run=_compile)
 
 
 # ------------------------------------------------------------------ render (base), overlay, composite

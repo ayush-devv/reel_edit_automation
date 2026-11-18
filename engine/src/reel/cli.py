@@ -71,6 +71,22 @@ def _cmd_library(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_bakeoff(args: argparse.Namespace) -> int:
+    import time
+
+    from reel import bakeoff
+
+    clips = bakeoff.load_dataset(Path(args.samples).resolve())
+    if not clips:
+        print(f"no clips in {args.samples}: add <name>/{{clip.mp4, transcript.txt[, words.tsv]}}")
+        return 2
+    out = Path(args.out).resolve() / time.strftime("%Y%m%d-%H%M%S")
+    summary = bakeoff.run(bakeoff.engines(args.engines), clips, out, language=args.language)
+    print((out / "results.md").read_text())
+    print(f"details: {out}")
+    return 0
+
+
 def _cmd_revise(args: argparse.Namespace) -> int:
     """Chat revision: resume the Editor's finish session, apply story ops + new finish plan, re-render."""
     from reel import decide
@@ -247,6 +263,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--license", required=True, help="licence summary stored with every file")
     p.add_argument("--replace", action="store_true", help="drop previously indexed files from the same source first")
     p.set_defaults(func=_cmd_library)
+
+    p = sub.add_parser("bakeoff", help="Hinglish ASR bake-off on samples/hinglish (ADR-0007)")
+    p.add_argument("--samples", default="samples/hinglish")
+    p.add_argument("--out", default="analysis/bakeoff")
+    p.add_argument("--engines", nargs="*", help="subset of engines (default: all registered)")
+    p.add_argument("--language", default="hi", help="language hint passed to engines that take one")
+    p.set_defaults(func=_cmd_bakeoff)
 
     p = sub.add_parser("revise", help="chat revision of an edited project, then re-render")
     p.add_argument("--project", required=True)

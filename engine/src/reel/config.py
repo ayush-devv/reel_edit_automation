@@ -77,3 +77,8 @@ def ffprobe_path() -> Path:
     if system:
         return Path(system)
     raise ToolNotFound("ffprobe not found.")
+
+
+# ASR engine per language (ADR-0007). Hindi/Hinglish = bake-off winner; until the owner's clips
+# have been scored this stays on Whisper large-v3 (`reel bakeoff`, docs/plan/step8-hinglish.md).
+ASR_ENGINES = {"en": "whisper-turbo", "hi": "whisper-large-v3", "hinglish": "whisper-large-v3"}

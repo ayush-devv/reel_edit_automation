@@ -21,6 +21,13 @@ perception = [
     "silero-vad>=6.2.3",
     "soundfile>=0.14.0",
 ]
+bakeoff = [
+    "cactus-compute==4.2.5",
+    "onnx-asr>=0.12",
+    "transformers>=4.57",
+    "torch>=2.8",
+    "huggingface-hub>=0.35",
+]
 
 [project.scripts]
 reel = "reel.cli:main"

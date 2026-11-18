@@ -110,6 +110,7 @@ class CaptionTrack(_Strict):
     family: str = owned("remotion")
     tokens: dict[str, str] = owned("remotion", default_factory=dict)
     script: str = owned("remotion", default="latin")
+    timing: str = owned("remotion", default="word")  # word = word-by-word highlight; phrase = page-level (fallback)
     pages: list[CaptionPage] = owned("remotion", default_factory=list)
 
 

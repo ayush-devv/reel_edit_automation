@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 from reel import brief as brief_mod
+from reel import config
 from reel.perception import asr, prosody, segments, vad, visual
 from reel.perception.audio import extract_wav, read_pcm
 from reel.runner import Stage, StageContext
@@ -40,7 +41,7 @@ def _input_hash(ctx: StageContext) -> str:
     return hash_inputs({
         "mezz": file_fingerprint(report) if report.exists() else None,
         "language": o.get("language"), "brief": _content(o.get("brief")), "brand": _content(o.get("brand")),
-        "asr": o.get("asr_repo"), "visual": not o.get("skip_visual"), "v": VERSION,
+        "asr": o.get("asr_repo") or config.ASR_ENGINES, "visual": not o.get("skip_visual"), "v": VERSION,
     })
 
 
@@ -73,8 +74,15 @@ def _run(ctx: StageContext) -> dict:
     t0 = time.time()
     durations = {c["id"]: int(round(c["probe"]["duration_s"] * 1e6)) for c in m["clips"]}
     wavs = [(cid, extract_wav(path, ctx.ws.path("perception", "audio", f"{cid}.wav")), durations[cid]) for cid, path in clips]
-    backend = asr.MlxWhisper(ctx.options["asr_repo"]) if ctx.options.get("asr_repo") else asr.MlxWhisper()
-    language = ctx.options.get("language") or (brief.language if brief and brief.language in ("en", "hi") else None)
+    requested = ctx.options.get("language") or (brief.language if brief else None)
+    language = "hi" if requested in ("hi", "hinglish") else requested if requested == "en" else None
+    if ctx.options.get("asr_repo"):
+        backend = asr.MlxWhisper(ctx.options["asr_repo"])
+    else:
+        from reel import bakeoff
+
+        engine = config.ASR_ENGINES.get(requested or "en", config.ASR_ENGINES["en"])
+        backend = bakeoff.engines([engine])[engine]
     words = asr.transcribe_clips(wavs, backend, language=language, vocabulary=vocab)
     timings["asr"] = round(time.time() - t0, 2)
 
