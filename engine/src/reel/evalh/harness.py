@@ -23,6 +23,10 @@ SCOREBOARD = config.EVAL_DIR / "scoreboard.jsonl"
 GOLD_DIR = config.REPO_ROOT / "samples" / "gold"
 
 
+HOLDOUT_SIZE = 6
+HOLDOUT_MIN_HINGLISH = 2
+
+
 class HoldoutRefused(RuntimeError):
     pass
 
@@ -169,6 +173,12 @@ def run_eval(split: str = "tuning", *, allow_holdout: bool = False, work_root: P
     if not MANIFEST.exists():
         init_manifest()
     manifest = yaml.safe_load(MANIFEST.read_text()) or {}
+    if split == "holdout":  # ADR-0031: the release check is locked until the holdout is complete
+        hold = [r for r in manifest.get("reels", []) if r.get("split") == "holdout"]
+        hing = [r for r in hold if r.get("language") in ("hi", "hinglish")]
+        if len(hold) < HOLDOUT_SIZE or len(hing) < HOLDOUT_MIN_HINGLISH:
+            raise HoldoutRefused(f"Release check locked (ADR-0031): holdout has {len(hold)}/{HOLDOUT_SIZE} reels, "
+                                 f"{len(hing)}/{HOLDOUT_MIN_HINGLISH} Hinglish.")
     reels = [r for r in manifest.get("reels", []) if r.get("split") == split and (not reels_filter or r["id"] in reels_filter)]
     run_id = time.strftime("%Y%m%d-%H%M%S") + (f"-{label}" if label else "")
     work_root = work_root or (config.REPO_ROOT / "projects" / "_eval" / run_id)

@@ -1,2 +1,44 @@
 holdout_target: 6
-reels: []
+reels:
+- id: hubermanlab_C0RyMr9s3Hw
+  raw: samples/gold/hubermanlab_C0RyMr9s3Hw/raw
+  final: samples/gold/hubermanlab_C0RyMr9s3Hw/final.mp4
+  split: tuning
+  genre: genre.podcast_clip
+  language: en
+  channel: '@hubermanlab'
+- id: hubermanlab_xmEnK-WWlUY
+  raw: samples/gold/hubermanlab_xmEnK-WWlUY/raw
+  final: samples/gold/hubermanlab_xmEnK-WWlUY/final.mp4
+  split: tuning
+  genre: genre.podcast_clip
+  language: en
+  channel: '@hubermanlab'
+- id: thediaryofaceo_Aop2MN2s-7w
+  raw: samples/gold/thediaryofaceo_Aop2MN2s-7w/raw
+  final: samples/gold/thediaryofaceo_Aop2MN2s-7w/final.mp4
+  split: tuning
+  genre: genre.podcast_clip
+  language: en
+  channel: '@TheDiaryOfACEO'
+- id: thediaryofaceo_Cz-sbWva2fA
+  raw: samples/gold/thediaryofaceo_Cz-sbWva2fA/raw
+  final: samples/gold/thediaryofaceo_Cz-sbWva2fA/final.mp4
+  split: tuning
+  genre: genre.podcast_clip
+  language: en
+  channel: '@TheDiaryOfACEO'
+- id: thediaryofaceo_HAXzFdJ9U-0
+  raw: samples/gold/thediaryofaceo_HAXzFdJ9U-0/raw
+  final: samples/gold/thediaryofaceo_HAXzFdJ9U-0/final.mp4
+  split: tuning
+  genre: genre.podcast_clip
+  language: en
+  channel: '@TheDiaryOfACEO'
+- id: thediaryofaceo_KxKDBjyB_8c
+  raw: samples/gold/thediaryofaceo_KxKDBjyB_8c/raw
+  final: samples/gold/thediaryofaceo_KxKDBjyB_8c/final.mp4
+  split: tuning
+  genre: genre.podcast_clip
+  language: en
+  channel: '@TheDiaryOfACEO'

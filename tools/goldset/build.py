@@ -77,8 +77,20 @@ def captions(video_id: str, lang: str, cache: Path) -> list[tuple[str, float]] |
     return words_json3(hit[0]) if hit else None
 
 
+def dehallucinate(words: list[tuple[str, float]]) -> list[tuple[str, float]]:
+    """Whisper writes music as one token repeated ("दुप दुप दुप …"): keep at most 2 of any run."""
+    out = []
+    for w in words:
+        if len(out) >= 2 and out[-1][0] == w[0] and out[-2][0] == w[0]:
+            continue
+        out.append(w)
+    return out
+
+
 def match(short: list[tuple[str, float]], episode: list[tuple[str, float]]) -> tuple[float, float, float]:
-    """(share of the Short's words found, span start s, span end s) via shared word 4-grams; densest cluster."""
+    """(share of the Short's words found, span start s, span end s) via shared word 4-grams; densest cluster.
+    Hallucinated repeats are dropped and an n-gram must contain ≥ 3 distinct words to count."""
+    short, episode = dehallucinate(short), dehallucinate(episode)
     idx: dict[tuple, list[int]] = {}
     ew = [w for w, _ in episode]
     for k in range(len(ew) - NGRAM + 1):
@@ -87,6 +99,8 @@ def match(short: list[tuple[str, float]], episode: list[tuple[str, float]]) -> t
     hits = []  # episode positions of matched short words
     covered = set()
     for k in range(len(sw) - NGRAM + 1):
+        if len(set(sw[k:k + NGRAM])) < 3:
+            continue
         pos = idx.get(tuple(sw[k:k + NGRAM]))
         if pos:
             covered.update(range(k, k + NGRAM))

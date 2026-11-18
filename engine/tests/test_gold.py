@@ -152,3 +152,15 @@ def test_style_score_inside_and_outside_the_library():
     inside, parts = style.style_score({"cuts_per_min": 26, "caption_share": 0.88}, lib)
     outside, _ = style.style_score({"cuts_per_min": 4, "caption_share": 0.1}, lib)
     assert inside == 1.0 and outside < 0.3 and set(parts) == {"cuts_per_min", "caption_share"}
+
+
+def test_release_check_locked_until_holdout_complete(tmp_path, monkeypatch):
+    import yaml
+
+    from reel.evalh import harness
+
+    monkeypatch.setattr(harness, "MANIFEST", tmp_path / "manifest.yaml")
+    reels = [{"id": f"r{k}", "split": "holdout", "language": "en", "raw": "x", "final": "y"} for k in range(6)]
+    harness.MANIFEST.write_text(yaml.safe_dump({"reels": reels}))
+    with pytest.raises(harness.HoldoutRefused, match="0/2 Hinglish"):
+        harness.run_eval("holdout", allow_holdout=True)

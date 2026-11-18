@@ -41,20 +41,66 @@ def audio(video_id: str, cache: Path) -> Path:
     return out
 
 
-def words(video_id: str, lang: str, cache: Path) -> list[tuple[str, float]]:
-    j = cache / f"{video_id}.words.json"
+CHUNK_S = 600  # long episodes: 10-minute chunks (whole-file word timing collapses on 2-hour Hindi audio)
+LOCATE_REPO = "mlx-community/whisper-large-v3-turbo"  # the small model loops on Hindi and was slower
+MAX_EPISODE_S = 4500  # skip 2–3 h podcasts: too slow to transcribe while YouTube's caption endpoint throttles us
+
+
+def _norm(t: str) -> str:
+    return re.sub(r"[^\w\u0900-\u097F']", "", t.lower())
+
+
+def words(video_id: str, lang: str, cache: Path, *, long: bool = False, stop_when=None) -> list[tuple[str, float]]:
+    """Short clips: word-timed transcript. Long episodes: chunked, segment-timed (words spread evenly
+    over each segment) — only used to LOCATE the Short; pairs are verified afterwards."""
+    import subprocess
+
+    import mlx_whisper
+
+    from reel import config
+
+    j = cache / f"{video_id}.{'segS' if long else 'locS'}.json"
     if j.exists():
         return [tuple(x) for x in json.loads(j.read_text())]
     a = audio(video_id, cache)
-    raw, _ = ASR.transcribe(extract_wav(a, cache / f"{video_id}.wav"), lang, None)
-    out = []
-    for w in raw:
-        t = re.sub(r"[^\wऀ-ॿ']", "", w.text.lower())
-        if t:
-            out.append((t, w.start_s))
+    wav = extract_wav(a, cache / f"{video_id}.wav")
+    out: list[tuple[str, float]] = []
+    if not long:  # the Short, transcribed with the SAME small model as the episodes so their words line up
+        res = mlx_whisper.transcribe(str(wav), path_or_hf_repo=LOCATE_REPO, language=lang, word_timestamps=False,
+                                     condition_on_previous_text=False)
+        for seg in res.get("segments", []):
+            toks = [t for t in (_norm(x) for x in seg["text"].split()) if t]
+            span = max(1e-3, seg["end"] - seg["start"])
+            out += [(t, seg["start"] + span * n / max(1, len(toks))) for n, t in enumerate(toks)]
+    else:
+        import soundfile as sf
+
+        dur = sf.info(str(wav)).duration
+        for k in range(0, int(dur), CHUNK_S):
+            part = cache / f"{video_id}.part.wav"
+            subprocess.run([str(config.ffmpeg_path()), "-v", "error", "-y", "-ss", str(k), "-t", str(CHUNK_S), "-i", str(wav), str(part)], check=True)
+            res = mlx_whisper.transcribe(str(part), path_or_hf_repo=LOCATE_REPO, language=lang, word_timestamps=False,
+                                         condition_on_previous_text=False)
+            for seg in res.get("segments", []):
+                toks = [t for t in (_norm(x) for x in seg["text"].split()) if t]
+                span = max(1e-3, seg["end"] - seg["start"])
+                out += [(t, k + seg["start"] + span * n / max(1, len(toks))) for n, t in enumerate(toks)]
+            part.unlink(missing_ok=True)
+            if stop_when and stop_when(out):  # the Short is found: no need to transcribe the rest (not cached: partial)
+                wav.unlink(missing_ok=True)
+                return out
     j.write_text(json.dumps(out, ensure_ascii=False))
-    (cache / f"{video_id}.wav").unlink(missing_ok=True)
+    wav.unlink(missing_ok=True)
     return out
+
+
+def verify(d: Path, lang: str, cache: Path) -> float:
+    """Share of the final's words found in the downloaded raw clip (both transcribed with word timing)."""
+    fw = [(t, w.start_s) for w in ASR.transcribe(extract_wav(d / "final.mp4", cache / "v_f.wav"), lang, None)[0] if (t := _norm(w.text))]
+    rw = [(t, w.start_s) for w in ASR.transcribe(extract_wav(d / "raw" / "raw.mp4", cache / "v_r.wav"), lang, None)[0] if (t := _norm(w.text))]
+    for f in ("v_f.wav", "v_r.wav"):
+        (cache / f).unlink(missing_ok=True)
+    return b.match(fw, rw)[0]
 
 
 def main() -> None:
@@ -71,7 +117,7 @@ def main() -> None:
     cache.mkdir(parents=True, exist_ok=True)
     shorts = [meta(s["id"]) for s in b.list_tab(a.handle, "shorts", a.shorts)]
     eps = [meta(e["id"]) for e in b.list_tab(a.handle, "videos", a.episodes)]
-    eps = [e for e in eps if (e["duration"] or 0) > 600 and e["date"]]
+    eps = [e for e in eps if 600 < (e["duration"] or 0) <= MAX_EPISODE_S and e["date"]]
     print(f"{chan}: {len(shorts)} shorts, {len(eps)} episodes > 10 min", flush=True)
     made = 0
     for sh in shorts:
@@ -87,7 +133,8 @@ def main() -> None:
             continue
         best = (0.0, None, 0.0, 0.0)
         for ep in cands:
-            share, s, e = b.match(sw, words(ep["id"], a.lang, cache))
+            done = lambda ew: b.match(sw, ew)[0] >= 0.75  # noqa: E731
+            share, s, e = b.match(sw, words(ep["id"], a.lang, cache, long=True, stop_when=done))
             if share > best[0]:
                 best = (share, ep, s, e)
         share, ep, s, e = best
@@ -111,8 +158,15 @@ def main() -> None:
             "episode_span_s": [round(lo, 1), round(hi, 1)], "matched_span_s": [round(s, 1), round(e, 1)], "match_share": round(share, 3),
             "matched_by": "local whisper transcripts", "channel": a.handle,
             "licence": "YouTube Standard License — internal evaluation only, not redistributed"}, indent=1))
+        v = verify(d, a.lang, cache)
+        if v < 0.6:  # the located window is wrong (e.g. timestamp drift): never keep an unverified pair
+            import shutil
+
+            shutil.move(str(d), str(b.GOLD.parent / "_rejected" / gid))
+            print(f"  ✗ rejected {gid}: only {v:.0%} of the final's words are in the raw window", flush=True)
+            continue
         made += 1
-        print(f"  → gold pair {gid}: raw {hi - lo:.0f}s, final {dur:.0f}s", flush=True)
+        print(f"  → gold pair {gid}: raw {hi - lo:.0f}s, final {dur:.0f}s, verified {v:.0%}", flush=True)
     print(f"{chan}: {made} pair(s)", flush=True)
 
 

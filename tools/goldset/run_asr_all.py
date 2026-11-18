@@ -8,6 +8,9 @@ ROOT = Path(__file__).resolve().parents[2]
 JOBS = [
     ("@BeerBiceps", "hi", ["--shorts", "10", "--episodes", "12", "--max-pairs", "3"]),
     ("@RajShamani", "hi", ["--shorts", "10", "--episodes", "12", "--max-pairs", "3"]),
+    ("@warikoo", "hi", ["--shorts", "12", "--episodes", "15", "--max-pairs", "3", "--genre", "genre.talking_head"]),
+    ("@dhruvrathee", "hi", ["--shorts", "15", "--episodes", "15", "--max-pairs", "3", "--genre", "genre.talking_head"]),
+    ("@AbhiandNiyu", "hi", ["--shorts", "15", "--episodes", "15", "--max-pairs", "3", "--genre", "genre.talking_head"]),
     ("@aliabdaal", "en", ["--shorts", "8", "--episodes", "12", "--max-pairs", "2", "--genre", "genre.talking_head"]),
     ("@hubermanlab", "en", ["--shorts", "10", "--episodes", "10", "--max-pairs", "2"]),
 ]
@@ -17,5 +20,5 @@ for handle, lang, extra in JOBS:
         continue
     p = subprocess.run([str(ROOT / "engine/.venv/bin/python"), str(ROOT / "tools/goldset/build_asr.py"), handle, lang, *extra],
                        cwd=ROOT, env=env, capture_output=True, text=True)
-    keep = [l for l in (p.stdout + p.stderr).splitlines() if any(k in l for k in ("episodes >", "short ", "gold pair", "pair(s)", "Error", "ERROR"))]
+    keep = [l for l in (p.stdout + p.stderr).splitlines() if any(k in l for k in ("episodes >", "short ", "gold pair", "rejected", "pair(s)", "Error", "ERROR"))]
     print("\n".join(keep[-30:]), flush=True)

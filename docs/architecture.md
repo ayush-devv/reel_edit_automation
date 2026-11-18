@@ -221,6 +221,10 @@ brands/<client>.json         brand kit; briefs/<project>.json structured brief
 | [0028](adr/0028-external-expert-and-audience-evaluation.md) | Quality judged by a hired pro editor + audience data | Accepted |
 | [0029](adr/0029-eval-harness-and-self-improvement-loop.md) | Eval harness + gated self-improvement loop (knowledge/prompts only; holdout never used) | Accepted |
 | [0030](adr/0030-harness-rules-score-and-acceptance.md) | Decision-call rules, primary score, change-acceptance rule; no `--bare` (plan login) | Accepted |
+| [0031](adr/0031-web-sourced-gold-set-and-hybrid-holdout.md) | Gold set from the web (official Shorts vs episode source, verified); 6 English pairs all tune; holdout filled later (web English + editor-made Hinglish); release locked until 6 incl. ≥ 2 Hinglish | Accepted |
+| [0032](adr/0032-hinglish-asr-answer-key.md) | Hinglish ASR answer key: MUCS 2021 now (in-domain discount), creator human subtitles later (overrides) | Accepted |
+| [0033](adr/0033-calibration-known-good-known-bad-plus-pro-labels.md) | Calibration: pro finals = known-good, injected defects = known-bad (now); pro-editor labels for κ at release; owner labels optional | Accepted |
+| [0034](adr/0034-release-judgement-two-independent-editors.md) | Release judged by an independent pro editor, separate from the gold-set editor; blind, standalone, ≥ 5/6 and no false sendable | Accepted |
 | [0014](adr/0014-gold-set-evaluation.md) | Gold-set evaluation is the quality instrument | Accepted |
 | [0015](adr/0015-ingest-mezzanine-canonical-clock.md) | S0 mezzanine, one canonical clock | Accepted |
 | [0016](adr/0016-selects-stage-two-pass-plan.md) | Selects stage, two-pass plan, patch ops, quote check, playbook split | Accepted |
@@ -276,7 +280,7 @@ Built in one go (owner decision, 2026-11-18): one release, **full scope kept** (
 10. Full-scope extras: client b-roll pool + stock APIs (live), reference-style imitation, palette-adaptive captions, client-note importer + review copies, text-behind-subject matte (SAM 2.1 / MediaPipe), delivery variants, NLE package (OTIO + FCPXML + alpha MOV + stems + SRT). **CP6.**
 11. Tune on the tuning set → **release candidate → holdout acceptance run.**
 
-**Release acceptance test (ADR-0021)**
+**Release acceptance test (ADR-0021, amended by ADR-0031/0034: independent hired judge; holdout = 6 incl. ≥ 2 Hinglish, filled by web pairs + editor-made Hinglish gold)**
 - Owner judges each of the 6 held-out reels on its own: "sendable with no edits" — **pass = ≥ 5 of 6**.
 - Every reel the tool marked `sendable` is judged sendable (no false `sendable`).
 - Conformance corpus passes; captions in sync and word-accurate (English + Hinglish); headless run with 0 permission prompts.
