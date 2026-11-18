@@ -90,6 +90,7 @@ QA_GATES = {
     "frame_count": "block", "loudness": "block", "proof_words": "block", "brief": "block",
     "dead_air": "warn", "frozen": "warn", "black": "warn", "caption_contrast": "warn", "caption_over_face": "warn",
     "safe_zone": "warn", "reading_speed": "warn", "face_cut": "warn",
+    "cut_pop": "warn", "cut_flash": "warn", "cut_in_word": "warn", "duration_match": "warn",
 }
 # The Reviewer can always force `hold`; it drives automatic fixes only once calibrated (ADR-0021 §5).
 REVIEWER_TRUSTED = False

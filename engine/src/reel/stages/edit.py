@@ -350,14 +350,15 @@ COMPOSITE = Stage(name="composite", input_hash=_composite_hash,
 
 
 def _qa_hash(ctx: StageContext) -> str:
-    from reel import config, verdict
+    from reel import config, cuts, verdict
     from reel import qa as qa_mod
     from reel.schemas.review import Review
 
     return hash_inputs({"final": _fp(ctx, "render/final.mp4"), "proof": _fp(ctx, "qa/proof_confirmed.json"),
                         "brief": _opt_file(ctx.options.get("brief")), "persona": file_fingerprint(verdict.REVIEWER_PERSONA),
                         "schema": decide.schema(Review), "gates": config.QA_GATES, "trusted": config.REVIEWER_TRUSTED,
-                        "code": hash_inputs([file_fingerprint(Path(m.__file__)) for m in (verdict, qa_mod)]),
+                        "code": hash_inputs([file_fingerprint(Path(m.__file__)) for m in (verdict, qa_mod, cuts)]),
+                        "cut_inputs": [_fp(ctx, f) for f in ("timeline/timeline.json", "perception/words.json", "perception/edges.json")],
                         "skip_review": bool(ctx.options.get("skip_review")), **_model_key(ctx)})
 
 
@@ -367,7 +368,8 @@ def _qa(ctx: StageContext) -> dict:
     return verdict.run(ctx.ws, ctx.options, _caller(ctx))
 
 
-QA = Stage(name="qa", input_hash=_qa_hash, outputs=lambda ctx: [ctx.ws.path("qa", "verdict.json"), ctx.ws.path("qa", "verdict.md")], run=_qa)
+QA = Stage(name="qa", input_hash=_qa_hash, outputs=lambda ctx: [ctx.ws.path("qa", "verdict.json"), ctx.ws.path("qa", "verdict.md"),
+                                                                ctx.ws.path("qa", "cuts.json")], run=_qa)
 
 # ------------------------------------------------------------------ NLE package (every run, ADR-0018)
 
