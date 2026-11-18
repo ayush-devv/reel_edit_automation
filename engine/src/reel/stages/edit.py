@@ -1,4 +1,4 @@
-"""Edit stages (build step 5): story pass → finish pass → compile → base render.
+"""Edit stages: story pass → finish pass → compile → base render → overlay → composite.
 
 Decision-stage input hashes cover everything that changes Claude's answer (tables, brief,
 brand, persona, knowledge, libraries, schema, model, effort) so a re-run never spends on
@@ -12,15 +12,16 @@ import json
 import shutil
 from pathlib import Path
 
-from reel import claude_call, decide, project, render
+from reel import brief as brief_mod
+from reel import claude_call, decide, overlay, project, render
 from reel.compile import compile_timeline
 from reel.runner import Stage, StageContext
 from reel.schemas.plan import FinishPlan, StoryPlan
-from reel.schemas.timeline import Timeline
+from reel.schemas.timeline import FFMPEG_FIELDS, REMOTION_FIELDS, Timeline, part
 from reel.validate import errors, validate_finish, validate_story
 from reel.workspace import atomic_write_json, file_fingerprint, hash_inputs
 
-VERSION = 1
+VERSION = 2
 TABLE_FILES = ("tables/script.md", "tables/segments.json", "tables/takes.json", "tables/words.tsv", "tables/summary.md",
                "tables/sheets.json", "perception/words.json", "perception/edges.json")
 
@@ -106,14 +107,16 @@ FINISH = Stage(name="finish", input_hash=_finish_hash, outputs=lambda ctx: [ctx.
 
 def _compile_hash(ctx: StageContext) -> str:
     return hash_inputs({f: _fp(ctx, f) for f in ("plan/story.json", "plan/finish.json", "perception/words.json",
-                                                 "perception/edges.json", "source/manifest.json")} | {"assets": _assets_fp(), "v": VERSION})
+                                                 "perception/edges.json", "source/manifest.json")}
+                       | {"assets": _assets_fp(), "brand": _opt_file(ctx.options.get("brand")), "v": VERSION})
 
 
 def _compile(ctx: StageContext) -> dict:
     inp = _inputs(ctx)
     story = project.load_json_model(StoryPlan, ctx.ws.path("plan", "story.json"))
     fin = project.load_json_model(FinishPlan, ctx.ws.path("plan", "finish.json"))
-    tl = compile_timeline(story, fin, inp.words, inp.clips, inp.fps, inp.idx, edges=inp.edges)
+    family, tokens = brief_mod.brand_caption_overrides(inp.brand)
+    tl = compile_timeline(story, fin, inp.words, inp.clips, inp.fps, inp.idx, edges=inp.edges, brand_family=family, brand_tokens=tokens)
     atomic_write_json(ctx.ws.path("timeline", "timeline.json"), tl.model_dump(mode="json"))
     return {"frames": tl.duration_f, "fps": tl.fps, "clips": len(tl.video), "caption_pages": len(tl.captions.pages if tl.captions else [])}
 
@@ -121,28 +124,66 @@ def _compile(ctx: StageContext) -> dict:
 COMPILE = Stage(name="compile", input_hash=_compile_hash, outputs=lambda ctx: [ctx.ws.path("timeline", "timeline.json")], run=_compile)
 
 
-# ------------------------------------------------------------------ render
+# ------------------------------------------------------------------ render (base), overlay, composite
+
+
+def _timeline(ctx: StageContext) -> Timeline:
+    return Timeline.model_validate_json(ctx.ws.path("timeline", "timeline.json").read_text())
+
+
+def _read_json(ctx: StageContext, *parts: str) -> dict | None:
+    p = ctx.ws.path(*parts)
+    return json.loads(p.read_text()) if p.exists() else None
+
+
+def _faces(ctx: StageContext) -> dict | None:
+    return _read_json(ctx, "perception", "faces.json")
+
+
+def _mezz_fps(ctx: StageContext) -> list:
+    manifest = json.loads(ctx.ws.path("source", "manifest.json").read_text())
+    return [_fp(ctx, f"mezz/{c['id']}.mov") for c in manifest["clips"]]
 
 
 def _render_hash(ctx: StageContext) -> str:
-    manifest = json.loads(ctx.ws.path("source", "manifest.json").read_text())
-    return hash_inputs({"timeline": _fp(ctx, "timeline/timeline.json"), "faces": _fp(ctx, "perception/faces.json"),
-                        "mezz": [_fp(ctx, f"mezz/{c['id']}.mov") for c in manifest["clips"]], "v": VERSION, "crf": render.CRF})
+    # only the ffmpeg-owned slice: a caption-only change never re-renders the base
+    return hash_inputs({"timeline": part(_timeline(ctx), FFMPEG_FIELDS), "faces": _fp(ctx, "perception/faces.json"),
+                        "mezz": _mezz_fps(ctx), "v": VERSION, "crf": render.CRF})
 
 
-def _render(ctx: StageContext) -> dict:
-    tl = Timeline.model_validate_json(ctx.ws.path("timeline", "timeline.json").read_text())
-    faces_p = ctx.ws.path("perception", "faces.json")
-    faces = json.loads(faces_p.read_text()) if faces_p.exists() else None
-    out = ctx.ws.path("render", "base.mp4")
-    meta = render.render_base(tl, ctx.ws.root, out, faces=faces)
+RENDER = Stage(name="render", input_hash=_render_hash, outputs=lambda ctx: [ctx.ws.path("render", "base.mov")],
+               run=lambda ctx: render.render_base(_timeline(ctx), ctx.ws.root, ctx.ws.path("render", "base.mov"), faces=_faces(ctx)))
+
+
+def _overlay_hash(ctx: StageContext) -> str:
+    return hash_inputs({"timeline": part(_timeline(ctx), REMOTION_FIELDS), "faces": _fp(ctx, "perception/faces.json"),
+                        "ocr": _fp(ctx, "perception/ocr.json"),
+                        "renderer": overlay.renderer_fingerprint(), "v": VERSION})
+
+
+def _overlay(ctx: StageContext) -> dict:
+    tl = _timeline(ctx)
+    meta = overlay.render_overlay(overlay.build_props(tl, ctx.ws.root, _faces(ctx), _read_json(ctx, "perception", "ocr.json")), ctx.ws.path("render", "overlay.mov"))
+    return meta | {"caption_family": tl.captions.family if tl.captions else None, "titles": len(tl.titles), "flashes": len(tl.flashes)}
+
+
+OVERLAY = Stage(name="overlay", input_hash=_overlay_hash, outputs=lambda ctx: [ctx.ws.path("render", "overlay.mov")], run=_overlay)
+
+
+def _composite_hash(ctx: StageContext) -> str:
+    return hash_inputs({"base": _fp(ctx, "render/base.mov"), "overlay": _fp(ctx, "render/overlay.mov"), "v": VERSION, "crf": render.CRF})
+
+
+def _composite(ctx: StageContext) -> dict:
+    out = ctx.ws.path("render", "final.mp4")
+    meta = overlay.composite(_timeline(ctx), ctx.ws.path("render", "base.mov"), ctx.ws.path("render", "overlay.mov"), out)
     export = ctx.ws.path("export", "reel.mp4")
     export.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(out, export)
-    return meta | {"captions": "not drawn yet (overlay renderer, build step 6)"}
+    return meta
 
 
-RENDER = Stage(name="render", input_hash=_render_hash,
-               outputs=lambda ctx: [ctx.ws.path("render", "base.mp4"), ctx.ws.path("export", "reel.mp4")], run=_render)
+COMPOSITE = Stage(name="composite", input_hash=_composite_hash,
+                  outputs=lambda ctx: [ctx.ws.path("render", "final.mp4"), ctx.ws.path("export", "reel.mp4")], run=_composite)
 
-STAGES = [STORY, FINISH, COMPILE, RENDER]
+STAGES = [STORY, FINISH, COMPILE, RENDER, OVERLAY, COMPOSITE]

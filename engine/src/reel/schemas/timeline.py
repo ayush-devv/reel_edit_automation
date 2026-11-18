@@ -111,6 +111,20 @@ class CaptionTrack(_Strict):
     pages: list[CaptionPage] = owned("remotion", default_factory=list)
 
 
+class TitleEvent(_Strict):
+    id: str
+    text: str = owned("remotion")
+    start_f: int = owned("remotion")
+    end_f: int = owned("remotion")
+    role: str = owned("remotion", default="hook")
+
+
+class FlashEvent(_Strict):
+    id: str
+    at_f: int = owned("remotion")  # output frame of the cut; the flash peaks here
+    frames: int = owned("remotion")
+
+
 class Timeline(_Strict):
     schema_version: int = 1
     fps: str  # "num/den"
@@ -123,6 +137,8 @@ class Timeline(_Strict):
     transitions: list[TransitionEvent] = Field(default_factory=list)
     ducking: list[Ducking] = Field(default_factory=list)
     captions: CaptionTrack | None = None
+    titles: list[TitleEvent] = Field(default_factory=list)
+    flashes: list[FlashEvent] = Field(default_factory=list)
     plan_ref: dict[str, str] = Field(default_factory=dict)  # file hashes of the plans compiled
 
 
@@ -134,7 +150,18 @@ def field_owners(model: type[BaseModel] = Timeline, prefix: str = "") -> dict[st
         if "owner" in extra:
             out[f"{prefix}{name}"] = extra["owner"]
         ann = f.annotation
-        for sub in (VideoClip, AudioClip, Ducking, TransitionEvent, CaptionTrack, CaptionPage, CaptionWord):
+        for sub in (VideoClip, AudioClip, Ducking, TransitionEvent, CaptionTrack, CaptionPage, CaptionWord, TitleEvent, FlashEvent):
             if ann is sub or (getattr(ann, "__args__", None) and sub in ann.__args__):
                 out.update(field_owners(sub, f"{prefix}{name}[]."))
     return out
+
+
+REMOTION_FIELDS = ("captions", "titles", "flashes")
+FFMPEG_FIELDS = ("assets", "video", "audio", "transitions", "ducking")
+
+
+def part(tl: Timeline, fields: tuple[str, ...]) -> dict:
+    """The slice of the timeline one renderer reads (for input hashes: a caption-only change
+    must not re-render the base)."""
+    d = tl.model_dump(mode="json")
+    return {k: d[k] for k in ("fps", "width", "height", "duration_f", *fields)}

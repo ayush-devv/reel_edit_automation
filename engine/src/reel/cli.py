@@ -70,7 +70,7 @@ def _cmd_revise(args: argparse.Namespace) -> int:
         state["stages"]["finish"] = {**state["stages"].get("finish", {}), "status": "done", "input_hash": edit.FINISH.input_hash(ctx),
                                      "meta": {"revision": res}}
         save_state(ws, state)
-    state = run_pipeline(ws, [edit.COMPILE, edit.RENDER], options=options)
+    state = run_pipeline(ws, [edit.COMPILE, edit.RENDER, edit.OVERLAY, edit.COMPOSITE], options=options)
     print(f"Editor: {res['reply']}  ({res['calls']} call(s), ~${res['cost_usd']})")
     _print_state(state, ws)
     return 0

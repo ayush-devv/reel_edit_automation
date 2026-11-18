@@ -138,7 +138,13 @@ class Broll(_Strict):
     reason: str
 
 
+class HookTitle(_Strict):
+    text: str  # on-screen title over the opening line; "" = none (≤ 42 chars, ≤ 7 words — validated)
+    reason: str
+
+
 class FinishPlan(_Strict):
+    hook_title: HookTitle
     punch_ins: list[PunchIn]
     speeds: list[Speed]
     transitions: list[Transition]

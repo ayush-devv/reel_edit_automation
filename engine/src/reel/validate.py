@@ -16,6 +16,8 @@ from reel.schemas.plan import FinishPlan, PatchOpKind, SfxAnchor, StoryPatch, St
 
 SCRIPTS = {"latin", "devanagari", "mixed"}
 BROLL_MODES = {"full", "pip"}
+TITLE_MAX_CHARS = 42
+TITLE_MAX_WORDS = 7
 
 
 @dataclass
@@ -147,6 +149,15 @@ def validate_finish(fin: FinishPlan, story: StoryPlan, words: WordTable, idx: In
         if not (it.word_start <= word <= it.word_end):
             issues.append(Issue("word_outside_item", path, f"Word {word} is outside item {item_id} ({it.word_start}–{it.word_end}).",
                                 f"Pick a word between {it.word_start} and {it.word_end}."))
+
+    title = fin.hook_title.text.strip()
+    if len(title) > TITLE_MAX_CHARS or len(title.split()) > TITLE_MAX_WORDS:
+        issues.append(Issue("title_too_long", "hook_title.text", f"Hook title '{title}' has {len(title)} chars / {len(title.split())} words.",
+                            f"Cut it to ≤ {TITLE_MAX_WORDS} words and ≤ {TITLE_MAX_CHARS} characters — a viewer reads it in under 2 s."))
+    unconfirmed = {norm(w.original_text or w.text) for w in words.words if w.vocab_suspect}
+    if title and any(norm(tok) in unconfirmed for tok in title.split()):
+        issues.append(Issue("title_unconfirmed_name", "hook_title.text", "The hook title uses a name the ASR could not confirm.",
+                            "Use the confirmed spelling from the brief, or leave the name out."))
 
     for n, p in enumerate(fin.punch_ins):
         path = f"punch_ins[{n}]"

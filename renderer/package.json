@@ -1,0 +1,16 @@
+{
+  "name": "reel-overlay-renderer",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {},
+  "dependencies": {
+    "@fontsource/inter": "5.2.8",
+    "@fontsource/plus-jakarta-sans": "5.2.8",
+    "@remotion/cli": "4.0.538",
+    "@types/react": "19.1.8",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "remotion": "4.0.538",
+    "typescript": "5.9.3"
+  }
+}

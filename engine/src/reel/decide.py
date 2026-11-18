@@ -32,7 +32,7 @@ STORY_EFFORT = "high"
 FINISH_EFFORT = "medium"
 
 # What the step-5 renderer can draw (render.unsupported rejects the rest). Grows in steps 6–7.
-RENDERABLE_TRANSITIONS = {"cut"}
+RENDERABLE_TRANSITIONS = {"cut", "flash"}
 
 Caller = Callable[..., claude_call.CallResult]
 
@@ -100,10 +100,11 @@ def _library(name: str, items: dict[str, dict], fields: tuple[str, ...]) -> list
 
 def finish_pack(inp: Inputs, story: StoryPlan) -> str:
     lines = ["# What the renderer can do in this build", "",
-             "- Transitions: `cut` only (leave `transitions` empty — every cut is a hard cut).",
+             "- Transitions: hard cut (default, nothing to add) or `flash` (a short white flash on the cut, 2–6 frames; use rarely, on a big beat change).",
+             "- Hook title: a short on-screen title over the opening line (≤ 7 words, ≤ 42 chars), or \"\" for none.",
              "- Punch-ins: yes (scale 1.0–2.0, instant or ramped).",
              "- Speed changes: none on speech; leave `speeds` empty.",
-             "- Captions: choose the family and emphasis now; they are drawn by the overlay renderer.", ""]
+             "- Captions: kinetic captions in the family you choose, with your emphasis words; a brand kit overrides family/tokens.", ""]
     if inp.brand:
         lines += ["# Brand kit (overrides your token choices)", "", json.dumps(inp.brand.model_dump(exclude_none=True), indent=1, ensure_ascii=False), ""]
     lines += ["# Caption families", ""]

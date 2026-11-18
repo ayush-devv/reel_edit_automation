@@ -67,3 +67,18 @@ def vocabulary(brief: Brief | None, brand: Brand | None, ocr_texts: list[str] | 
         # keep capitalised tokens from on-screen text (names, brands), skip long sentences
         terms += [tok.strip(".,!?:;") for tok in t.split() if tok[:1].isupper() and len(tok) > 2][:5]
     return terms
+
+
+def brand_caption_overrides(brand: Brand | None) -> tuple[str | None, dict[str, str]]:
+    """Brand kit → (locked caption family or None, caption tokens). Brand always wins (ADR-0017)."""
+    if not brand:
+        return None, {}
+    tokens: dict[str, str] = {}
+    if brand.colors.text:
+        tokens["base_color"] = brand.colors.text
+    if brand.colors.accent or brand.colors.primary:
+        tokens["emph_color"] = brand.colors.accent or brand.colors.primary
+    if brand.fonts.get("heading"):
+        tokens["font"] = brand.fonts["heading"]
+    tokens.update(brand.caption_tokens)
+    return brand.caption_family, tokens

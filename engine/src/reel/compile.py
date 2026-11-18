@@ -15,7 +15,7 @@ from fractions import Fraction
 from reel import timebase as tb
 from reel.assets import Indexes
 from reel.schemas.perception import Word, WordTable
-from reel.schemas.plan import CaptionPlan, Ease, FinishPlan, MusicPlan, SfxAnchor, StoryPlan
+from reel.schemas.plan import CaptionPlan, Ease, FinishPlan, HookTitle, MusicPlan, SfxAnchor, StoryPlan, TransitionType
 from reel.schemas.timeline import (
     Asset,
     AssetKind,
@@ -24,9 +24,11 @@ from reel.schemas.timeline import (
     CaptionTrack,
     CaptionWord,
     Ducking,
+    FlashEvent,
     Keyframe,
     Provenance,
     Timeline,
+    TitleEvent,
     TransitionEvent,
     VideoClip,
 )
@@ -34,6 +36,8 @@ from reel.schemas.timeline import (
 BREATH_PAD_US = 80_000  # breath around a kept range when only ASR edges are known
 HEARD_PAD_US = 100_000  # breath around heard (snapped) edges (ADR-0002)
 MIN_CAPTION_US = 350_000  # a caption page stays at least this long
+TITLE_MIN_US = 1_500_000  # hook title on screen at least this long …
+TITLE_MAX_US = 3_000_000  # … and at most this long (or to the end of the first item, if sooner past the minimum)
 
 
 @dataclass(frozen=True)
@@ -49,7 +53,7 @@ class CompileError(ValueError):
 
 def empty_finish(family: str = "bold_pop") -> FinishPlan:
     return FinishPlan(
-        punch_ins=[], speeds=[], transitions=[],
+        hook_title=HookTitle(text="", reason="default"), punch_ins=[], speeds=[], transitions=[],
         captions=CaptionPlan(family=family, tokens=[], emphasis_words=[], script="latin", reason="default"),
         sfx=[], music=MusicPlan(track="none", gain_db=-18, duck_db=12, reason="default"),
         broll=[], knowledge_used=[],
@@ -92,7 +96,10 @@ def compile_timeline(
     width: int = 1080,
     height: int = 1920,
     edges: dict[int, tuple[int, int]] | None = None,
+    brand_family: str | None = None,
+    brand_tokens: dict[str, str] | None = None,
 ) -> Timeline:
+    """Brand kit (family lock + tokens) overrides the Editor's caption choices (ADR-0017)."""
     finish = finish or empty_finish()
     by = words.by_index()
     assets: dict[str, Asset] = {c.id: Asset(id=c.id, kind=AssetKind.video, uri=c.uri, duration_us=c.duration_us) for c in clips.values()}
@@ -147,15 +154,28 @@ def compile_timeline(
             clip.scale.append(Keyframe(f=min(k + p.ramp_frames, clip.dur_f), v=p.scale, ease=p.ease))
 
     # ---- transitions at cuts
-    transitions = []
+    # ---- transitions at cuts: flashes are overlay events (Remotion), the rest need both shots (ffmpeg)
+    transitions, flashes = [], []
     for t in finish.transitions:
         at_f, dur_f, _ = item_seg[t.after_item]
-        transitions.append(TransitionEvent(id=t.id, at_f=at_f + dur_f, type=t.type, frames=t.frames))
+        if t.type == TransitionType.flash:
+            flashes.append(FlashEvent(id=t.id, at_f=at_f + dur_f, frames=t.frames))
+        else:
+            transitions.append(TransitionEvent(id=t.id, at_f=at_f + dur_f, type=t.type, frames=t.frames))
+
+    # ---- hook title over the opening line
+    titles = []
+    if finish.hook_title.text.strip() and story.items:
+        first_end = item_seg[story.items[0].id][1]
+        lo, hi = tb.us_to_frame(TITLE_MIN_US, fps, mode="ceil"), tb.us_to_frame(TITLE_MAX_US, fps)
+        titles.append(TitleEvent(id="hook_title", text=finish.hook_title.text.strip(), start_f=0, end_f=min(max(first_end, lo), hi, total)))
 
     # ---- captions on output frames
-    fam = idx.caption_families.get(finish.captions.family, {})
+    family = brand_family if brand_family in idx.caption_families else finish.captions.family
+    fam = idx.caption_families.get(family, {})
     max_words = int(fam.get("max_words", 3))
-    tokens = {**(fam.get("tokens") or {}), **{tok.key: tok.value for tok in finish.captions.tokens}}
+    editor_tokens = {tok.key: tok.value for tok in finish.captions.tokens} if family == finish.captions.family else {}
+    tokens = {**(fam.get("tokens") or {}), **editor_tokens, **(brand_tokens or {})}
     emph = set(finish.captions.emphasis_words)
     pages: list[CaptionPage] = []
     for it in story.items:
@@ -170,7 +190,7 @@ def compile_timeline(
     for a, b in zip(pages, pages[1:]):  # no overlapping pages
         if a.end_f > b.start_f:
             a.end_f = b.start_f
-    captions = CaptionTrack(family=finish.captions.family, tokens=tokens, script=finish.captions.script, pages=pages)
+    captions = CaptionTrack(family=family, tokens=tokens, script=finish.captions.script, pages=pages)
 
     # ---- SFX, peak-aligned
     for c in finish.sfx:
@@ -206,6 +226,7 @@ def compile_timeline(
     return Timeline(
         fps=f"{fps.numerator}/{fps.denominator}", width=width, height=height, duration_f=total,
         assets=assets, video=video, audio=audio, transitions=transitions, ducking=ducking, captions=captions,
+        titles=titles, flashes=flashes,
         plan_ref={"story": _digest(story), "finish": _digest(finish)},
     )
 

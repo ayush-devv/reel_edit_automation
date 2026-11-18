@@ -81,12 +81,29 @@ def _face_centre(faces: dict | None, clip_asset: str) -> tuple[float, float]:
     return box["x"] + box["w"] / 2, box["y"] + box["h"] / 2
 
 
-def _geometry(c: VideoClip, src_w: int, src_h: int, out_w: int, out_h: int, fps: Fraction, centre: tuple[float, float]) -> str:
+def cover_crop(src_w: int, src_h: int, out_w: int, out_h: int, centre: tuple[float, float]) -> tuple[int, int, int, int]:
+    """Scale to cover the output, crop around `centre` (normalised source coords): (sw, sh, x, y)."""
     s = max(out_w / src_w, out_h / src_h)
     sw, sh = max(out_w, round(src_w * s / 2) * 2), max(out_h, round(src_h * s / 2) * 2)
     cx, cy = centre
     x = min(max(round(cx * sw - out_w / 2), 0), sw - out_w)
     y = min(max(round(cy * sh - out_h / 2), 0), sh - out_h)
+    return sw, sh, x, y
+
+
+def face_box_out(faces: dict | None, asset: str, src_w: int, src_h: int, out_w: int, out_h: int) -> dict | None:
+    """Median face box in normalised OUTPUT coordinates (after the cover crop), for overlay layout."""
+    box = ((faces or {}).get(asset) or {}).get("median_box")
+    if not box:
+        return None
+    sw, sh, x, y = cover_crop(src_w, src_h, out_w, out_h, _face_centre(faces, asset))
+    return {"x": round((box["x"] * sw - x) / out_w, 4), "y": round((box["y"] * sh - y) / out_h, 4),
+            "w": round(box["w"] * sw / out_w, 4), "h": round(box["h"] * sh / out_h, 4)}
+
+
+def _geometry(c: VideoClip, src_w: int, src_h: int, out_w: int, out_h: int, fps: Fraction, centre: tuple[float, float]) -> str:
+    sw, sh, x, y = cover_crop(src_w, src_h, out_w, out_h, centre)
+    cx, cy = centre
     chain = f"scale={sw}:{sh}:flags=lanczos,crop={out_w}:{out_h}:{x}:{y},format=yuv420p"
     if c.scale and any(k.v != 1.0 for k in c.scale):
         # face position inside the cropped frame, so the punch-in keeps the face centred
@@ -95,6 +112,23 @@ def _geometry(c: VideoClip, src_w: int, src_h: int, out_w: int, out_h: int, fps:
         chain += (f",zoompan=z='{z}':d=1:s={out_w}x{out_h}:fps={fps.numerator}/{fps.denominator}"
                   f":x='clip({fx:.4f}*iw-iw/zoom/2,0,iw-iw/zoom)':y='clip({fy:.4f}*ih-ih/zoom/2,0,ih-ih/zoom)'")
     return chain
+
+
+def source_size(path: Path) -> tuple[int, int]:
+    st = tools.ffprobe_json(path, ["-select_streams", "v:0"])["streams"][0]
+    return int(st["width"]), int(st["height"])
+
+
+def encode_args(out: Path, *, crf: int = CRF) -> list[str]:
+    """`.mov` → ProRes 422 + PCM intermediate (no generation loss before the composite);
+    anything else → the delivery encode (H.264 High, yuv420p, bt709, AAC 48 kHz, faststart)."""
+    if out.suffix.lower() == ".mov":
+        return ["-c:v", "prores_ks", "-profile:v", "2", "-pix_fmt", "yuv422p10le", "-vendor", "apl0",
+                "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", "-color_range", "tv",
+                "-c:a", "pcm_s16le", "-ar", str(AUDIO_RATE), "-ac", "2", str(out)]
+    return ["-c:v", "libx264", "-preset", "medium", "-crf", str(crf), "-profile:v", "high", "-pix_fmt", "yuv420p",
+            "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", "-color_range", "tv",
+            "-c:a", "aac", "-b:a", "256k", "-ar", str(AUDIO_RATE), "-ac", "2", "-movflags", "+faststart", str(out)]
 
 
 def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = None, crf: int = CRF) -> list[str]:
@@ -120,8 +154,7 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
     for c in base:
         uri = root / tl.assets[c.asset].uri
         if c.asset not in sizes:
-            st = tools.ffprobe_json(uri, ["-select_streams", "v:0"])["streams"][0]
-            sizes[c.asset] = (int(st["width"]), int(st["height"]))
+            sizes[c.asset] = source_size(uri)
         in_f = tb.us_to_frame(c.src_in_us, fps)
         if in_f > 0:
             args += ["-ss", f"{float((Fraction(in_f) - Fraction(1, 2)) / fps):.6f}"]
@@ -163,11 +196,7 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
     graph.append("".join(concat_in) + f"concat=n={len(base)}:v=1:a=1[vout][aout]")
 
     args += ["-filter_complex", ";".join(graph), "-map", "[vout]", "-map", "[aout]",
-             "-r", f"{fps.numerator}/{fps.denominator}", "-fps_mode", "cfr",
-             "-c:v", "libx264", "-preset", "medium", "-crf", str(crf), "-profile:v", "high", "-pix_fmt", "yuv420p",
-             "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", "-color_range", "tv",
-             "-c:a", "aac", "-b:a", "256k", "-ar", str(AUDIO_RATE), "-ac", "2",
-             "-movflags", "+faststart", str(out)]
+             "-r", f"{fps.numerator}/{fps.denominator}", "-fps_mode", "cfr", *encode_args(out, crf=crf)]
     return args
 
 
