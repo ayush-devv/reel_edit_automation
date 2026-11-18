@@ -107,8 +107,9 @@ FINISH = Stage(name="finish", input_hash=_finish_hash, outputs=lambda ctx: [ctx.
 
 def _compile_hash(ctx: StageContext) -> str:
     return hash_inputs({f: _fp(ctx, f) for f in ("plan/story.json", "plan/finish.json", "perception/words.json",
-                                                 "perception/edges.json", "source/manifest.json")}
-                       | {"assets": _assets_fp(), "brand": _opt_file(ctx.options.get("brand")), "proof": _fp(ctx, "qa/proof_confirmed.json"), "v": VERSION})
+                                                 "perception/edges.json", "source/manifest.json", "perception/palette.json")}
+                       | {"assets": _assets_fp(), "brand": _opt_file(ctx.options.get("brand")), "proof": _fp(ctx, "qa/proof_confirmed.json"),
+                          "code": _code_fp("compile", "adapt", "script"), "v": VERSION})
 
 
 def _compile(ctx: StageContext) -> dict:
@@ -119,10 +120,15 @@ def _compile(ctx: StageContext) -> dict:
     fixes = {int(k): v["text"] for k, v in (_read_json(ctx, "qa", "proof_confirmed.json") or {}).items() if v.get("text")}
     tl = compile_timeline(story, fin, inp.words, inp.clips, inp.fps, inp.idx, edges=inp.edges, brand_family=family, brand_tokens=tokens,
                           brand_look=inp.brand.look if inp.brand else None, word_fixes=fixes)
+    from reel import adapt
+
+    pal = _read_json(ctx, "perception", "palette.json") or {}
+    palette = [c["hex"] for v in pal.values() for c in (v.get("colors") or [])]
+    tl, adapted = adapt.adapt(tl, ctx.ws.root, palette, locked=set(tokens))
     atomic_write_json(ctx.ws.path("timeline", "timeline.json"), tl.model_dump(mode="json"))
     proof = proof_list(tl, story, inp.words)
     atomic_write_json(ctx.ws.path("qa", "proof_list.json"), proof)
-    return {"proof_words": len(proof), "caption_timing": tl.captions.timing if tl.captions else None, "frames": tl.duration_f, "fps": tl.fps, "clips": len(tl.video), "caption_pages": len(tl.captions.pages if tl.captions else [])}
+    return {"adapted_tokens": adapted, "proof_words": len(proof), "caption_timing": tl.captions.timing if tl.captions else None, "frames": tl.duration_f, "fps": tl.fps, "clips": len(tl.video), "caption_pages": len(tl.captions.pages if tl.captions else [])}
 
 
 COMPILE = Stage(name="compile", input_hash=_compile_hash,
@@ -148,6 +154,13 @@ def _faces(ctx: StageContext) -> dict | None:
 def _mezz_fps(ctx: StageContext) -> list:
     manifest = json.loads(ctx.ws.path("source", "manifest.json").read_text())
     return [_fp(ctx, f"mezz/{c['id']}.mov") for c in manifest["clips"]]
+
+
+def _code_fp(*modules: str) -> str:
+    """Fingerprint of engine modules a stage's output depends on (code changes re-run the stage)."""
+    import importlib
+
+    return hash_inputs([file_fingerprint(Path(importlib.import_module(f"reel.{m}").__file__)) for m in modules])
 
 
 def _render_code_fp() -> str:
@@ -197,11 +210,14 @@ def _render(ctx: StageContext) -> dict:
     rt = room_tones(ctx)
     tl = _timeline(ctx)
     luts, measured = clip_luts(ctx, tl)
-    meta = render.render_base(tl, ctx.ws.root, ctx.ws.path("render", "base.mov"), faces=_faces(ctx), room_tone=rt, luts=luts)
+    meta = render.render_base(tl, ctx.ws.root, ctx.ws.path("render", "base.mov"), faces=_faces(ctx), room_tone=rt, luts=luts,
+                              stems_dir=ctx.ws.path("render", "stems"))
     return meta | {"grade": {"look": tl.grade.look, "strength": tl.grade.strength, "clips": measured}, "room_tone": {k: {"s": round(v[0] / 1e6, 2), "e": round(v[1] / 1e6, 2), "dbfs": v[2]} for k, v in rt.items()}}
 
 
-RENDER = Stage(name="render", input_hash=_render_hash, outputs=lambda ctx: [ctx.ws.path("render", "base.mov")], run=_render)
+RENDER = Stage(name="render", input_hash=_render_hash,
+               outputs=lambda ctx: [ctx.ws.path("render", "base.mov"), *(ctx.ws.path("render", "stems", f"{b}.wav") for b in ("dialogue", "music", "sfx"))],
+               run=_render)
 
 
 def _overlay_hash(ctx: StageContext) -> str:
@@ -258,4 +274,70 @@ def _qa(ctx: StageContext) -> dict:
 
 QA = Stage(name="qa", input_hash=_qa_hash, outputs=lambda ctx: [ctx.ws.path("qa", "verdict.json"), ctx.ws.path("qa", "verdict.md")], run=_qa)
 
-STAGES = [STORY, FINISH, COMPILE, RENDER, OVERLAY, COMPOSITE, QA]
+# ------------------------------------------------------------------ NLE package (every run, ADR-0018)
+
+
+def _package_hash(ctx: StageContext) -> str:
+    from reel import package
+
+    files = ["render/final.mp4", "render/overlay.mov", "timeline/timeline.json", "plan/story.json", "plan/finish.json", "qa/verdict.json",
+             *(f"render/stems/{b}.wav" for b in package.STEMS)]
+    return hash_inputs({f: _fp(ctx, f) for f in files} | {"code": file_fingerprint(Path(package.__file__)), "v": VERSION})
+
+
+def _package(ctx: StageContext) -> dict:
+    from reel import assets, package
+    from reel.runner import load_state
+
+    tl = _timeline(ctx)
+    story = project.load_json_model(StoryPlan, ctx.ws.path("plan", "story.json"))
+    fin = project.load_json_model(FinishPlan, ctx.ws.path("plan", "finish.json"))
+    comp = load_state(ctx.ws)["stages"].get("composite", {}).get("meta", {})
+    v = _read_json(ctx, "qa", "verdict.json") or {}
+    return package.build(ctx.ws, tl, story, fin, project.word_table(ctx.ws), assets.load(), lufs_in=comp.get("lufs_in"), verdict=v.get("status"))
+
+
+PACKAGE = Stage(name="package", input_hash=_package_hash,
+                outputs=lambda ctx: [ctx.ws.path("export", "package", f) for f in ("reel.mp4", "overlay.mov", "timeline.fcpxml", "timeline.otio",
+                                                                                     "captions.srt", "edit_list.md", "README.md")],
+                run=_package)
+
+# ------------------------------------------------------------------ delivery variants + review copy
+
+
+def _deliverables(ctx: StageContext) -> list[str]:
+    from reel import brief as b, variants
+
+    brief = b.load_brief(ctx.options.get("brief"))
+    return [d for d in (brief.deliverables if brief else []) if d in variants.PROFILES]
+
+
+def _variants_hash(ctx: StageContext) -> str:
+    from reel import variants
+
+    return hash_inputs({f: _fp(ctx, f) for f in ("render/final.mp4", "render/base.mov", "timeline/timeline.json", "render/overlay.props.json")}
+                       | {"deliverables": _deliverables(ctx), "renderer": overlay.renderer_fingerprint(),
+                          "code": file_fingerprint(Path(variants.__file__)), "v": VERSION})
+
+
+def _variants(ctx: StageContext) -> dict:
+    from reel import variants
+
+    tl = _timeline(ctx)
+    out = {"review": variants.review_copy(ctx.ws, tl, (_read_json(ctx, "qa", "verdict.json") or {}).get("status"))}
+    for name in _deliverables(ctx):
+        out[name] = variants.make_variant(ctx.ws, tl, name)
+    from fractions import Fraction
+
+    from reel import timebase as tb
+
+    out["platform_notes"] = variants.platform_notes(float(Fraction(tl.duration_f) / tb.parse_rate(tl.fps)))
+    return out
+
+
+VARIANTS = Stage(name="variants", input_hash=_variants_hash,
+                 outputs=lambda ctx: [ctx.ws.path("export", "review", "review.mp4"),
+                                      *(ctx.ws.path("export", "variants", f"reel_{n}.mp4") for n in _deliverables(ctx))],
+                 run=_variants)
+
+STAGES = [STORY, FINISH, COMPILE, RENDER, OVERLAY, COMPOSITE, QA, PACKAGE, VARIANTS]

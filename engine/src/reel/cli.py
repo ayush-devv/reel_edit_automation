@@ -116,7 +116,7 @@ def _rerun_after_plan_change(ws, options) -> None:
     from reel.runner import run_pipeline
     from reel.stages import edit
 
-    state = run_pipeline(ws, [edit.COMPILE, edit.RENDER, edit.OVERLAY, edit.COMPOSITE, edit.QA], options=options)
+    state = run_pipeline(ws, [edit.COMPILE, edit.RENDER, edit.OVERLAY, edit.COMPOSITE, edit.QA, edit.PACKAGE, edit.VARIANTS], options=options)
     _print_state(state, ws)
     _print_verdict(ws)
 
@@ -127,6 +127,29 @@ def _cmd_revise(args: argparse.Namespace) -> int:
 
     ws, options = _load_ws(args.project)
     res = autofix.apply_revision(ws, options, args.request)
+    print(f"Editor: {res['reply']}  ({res['calls']} call(s), ~${res['cost_usd']})")
+    _rerun_after_plan_change(ws, options)
+    return 0
+
+
+def _cmd_notes(args: argparse.Namespace) -> int:
+    """Client notes on the review copy → one Editor revision → re-render + re-check."""
+    from reel import autofix, notes, project
+    from reel.schemas.plan import StoryPlan
+    from reel.schemas.timeline import Timeline
+
+    ws, options = _load_ws(args.project)
+    parsed = notes.parse(Path(args.file).read_text())
+    if not parsed:
+        print("no notes found")
+        return 2
+    tl = Timeline.model_validate_json(ws.path("timeline", "timeline.json").read_text())
+    story = project.load_json_model(StoryPlan, ws.path("plan", "story.json"))
+    request = notes.revision_request(parsed, tl, story, project.word_table(ws))
+    print(request + "\n")
+    if args.dry_run:
+        return 0
+    res = autofix.apply_revision(ws, options, request)
     print(f"Editor: {res['reply']}  ({res['calls']} call(s), ~${res['cost_usd']})")
     _rerun_after_plan_change(ws, options)
     return 0
@@ -311,6 +334,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--analyse-only", action="store_true", help="stop after the footage tables (no Claude calls)")
     p.add_argument("--skip-review", action="store_true", help="QA gates only, no Reviewer call")
     p.set_defaults(func=_cmd_run)
+
+    p = sub.add_parser("notes", help="apply a client's timestamped notes (e.g. '0:12 make this faster') as one revision")
+    p.add_argument("--project", required=True)
+    p.add_argument("file", help="text file with one note per line")
+    p.add_argument("--dry-run", action="store_true", help="show the anchored request without calling the Editor")
+    p.set_defaults(func=_cmd_notes)
 
     p = sub.add_parser("proof", help="confirm/correct unsure caption words, then re-render captions")
     p.add_argument("--project", required=True)

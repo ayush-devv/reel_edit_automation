@@ -260,7 +260,7 @@ def duck_expr(regions_f: list[list[int]], fps: Fraction, depth_db: float, attack
 
 def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = None, crf: int = CRF,
                   room_tone: dict[str, tuple[int, int, float]] | None = None, finish_audio: bool = True,
-                  luts: dict[str, Path] | None = None) -> list[str]:
+                  luts: dict[str, Path] | None = None, stems_dir: Path | None = None) -> list[str]:
     """`room_tone`: per mezzanine asset, the (start_us, end_us, dBFS) stretch to loop under its segments.
     `finish_audio=False` renders the raw cut voice only (used by sync tests)."""
     problems = unsupported(tl)
@@ -360,10 +360,12 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
         floors = [db for (_s, _e, db) in room_tone.values()]
         floor = min(floors) if floors else None
         graph.append(f"[vraw]{mix.voice_chain(floor)}[voice]")
-        mix_in = ["[voice]"]
+        # buses: dialogue (voice + room tone), music, sfx — mixed for the deliverable, optionally
+        # also written as stems for the NLE package
+        buses: dict[str, list[str]] = {"dialogue": ["[voice]"], "music": [], "sfx": []}
         if rt_in:
             graph.append("".join(rt_in) + f"concat=n={len(rt_in)}:v=0:a=1,{mix.room_tone_chain(floor)}[rt]")
-            mix_in.append("[rt]")
+            buses["dialogue"].append("[rt]")
         duck = tl.ducking[0] if tl.ducking else None
         for j, a in enumerate(extras):
             at = tb.frame_to_sample(a.at_f, fps)
@@ -378,23 +380,42 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
                     chain += f",asetpts=PTS+{at}/SR/TB,volume='{expr}':eval=frame,asetpts=PTS-STARTPTS"
             chain += f",adelay=delays={at}S:all=1,apad=whole_len={total_samples},atrim=end_sample={total_samples}"
             graph.append(f"[{a_label[a.asset].pop(0)}]{chain}[x{j}]")
-            mix_in.append(f"[x{j}]")
+            buses[a.role].append(f"[x{j}]")
+        mix_in = []
+        for bus, ins in buses.items():
+            if not ins:
+                if not stems_dir:
+                    continue
+                graph.append(f"anullsrc=r={AUDIO_RATE}:cl=stereo,atrim=end_sample={total_samples},aformat=sample_fmts=fltp[{bus}_sum]")
+            elif len(ins) == 1:
+                graph.append(f"{ins[0]}anull[{bus}_sum]")
+            else:
+                graph.append("".join(ins) + f"amix=inputs={len(ins)}:normalize=0:duration=first:dropout_transition=0[{bus}_sum]")
+            if stems_dir:
+                graph.append(f"[{bus}_sum]asplit[{bus}_mix][{bus}_stem]")
+                mix_in.append(f"[{bus}_mix]")
+            else:
+                mix_in.append(f"[{bus}_sum]")
         if len(mix_in) > 1:
             graph.append("".join(mix_in) + f"amix=inputs={len(mix_in)}:normalize=0:duration=first:dropout_transition=0[aout]")
         else:
-            graph.append("[voice]anull[aout]")
+            graph.append(f"{mix_in[0]}anull[aout]")
 
     args += ["-filter_complex", ";".join(graph), "-map", "[vout]", "-map", "[aout]",
              "-r", f"{fps.numerator}/{fps.denominator}", "-fps_mode", "cfr", *encode_args(out, crf=crf)]
+    if stems_dir and finish_audio:
+        stems_dir.mkdir(parents=True, exist_ok=True)
+        for bus in ("dialogue", "music", "sfx"):
+            args += ["-map", f"[{bus}_stem]", "-c:a", "pcm_s24le", "-ar", str(AUDIO_RATE), str(stems_dir / f"{bus}.wav")]
     return args
 
 
 def render_base(tl: Timeline, root: Path, out: Path, *, faces: dict | None = None,
                 room_tone: dict[str, tuple[int, int, float]] | None = None, finish_audio: bool = True,
-                luts: dict[str, Path] | None = None) -> dict:
+                luts: dict[str, Path] | None = None, stems_dir: Path | None = None) -> dict:
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = tmp_path_for(out)
-    cmd = build_command(tl, root, tmp, faces=faces, room_tone=room_tone, finish_audio=finish_audio, luts=luts)
+    cmd = build_command(tl, root, tmp, faces=faces, room_tone=room_tone, finish_audio=finish_audio, luts=luts, stems_dir=stems_dir)
     t0 = time.time()
     tools.run(cmd)
     tmp.replace(out)

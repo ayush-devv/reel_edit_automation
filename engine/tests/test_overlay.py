@@ -127,3 +127,23 @@ def test_overlay_composite_keeps_base_outside_the_text(tmp_path):
     bottom = np.abs(b[1650:1900] - f[1650:1900]).mean()      # below captions: untouched (codec noise only)
     caption = np.abs(b[1150:1300] - f[1150:1300]).mean()     # caption band: changed
     assert bottom < 4.0 and caption > 10.0, (bottom, caption)
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not READY, reason="needs pinned ffmpeg + renderer")
+def test_adaptive_tokens_fix_illegible_captions_but_respect_brand(tmp_path):
+    from reel import adapt, tools
+
+    mezz = tmp_path / "mezz" / "c01.mov"
+    mezz.parent.mkdir()
+    tools.ffmpeg(["-y", "-f", "lavfi", "-i", "color=c=#FFF200:s=720x1280:r=25:d=2", "-c:v", "prores_ks", "-pix_fmt", "yuv422p10le", str(mezz)])
+    prov = Provenance(item="k0", words=[0, 0])
+    tl = Timeline(fps="25/1", width=1080, height=1920, duration_f=50, assets={"c01": Asset(id="c01", kind=AssetKind.video, uri="mezz/c01.mov")},
+                  video=[VideoClip(id="v_k0", asset="c01", at_f=0, dur_f=50, src_in_us=0, src_out_us=2_000_000, src=prov)], audio=[],
+                  captions=CaptionTrack(family="bold_pop", tokens={"base_color": "#FFFFFF", "emph_color": "#FFD400", "stroke": "false"},
+                                        pages=[CaptionPage(start_f=0, end_f=40, words=[CaptionWord(i=0, text="SAVE", start_f=0, end_f=40)])]))
+    out, changes = adapt.adapt(tl, tmp_path, palette=["#146C7F", "#E3E706"], locked=set())
+    t = out.captions.tokens
+    assert t["stroke"] == "#000000" and t["emph_color"] != "#FFD400" and len(changes) == 2  # white/yellow on yellow
+    kept, _ = adapt.adapt(tl, tmp_path, palette=[], locked={"emph_color", "stroke"})
+    assert kept.captions.tokens == tl.captions.tokens  # brand-locked: untouched

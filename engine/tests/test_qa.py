@@ -171,7 +171,7 @@ def test_cli_registers_every_command(capsys):
         cli.main(["--help"])
     assert exc.value.code == 0
     out = capsys.readouterr().out
-    for cmd in ("doctor", "probe", "run", "revise", "proof", "label", "calibrate", "library", "bakeoff", "eval",
+    for cmd in ("doctor", "probe", "run", "revise", "notes", "proof", "label", "calibrate", "library", "bakeoff", "eval",
                 "conformance", "schema", "validate", "compile", "dry-run"):
         assert cmd in out, cmd
     assert cli.main(["schema", "revision"]) == 0

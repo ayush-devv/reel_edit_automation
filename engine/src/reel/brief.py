@@ -28,6 +28,7 @@ class Brief(_Strict):
     tone: str | None = None
     vocabulary: list[str] = Field(default_factory=list)  # names/terms to spell correctly
     notes: str | None = None
+    deliverables: list[str] = Field(default_factory=list)  # extra aspect ratios: feed_4x5 | square (9:16 master always)
 
 
 class BrandColors(_Strict):
