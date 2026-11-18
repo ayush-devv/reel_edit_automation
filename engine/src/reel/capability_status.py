@@ -110,6 +110,7 @@ STATUS: dict[str, tuple[str, str]] = {
     "cap.export.color_tagging": ("auto", "bt709"),
     "cap.export.alpha_overlay": ("auto", "ProRes 4444 overlay in the package"),
     "cap.export.multi_version": ("yes", "variants"),
+    "cap.export.cover_frame": ("auto", "cover stage: face area × sharpness × blendshape expression over ~40 base-render frames, top 5 kept; cover.jpg with the hook title in the package"),
     # analysis
     "cap.analysis.scene_detection": ("auto", "PySceneDetect"),
     "cap.analysis.silence_detection": ("auto", "Silero VAD"),

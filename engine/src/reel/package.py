@@ -7,11 +7,13 @@
   timeline.fcpxml          Final Cut Pro (1.10): the cut on the mezzanines + overlay + stems
   timeline.otio            OpenTimelineIO (DaVinci Resolve, Premiere via plugin, Avid)
   edit_list.md             every decision with the Editor's reason
-  README.md                what is baked where, how to open it, licences of assets used
+  cover.jpg / cover_clean.jpg / covers/ / cover.json   thumbnail (reel.cover), when the cover stage ran
+  README.md                what is baked where, how to open it, licences of assets used, the cover choice
 """
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from fractions import Fraction
@@ -198,7 +200,27 @@ def edit_list(tl: Timeline, story: StoryPlan, finish: FinishPlan, words) -> str:
     return "\n".join(lines) + "\n"
 
 
-def readme(tl: Timeline, idx, lufs_offset_db: float | None, verdict: str | None) -> str:
+def cover_section(cover: dict | None) -> str:
+    """README section: the chosen cover, where to set it in the app, and the runners-up."""
+    if not cover:
+        return ""
+    rows = [f"| {n} | {c['tc']} (frame {c['frame']}) | {c['score']:.3f} | {c['face_area']:.3f} | {c['sharp']:.2f} | {c['expression']:.2f} | "
+            f"{c.get('blink') if c.get('blink') is not None else '—'} | {c['why']} | {c.get('file', '')} |"
+            for n, c in enumerate(cover.get("top", []), 1)]
+    return "\n".join([
+        "", "## Cover", "",
+        f"`cover.jpg` (1080x1920) = frame **{cover['frame']}** at **{cover['tc']}** with the title “{cover['title'] or '—'}” "
+        f"({cover['font']}); `cover_clean.jpg` is the same frame without text. To use the clean frame as the Reels cover in the app, "
+        f"pick *Edit cover* → slide to {cover['tc']}; or upload `cover.jpg` / `cover_clean.jpg` from the camera roll. "
+        "The grid shows the centre 1080x1440; the title stays inside it.", "",
+        f"Picked from {len(cover.get('candidates', []))} frames of the base render (first 60 % + hook, emphasised words, punch-ins). "
+        f"Score = face area (capped at {cover['rules']['area_cap']:.0%} of the frame) × sharpness (face Laplacian variance, capped) × expression "
+        f"(smile, raised brows, open mouth up; eyes closed rejected; looking down penalised). Faces: {cover['faces']}.", "",
+        "| # | time | score | face area | sharp | expression | blink | why sampled | file |", "|---|---|---|---|---|---|---|---|---|",
+        *rows, ""])
+
+
+def readme(tl: Timeline, idx, lufs_offset_db: float | None, verdict: str | None, cover: dict | None = None) -> str:
     used = {a.asset for a in tl.audio if a.role in ("sfx", "music")} | {c.asset for c in tl.video if c.id.startswith("br_")}
     by_file = {m.get("file"): k for k, m in idx.broll.items()}
     used |= {by_file[p.uri] for p in tl.pips if p.uri in by_file}
@@ -221,14 +243,27 @@ Verdict: **{verdict or 'n/a'}** (see qa/verdict.md in the project).
 | timeline.fcpxml | Final Cut Pro: cut on the mezzanines (production audio), overlay on lane 1, stems on lanes −1…−3 (disabled) |
 | timeline.otio | OpenTimelineIO for DaVinci Resolve / Avid / Premiere (OTIO plugin) |
 | edit_list.md | every cut and finishing decision with the Editor's reason |
-
+{"| cover.jpg / cover_clean.jpg / covers/ | thumbnail with the hook title, the same frame clean, the top-5 candidate frames; cover.json has every score |" + chr(10) if cover else ""}
 **What is baked where.** The cut, speed changes and timing are in the timelines. Punch-ins, transitions, colour (per-clip correction + look) and the audio finishing are baked into `reel.mp4` and the stems, **not** rebuilt as NLE effects. The mezzanine clips are the ungraded, unzoomed source at the project frame rate. Re-grade or re-zoom there if needed.
 
 **Media paths** point into the project folder (absolute `file://` URLs). Keep the project where it is, or relink.
 
 ## Licences of library assets used
 {chr(10).join(lic) or '- none'}
-"""
+{cover_section(cover)}"""
+
+
+def _cover(ws, pkg: Path) -> dict | None:
+    """Link the cover stage's files (render/cover/) into the package; returns cover.json or None."""
+    src = ws.path("render", "cover")
+    if not (src / "cover.json").exists():
+        return None
+    for old in (pkg / "covers").glob("*.jpg") if (pkg / "covers").exists() else []:
+        old.unlink()
+    for f in [src / "cover.jpg", src / "cover_clean.jpg", src / "cover.json", *sorted((src / "covers").glob("*.jpg"))]:
+        if f.exists():
+            _link(f, pkg / f.relative_to(src))
+    return json.loads((src / "cover.json").read_text())
 
 
 def build(ws, tl: Timeline, story: StoryPlan, finish: FinishPlan, words, idx, *, lufs_in: float | None = None, verdict: str | None = None) -> dict:
@@ -250,6 +285,7 @@ def build(ws, tl: Timeline, story: StoryPlan, finish: FinishPlan, words, idx, *,
     atomic_write_bytes(pkg / "timeline.fcpxml", fcpxml(tl, ws.root, pkg, name).encode())
     otio.adapters.write_to_file(otio_timeline(tl, ws.root, pkg, name), str(pkg / "timeline.otio"))
     atomic_write_bytes(pkg / "edit_list.md", edit_list(tl, story, finish, words).encode())
+    cover = _cover(ws, pkg)
     offset = (mix.TARGET_I - lufs_in) if lufs_in is not None and lufs_in > mix.SILENT_LUFS else None
-    atomic_write_bytes(pkg / "README.md", readme(tl, idx, offset, verdict).encode())
+    atomic_write_bytes(pkg / "README.md", readme(tl, idx, offset, verdict, cover).encode())
     return {"files": sorted(str(p.relative_to(pkg)) for p in pkg.rglob("*") if p.is_file())}

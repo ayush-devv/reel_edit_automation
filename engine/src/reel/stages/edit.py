@@ -371,6 +371,28 @@ def _qa(ctx: StageContext) -> dict:
 QA = Stage(name="qa", input_hash=_qa_hash, outputs=lambda ctx: [ctx.ws.path("qa", "verdict.json"), ctx.ws.path("qa", "verdict.md"),
                                                                 ctx.ws.path("qa", "cuts.json")], run=_qa)
 
+# ------------------------------------------------------------------ cover frame (cap.export.cover_frame)
+
+
+def _cover_hash(ctx: StageContext) -> str:
+    from reel import cover
+
+    return hash_inputs({f: _fp(ctx, f) for f in ("render/base.mov", "timeline/timeline.json", "plan/story.json", "plan/finish.json",
+                                                 "perception/words.json")}
+                       | {"code": _code_fp("cover", "cuts"), "model": cover.LANDMARKER_SHA256, "font": cover.INTER_SHA256, "v": VERSION})
+
+
+def _cover(ctx: StageContext) -> dict:
+    from reel import cover
+
+    story = project.load_json_model(StoryPlan, ctx.ws.path("plan", "story.json"))
+    fin = project.load_json_model(FinishPlan, ctx.ws.path("plan", "finish.json"))
+    return cover.build(ctx.ws, _timeline(ctx), story, fin, project.word_table(ctx.ws))
+
+
+COVER = Stage(name="cover", input_hash=_cover_hash, run=_cover,
+              outputs=lambda ctx: [ctx.ws.path("render", "cover", f) for f in ("cover.jpg", "cover_clean.jpg", "cover.json")])
+
 # ------------------------------------------------------------------ NLE package (every run, ADR-0018)
 
 
@@ -378,7 +400,7 @@ def _package_hash(ctx: StageContext) -> str:
     from reel import package
 
     files = ["render/final.mp4", "render/overlay.mov", "timeline/timeline.json", "plan/story.json", "plan/finish.json", "qa/verdict.json",
-             *(f"render/stems/{b}.wav" for b in package.STEMS)]
+             "render/cover/cover.json", "render/cover/cover.jpg", *(f"render/stems/{b}.wav" for b in package.STEMS)]
     return hash_inputs({f: _fp(ctx, f) for f in files} | {"code": file_fingerprint(Path(package.__file__)), "v": VERSION})
 
 
@@ -396,7 +418,7 @@ def _package(ctx: StageContext) -> dict:
 
 PACKAGE = Stage(name="package", input_hash=_package_hash,
                 outputs=lambda ctx: [ctx.ws.path("export", "package", f) for f in ("reel.mp4", "overlay.mov", "timeline.fcpxml", "timeline.otio",
-                                                                                     "captions.srt", "edit_list.md", "README.md")],
+                                                                                     "captions.srt", "edit_list.md", "README.md", "cover.jpg")],
                 run=_package)
 
 # ------------------------------------------------------------------ delivery variants + review copy
@@ -437,4 +459,4 @@ VARIANTS = Stage(name="variants", input_hash=_variants_hash,
                                       *(ctx.ws.path("export", "variants", f"reel_{n}.mp4") for n in _deliverables(ctx))],
                  run=_variants)
 
-STAGES = [BROLL, REFERENCE, STORY, FINISH, COMPILE, RENDER, OVERLAY, COMPOSITE, QA, PACKAGE, VARIANTS]
+STAGES = [BROLL, REFERENCE, STORY, FINISH, COMPILE, RENDER, OVERLAY, COMPOSITE, QA, COVER, PACKAGE, VARIANTS]
