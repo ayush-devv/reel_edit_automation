@@ -409,12 +409,9 @@ def build(ws, tl: Timeline, story: StoryPlan, finish: FinishPlan, words: WordTab
     full = decode_frames(base, {c["frame"] for c in top}, OUT_W)
     title = title_text(finish, story, words)
     font, font_note = cover_font(title) if title else (None, "no title")
-    files = []
     for n, c in enumerate(top, 1):
-        rel = f"covers/cover_{n}.jpg"
-        write_jpeg(full[c["frame"]], out / rel)
-        files.append(rel)
-        c["file"] = rel
+        c["file"] = f"covers/cover_{n}.jpg"
+        write_jpeg(full[c["frame"]], out / c["file"])
     best = top[0]
     write_jpeg(full[best["frame"]], out / "cover_clean.jpg")
     text_meta = write_jpeg(full[best["frame"]], out / "cover.jpg", text=title, font=font, face_box=best.get("box"))
