@@ -1,0 +1,4 @@
+Procedural SFX (assets/sfx/procedural/) — owned, no licence, no attribution.
+
+Synthesised by reel.procedural_sfx with ffmpeg lavfi (seeded noise, tone/envelope expressions,
+filters); `reel assets fetch` re-creates byte-identical files on the same ffmpeg build.
