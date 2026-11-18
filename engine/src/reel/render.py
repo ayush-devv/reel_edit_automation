@@ -276,8 +276,9 @@ def crop_share(src_w: int, src_h: int, out_w: int, out_h: int) -> float:
 
 
 def clip_shots(c: VideoClip, fps: Fraction, faces: dict | None, scenes: dict | None, src_size: tuple[int, int] | None = None,
-               out_size: tuple[int, int] = (1080, 1920)) -> list:
-    """Per-shot framing for a base clip (camera cuts inside it get their own framing; see reel.framing)."""
+               out_size: tuple[int, int] = (1080, 1920), speakers: dict | None = None) -> list:
+    """Per-shot framing for a base clip (camera cuts inside it get their own framing; wide two-shots
+    follow the active speaker when perception/speakers.json has them; see reel.framing)."""
     from reel import framing
 
     fallback = _face_centre(faces, c.asset)
@@ -286,7 +287,7 @@ def clip_shots(c: VideoClip, fps: Fraction, faces: dict | None, scenes: dict | N
     if not samples:
         return [framing.Shot(0, fallback, None)]
     crop_w = crop_share(*src_size, *out_size) if src_size else 1.0
-    return framing.shots(c, fps, cuts, samples, fallback, crop_w=crop_w)
+    return framing.shots(c, fps, cuts, samples, fallback, crop_w=crop_w, speakers=(speakers or {}).get(c.asset))
 
 
 def crop_x_expr(shots: list, crops: list[tuple[int, int, int, int]], sw: int, out_w: int) -> str:
@@ -394,7 +395,8 @@ def duck_expr(regions_f: list[list[int]], fps: Fraction, depth_db: float, attack
 
 def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = None, crf: int = CRF,
                   room_tone: dict[str, tuple[int, int, float]] | None = None, finish_audio: bool = True,
-                  luts: dict[str, Path] | None = None, stems_dir: Path | None = None, scenes: dict | None = None) -> list[str]:
+                  luts: dict[str, Path] | None = None, stems_dir: Path | None = None, scenes: dict | None = None,
+                  speakers: dict | None = None) -> list[str]:
     """`room_tone`: per mezzanine asset, the (start_us, end_us, dBFS) stretch to loop under its segments.
     `finish_audio=False` renders the raw cut voice only (used by sync tests)."""
     problems = unsupported(tl)
@@ -475,7 +477,7 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
             timing = (f"trim=end_frame={src_frames},setpts=(PTS-STARTPTS)/{c.speed},"
                       f"fps={fps.numerator}/{fps.denominator},trim=end_frame={c.dur_f},setpts=PTS-STARTPTS")
         graph.append(f"[{k}:v]{timing},"
-                     f"{_geometry(cz, w, h, tl.width, tl.height, fps, clip_shots(c, fps, faces, scenes, (w, h), (tl.width, tl.height)), (luts or {}).get(c.asset), tag=str(k))},setsar=1[g{k}]")
+                     f"{_geometry(cz, w, h, tl.width, tl.height, fps, clip_shots(c, fps, faces, scenes, (w, h), (tl.width, tl.height), speakers), (luts or {}).get(c.asset), tag=str(k))},setsar=1[g{k}]")
         graph += transition_graph(k, f"g{k}", f"v{k}", c, head, tail, tl.width, tl.height, fps)
         a = voice.get(c.id[2:])
         if a is None:
@@ -569,11 +571,12 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
 
 def render_base(tl: Timeline, root: Path, out: Path, *, faces: dict | None = None,
                 room_tone: dict[str, tuple[int, int, float]] | None = None, finish_audio: bool = True,
-                luts: dict[str, Path] | None = None, stems_dir: Path | None = None, scenes: dict | None = None) -> dict:
+                luts: dict[str, Path] | None = None, stems_dir: Path | None = None, scenes: dict | None = None,
+                speakers: dict | None = None) -> dict:
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = tmp_path_for(out)
     cmd = build_command(tl, root, tmp, faces=faces, room_tone=room_tone, finish_audio=finish_audio, luts=luts, stems_dir=stems_dir,
-                        scenes=scenes)
+                        scenes=scenes, speakers=speakers)
     t0 = time.time()
     tools.run(cmd)
     tmp.replace(out)
