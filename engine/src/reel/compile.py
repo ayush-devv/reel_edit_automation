@@ -31,7 +31,8 @@ from reel.schemas.timeline import (
     VideoClip,
 )
 
-BREATH_PAD_US = 80_000  # breath kept around a kept range, clamped to neighbouring words
+BREATH_PAD_US = 80_000  # breath around a kept range when only ASR edges are known
+HEARD_PAD_US = 100_000  # breath around heard (snapped) edges (ADR-0002)
 MIN_CAPTION_US = 350_000  # a caption page stays at least this long
 
 
@@ -59,13 +60,22 @@ def _digest(model) -> str:
     return hashlib.sha256(json.dumps(model.model_dump(mode="json"), sort_keys=True).encode()).hexdigest()[:16]
 
 
-def _source_range(item_words: list[Word], clip_words: list[Word], clip: ClipInfo) -> tuple[int, int]:
+def _source_range(item_words: list[Word], clip_words: list[Word], clip: ClipInfo,
+                  edges: dict[int, tuple[int, int]] | None = None) -> tuple[int, int]:
+    """Cut points: heard speech edges (step 4 snapping) when known, else ASR edges; plus a breath,
+    never crossing into the neighbouring words' heard sound."""
+    edges = edges or {}
+
+    def heard(w: Word) -> tuple[int, int]:
+        return edges.get(w.i, (w.start_us, w.end_us))
+
     first, last = item_words[0], item_words[-1]
     pos = {w.i: k for k, w in enumerate(clip_words)}
     prev = clip_words[pos[first.i] - 1] if pos[first.i] > 0 else None
     nxt = clip_words[pos[last.i] + 1] if pos[last.i] + 1 < len(clip_words) else None
-    start = max(first.start_us - BREATH_PAD_US, prev.end_us if prev else 0, 0)
-    end = min(last.end_us + BREATH_PAD_US, nxt.start_us if nxt else clip.duration_us, clip.duration_us)
+    pad = BREATH_PAD_US if not edges else HEARD_PAD_US
+    start = max(heard(first)[0] - pad, heard(prev)[1] if prev else 0, 0)
+    end = min(heard(last)[1] + pad, heard(nxt)[0] if nxt else clip.duration_us, clip.duration_us)
     if end <= start:
         raise CompileError(f"empty source range for words {first.i}-{last.i}")
     return start, end
@@ -81,6 +91,7 @@ def compile_timeline(
     *,
     width: int = 1080,
     height: int = 1920,
+    edges: dict[int, tuple[int, int]] | None = None,
 ) -> Timeline:
     finish = finish or empty_finish()
     by = words.by_index()
@@ -93,7 +104,7 @@ def compile_timeline(
         item_words = [by.get(i) for i in range(it.word_start, it.word_end + 1)]
         if clip is None or not item_words or any(w is None or w.clip != it.clip for w in item_words):
             raise CompileError(f"item {it.id}: invalid clip/word range — run `reel validate` first")
-        start_us, end_us = _source_range(item_words, words.clip_words(it.clip), clip)
+        start_us, end_us = _source_range(item_words, words.clip_words(it.clip), clip, edges)
         in_f = tb.us_to_frame(start_us, fps, mode="floor")
         out_f = min(tb.us_to_frame(end_us, fps, mode="ceil"), tb.us_to_frame(clip.duration_us, fps, mode="floor"))
         if out_f <= in_f:
@@ -199,9 +210,10 @@ def compile_timeline(
     )
 
 
-def dry_run(story: StoryPlan, words: WordTable, clips: dict[str, ClipInfo], fps: Fraction, idx: Indexes) -> str:
+def dry_run(story: StoryPlan, words: WordTable, clips: dict[str, ClipInfo], fps: Fraction, idx: Indexes,
+            edges: dict[int, tuple[int, int]] | None = None) -> str:
     """Read-back script Claude sees before committing a story (ADR-0016)."""
-    tl = compile_timeline(story, None, words, clips, fps, idx)
+    tl = compile_timeline(story, None, words, clips, fps, idx, edges=edges)
     by = words.by_index()
     lines = []
     for c, it in zip(tl.video, story.items):

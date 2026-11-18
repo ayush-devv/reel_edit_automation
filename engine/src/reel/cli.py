@@ -132,6 +132,7 @@ def _cmd_validate(args: argparse.Namespace) -> int:
 
 
 def _cmd_compile(args: argparse.Namespace) -> int:
+    from reel import project
     from reel.compile import compile_timeline
     from reel.validate import errors, validate_finish, validate_story
     from reel.workspace import atomic_write_json
@@ -141,7 +142,7 @@ def _cmd_compile(args: argparse.Namespace) -> int:
     if errors(issues):
         print(json.dumps({"ok": False, "issues": [i.as_dict() for i in errors(issues)]}, indent=2, ensure_ascii=False))
         return 2
-    tl = compile_timeline(story, finish, words, clips, fps, idx)
+    tl = compile_timeline(story, finish, words, clips, fps, idx, edges=project.edges(ws))
     out = ws.path("timeline", "timeline.json")
     atomic_write_json(out, tl.model_dump(mode="json"))
     print(f"timeline: {out} · {tl.duration_f} frames @ {tl.fps} · {len(tl.video)} video clips · {len(tl.captions.pages if tl.captions else [])} caption pages")
@@ -149,6 +150,7 @@ def _cmd_compile(args: argparse.Namespace) -> int:
 
 
 def _cmd_dry_run(args: argparse.Namespace) -> int:
+    from reel import project
     from reel.compile import dry_run
     from reel.validate import errors, validate_story
 
@@ -157,7 +159,7 @@ def _cmd_dry_run(args: argparse.Namespace) -> int:
     if errors(issues):
         print(json.dumps({"ok": False, "issues": [i.as_dict() for i in errors(issues)]}, indent=2, ensure_ascii=False))
         return 2
-    print(dry_run(story, words, clips, fps, idx))
+    print(dry_run(story, words, clips, fps, idx, edges=project.edges(ws)))
     return 0
 
 

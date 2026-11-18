@@ -35,5 +35,13 @@ def word_table(ws: Workspace) -> WordTable:
     return WordTable.model_validate_json(path.read_text())
 
 
+def edges(ws: Workspace) -> dict[int, tuple[int, int]] | None:
+    """Heard word edges from the tables stage (None if not computed yet)."""
+    path = ws.path("perception", "edges.json")
+    if not path.exists():
+        return None
+    return {int(k): (int(v[0]), int(v[1])) for k, v in json.loads(path.read_text()).items()}
+
+
 def load_json_model(model, path: Path):
     return model.model_validate_json(Path(path).read_text())
