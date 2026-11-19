@@ -1,6 +1,7 @@
-// FR-1 Projects home: "Needs you" first, filters, search, drop files to start an edit.
-// Cutting Room: no ambient backdrop (decoration without information was removed in the redesign).
-import { useMemo, useState, type DragEvent } from "react";
+// FR-1 Projects home: a 3D wall of your reels, "Needs you" first, filters, search, drop files to start an edit.
+// Cinematic studio: each reel glows in its own colour (from its thumbnail); the wall is the hero, the list below
+// stays the accessible path.
+import { lazy, Suspense, useMemo, useState, type CSSProperties, type DragEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useApi } from "../api/context";
 import { friendlyError } from "../api/errors";
@@ -13,6 +14,59 @@ import { useQuery } from "../hooks/useQuery";
 import { ago, duration } from "../lib/format";
 import { setPendingFiles } from "../lib/pendingFiles";
 import { badgeOf, sortByAttention, STAGE_LABEL, type Badge } from "../lib/status";
+import { useImageTint, useImageTints } from "../lib/tint";
+import { useStatus } from "../hooks/status";
+import { use3D } from "../hooks/useMedia";
+import { color } from "../theme/tokens";
+import type { WallItem } from "../three/ReelWall";
+
+const ReelWall = lazy(() => import("../three/ReelWall"));
+
+const BADGE_WORD: Record<Badge, string> = { hold: "Hold", failed: "Failed", sendable: "Sendable", editing: "Editing", queued: "Queued", delivered: "Delivered", draft: "Draft" };
+const BADGE_COLOR: Record<Badge, string> = {
+  hold: color.status.hold,
+  failed: color.status.fail,
+  sendable: color.status.sendable,
+  editing: color.accent.ai,
+  queued: color.text.muted,
+  delivered: color.text.secondary,
+  draft: color.text.muted,
+};
+
+/** Hero: the 3D wall of recent reels (flat row of glowing posters under reduced motion / no WebGL). */
+function Hero({ list }: { list: ProjectSummary[] }) {
+  const api = useApi();
+  const nav = useNavigate();
+  const { busy } = useStatus();
+  const can3D = use3D();
+  const recent = list.slice(0, 9);
+  const thumbs = recent.map((p) => (p.thumb ? api.mediaUrl(p.id, p.thumb, p.updated) : null));
+  const tints = useImageTints(thumbs);
+  const items: WallItem[] = recent.map((p, i) => {
+    const b = badgeOf(p);
+    return { id: p.id, name: p.name, status: BADGE_WORD[b], statusColor: BADGE_COLOR[b], thumb: thumbs[i], tint: tints[i] };
+  });
+  if (!items.length) return null;
+  return (
+    <section aria-label="Recent reels" className="relative -mx-8 -mt-8 mb-10 h-[380px] overflow-hidden border-b border-line-subtle">
+      {can3D ? (
+        <Suspense fallback={null}>
+          <ReelWall items={items} busy={busy} onOpen={(id) => nav(projectHref(list.find((p) => p.id === id)!))} />
+        </Suspense>
+      ) : (
+        <ul className="flex h-full items-center justify-center gap-6 px-8" aria-hidden="true">
+          {items.slice(0, 6).map((it) => (
+            <li key={it.id} className="h-[280px] aspect-[9/16] overflow-hidden rounded-surface bg-bg-high" style={{ boxShadow: `0 0 60px 6px rgba(${it.tint}, 0.28)` }}>
+              {it.thumb && <img src={it.thumb} alt="" className="h-full w-full object-cover" />}
+            </li>
+          ))}
+        </ul>
+      )}
+      {/* Fade the wall into the page so it reads as light, not a box. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-bg-base to-transparent" aria-hidden="true" />
+    </section>
+  );
+}
 
 type Filter = "all" | "attention" | "editing" | "sendable" | "delivered";
 const FILTER_MATCH: Record<Filter, (b: Badge) => boolean> = {
@@ -32,11 +86,14 @@ function ProjectCard({ p }: { p: ProjectSummary }) {
   const api = useApi();
   const b = badgeOf(p);
   const holdCount = p.needs_attention.length || undefined;
+  const src = p.thumb ? api.mediaUrl(p.id, p.thumb, p.updated) : null;
+  const tint = useImageTint(src);
   return (
-    <li>
+    <li style={{ "--tint": tint } as CSSProperties}>
       <Link to={projectHref(p)} className="group block rounded-surface focus-visible:outline-offset-4">
-        <div className="overflow-hidden rounded-surface ring-1 ring-line-subtle transition-shadow duration-hover group-hover:ring-line-control">
-          <Thumb id={p.id} src={p.thumb ? api.mediaUrl(p.id, p.thumb, p.updated) : null} label={p.name}>
+        {/* The reel glows in its own colour; brighter and lifted on hover. */}
+        <div className="overflow-hidden rounded-surface ring-1 ring-line-subtle transition-[box-shadow,transform] duration-panel ease-std [box-shadow:0_8px_40px_-12px_rgba(var(--tint),0.45)] group-hover:-translate-y-1 group-hover:ring-line-control group-hover:[box-shadow:0_16px_60px_-10px_rgba(var(--tint),0.7)]">
+          <Thumb id={p.id} src={src} label={p.name}>
             {p.duration_s !== null && (
               <span className="absolute bottom-2 right-2 rounded-control bg-black/70 px-1.5 py-0.5 font-mono text-meta text-white">{duration(p.duration_s)}</span>
             )}
@@ -173,6 +230,7 @@ export default function Home() {
             )
           }
         />
+        {q.data && q.data.length > 0 && <Hero list={sorted} />}
 
         {q.error && !q.data ? <Notice tone="error" title="Couldn’t load projects">{friendlyError(q.error)}</Notice> : null}
         {q.loading && !q.data ? <Loading label="Loading projects…" /> : null}

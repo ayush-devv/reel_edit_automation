@@ -17,6 +17,7 @@ export default {
       /** Violet: the AI is working. */
       ai: { DEFAULT: color.accent.ai, glow: color.accent.glow },
       info: color.accent.info,
+      teal: color.accent.teal,
       /** Legacy alias of `info` (no cyan in Cutting Room). */
       cyan: color.accent.info,
       st: color.status,

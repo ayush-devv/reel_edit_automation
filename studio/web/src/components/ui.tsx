@@ -8,7 +8,7 @@ export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Bool
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 // Cutting Room: one amber primary per screen; everything else is graphite.
 const VARIANT: Record<Variant, string> = {
-  primary: "bg-signal text-signal-on border border-transparent hover:bg-signal-hover active:bg-signal-pressed",
+  primary: "bg-signal text-signal-on border border-transparent shadow-[0_6px_24px_-8px_rgba(242,169,59,0.75)] hover:bg-signal-hover hover:shadow-[0_8px_28px_-6px_rgba(242,169,59,0.85)] active:bg-signal-pressed",
   secondary: "bg-bg-overlay text-fg-primary border border-line-strong hover:bg-bg-high hover:border-line-control",
   ghost: "bg-transparent text-fg-primary border border-transparent hover:bg-bg-overlay",
   danger: "bg-transparent text-st-fail border border-st-fail/60 hover:bg-st-fail/10",
@@ -105,7 +105,7 @@ export function StatusBadge({ badge, stage, count, size = "md" }: { badge: Badge
         b.color,
       )}
     >
-      <span className={cx("h-2 w-2 rounded-full", DOT[badge], badge === "editing" && "pulse-dot")} aria-hidden="true" />
+      <span className={cx("h-2 w-2 rounded-full [box-shadow:0_0_10px_1px_currentColor]", DOT[badge], badge === "editing" && "pulse-dot")} aria-hidden="true" />
       {label}
     </span>
   );

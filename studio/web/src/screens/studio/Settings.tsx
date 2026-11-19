@@ -167,7 +167,7 @@ function SettingsForm() {
               ] as const
             ).map(([k, l]) => (
               <label key={k} className="flex cursor-pointer items-center gap-2">
-                <input type="checkbox" className="h-4 w-4 accent-[#E8A33D]" checked={s.default_deliverables.includes(k)} onChange={() => toggleDel(k)} />
+                <input type="checkbox" className="h-4 w-4 accent-[#F2A93B]" checked={s.default_deliverables.includes(k)} onChange={() => toggleDel(k)} />
                 {l}
               </label>
             ))}

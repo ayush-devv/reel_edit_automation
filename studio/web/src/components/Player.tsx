@@ -71,7 +71,7 @@ export function PhonePreview({ player, client }: { player: ReelPlayer; client: s
   return (
     <div className="flex flex-col gap-4">
       {/* Monitor well: the darkest surface, so the footage is the brightest thing on screen. */}
-      <div className="relative h-[600px] overflow-hidden rounded-surface bg-bg-inset">
+      <div className="stage-lit relative h-[600px] overflow-hidden rounded-surface">
         {can3D ? (
           <Suspense fallback={null}>
             <PhoneScene
@@ -105,7 +105,7 @@ export function PhonePreview({ player, client }: { player: ReelPlayer; client: s
             value={t}
             aria-label="Scrub"
             onChange={(e) => player.seek(Number(e.target.value))}
-            className="h-1 flex-1 cursor-pointer accent-[#E8A33D]"
+            className="h-1 flex-1 cursor-pointer accent-[#F2A93B]"
           />
           <Mono className="w-12 text-right text-fg-muted">{fmt(player.duration)}</Mono>
           <IconButton icon={player.isMuted() ? "mute" : "volume"} label={player.isMuted() ? "Unmute" : "Mute"} onClick={() => player.setMuted(!player.isMuted())} />

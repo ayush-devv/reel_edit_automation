@@ -138,7 +138,7 @@ function Phone({ player, overlayUI, safeZones, uiCanvas, safeCanvas, resetSignal
       {/* side button */}
       <mesh position={[BODY_W / 2 + 0.008, 0.7, 0]}>
         <boxGeometry args={[0.02, 0.4, 0.06]} />
-        <meshStandardMaterial color="#2a2f3d" metalness={0.9} roughness={0.3} />
+        <meshStandardMaterial color="#232A3B" metalness={0.9} roughness={0.3} />
       </mesh>
     </group>
   );
@@ -162,9 +162,9 @@ export default function PhoneScene(props: PhoneProps & { busy: boolean; resetSig
       onDoubleClick={props.onReset}
     >
       <StudioLights intensity={1} shadowSize={4} />
-      {/* Neutral key and fill: coloured light would tint the client's footage. */}
-      <spotLight position={[-4, 5, 4]} angle={0.5} penumbra={1} intensity={22} color="#FFFFFF" />
-      <spotLight position={[4, 3, 3]} angle={0.5} penumbra={1} intensity={10} color={color.text.secondary} />
+      {/* Warm key, cool rim on the phone body. The screen is an unlit video texture, so the footage keeps its true colour. */}
+      <spotLight position={[-4, 5, 4]} angle={0.5} penumbra={1} intensity={26} color={color.signal.DEFAULT} />
+      <spotLight position={[4, 3, 3]} angle={0.5} penumbra={1} intensity={20} color={color.accent.teal} />
       <group position={[0, 0.2, 0]}>
         <Phone {...props} />
       </group>

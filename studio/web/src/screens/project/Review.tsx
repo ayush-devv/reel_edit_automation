@@ -23,7 +23,7 @@ function VerdictCard({ p }: { p: Project }) {
     <section aria-label="Verdict" className="pb-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className={cx("text-display", sendable ? "text-st-sendable" : "text-st-hold")}>{sendable ? "Sendable" : "Hold"}</p>
+          <p className={cx("text-display [text-shadow:0_0_28px_currentColor]", sendable ? "text-st-sendable" : "text-st-hold")}>{sendable ? "Sendable" : "Hold"}</p>
           <p className="mt-1 text-body text-fg-secondary">{sendable ? "Safe to send to the client." : fixable ? "Fix the items below, then it re-checks." : "Needs you — see the reasons."}</p>
         </div>
         {sendable && (

@@ -78,7 +78,7 @@ export default function Layers() {
   return (
     <div className="grid grid-cols-12 gap-x-10 gap-y-6">
       <div className="col-span-12 xl:col-span-8">
-        <section className="mb-6 overflow-hidden rounded-surface bg-bg-inset" aria-label="Layers">
+        <section className="stage-lit mb-6 overflow-hidden rounded-surface" aria-label="Layers">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-subtle px-4 py-3">
             <div className="flex items-center gap-2">
               {can3D && (
@@ -100,7 +100,7 @@ export default function Layers() {
             </div>
             <div className="flex min-w-[260px] flex-1 items-center gap-3 sm:max-w-md">
               <Mono className="w-12 text-fg-secondary">{fmt(time)}</Mono>
-              <input type="range" min={0} max={model.duration} step={0.05} value={time} onChange={(e) => setTime(Number(e.target.value))} aria-label="Playhead" className="h-1 flex-1 accent-[#E8A33D]" />
+              <input type="range" min={0} max={model.duration} step={0.05} value={time} onChange={(e) => setTime(Number(e.target.value))} aria-label="Playhead" className="h-1 flex-1 accent-[#F2A93B]" />
               <Mono className="w-12 text-right text-fg-muted">{fmt(model.duration)}</Mono>
             </div>
           </div>

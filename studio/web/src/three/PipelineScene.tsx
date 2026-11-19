@@ -23,8 +23,8 @@ function makeCurve(n: number) {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  // Done is graphite, running is violet (the AI is working), failed is red; the rest is a hairline.
-  done: color.text.muted,
+  // Done is teal (finished, cool), running is violet (the AI is working), failed is red; the rest is a hairline.
+  done: color.accent.teal,
   running: color.accent.ai,
   failed: color.status.fail,
   skipped: color.line.strong,
@@ -77,7 +77,7 @@ function Node({ stage, pos, selected, onSelect }: { stage: Stage; pos: THREE.Vec
         <meshStandardMaterial
           color={lit ? c : color.bg.high}
           emissive={c}
-          emissiveIntensity={st === "done" ? 0.15 : st === "failed" ? 2.4 : st === "running" ? 2.4 : 0.05}
+          emissiveIntensity={st === "done" ? 0.9 : st === "failed" ? 2.4 : st === "running" ? 2.4 : 0.05}
           metalness={0.2}
           roughness={0.3}
           transparent={st === "skipped"}
@@ -129,7 +129,7 @@ function Track({ curve, upTo }: { curve: THREE.CatmullRomCurve3; upTo: number })
       </mesh>
       {lit && (
         <mesh geometry={lit}>
-          <meshStandardMaterial color={color.text.muted} emissive={color.text.muted} emissiveIntensity={0.25} />
+          <meshStandardMaterial color={color.accent.teal} emissive={color.accent.teal} emissiveIntensity={0.9} />
         </mesh>
       )}
     </group>
@@ -193,7 +193,7 @@ export default function PipelineScene({ stages, selected, onSelect, busy }: { st
 
   return (
     <Scene3D busy={busy} label={`Pipeline stage. ${summary}`} className="h-full w-full" camera={{ position: [0, 2.6, 6.4], fov: 40 }}>
-      <color attach="background" args={[color.bg.inset]} />
+      {/* No background: the stage's CSS lighting shows through the transparent canvas. */}
       <fog attach="fog" args={[color.bg.inset, 9, 22]} />
       <StudioLights intensity={0.9} shadowSize={10} />
       <CameraRig focusX={positions[focus]?.x ?? 0} />

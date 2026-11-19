@@ -278,7 +278,7 @@ export default function Deliver() {
             ] as const
           ).map(([id, label]) => (
             <label key={id} className="flex cursor-pointer items-center gap-2 py-1">
-              <input type="checkbox" className="h-4 w-4 accent-[#E8A33D]" checked={variants.includes(id)} onChange={(e) => setVariants((v) => (e.target.checked ? [...v, id] : v.filter((x) => x !== id)))} />
+              <input type="checkbox" className="h-4 w-4 accent-[#F2A93B]" checked={variants.includes(id)} onChange={(e) => setVariants((v) => (e.target.checked ? [...v, id] : v.filter((x) => x !== id)))} />
               {label}
             </label>
           ))}

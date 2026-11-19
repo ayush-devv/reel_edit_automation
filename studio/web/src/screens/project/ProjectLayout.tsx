@@ -3,6 +3,8 @@ import { friendlyError } from "../../api/errors";
 import { useApi } from "../../api/context";
 import { Icon, type IconName } from "../../components/icons";
 import { StoryStrip } from "../../components/StoryStrip";
+import { useImageTint } from "../../lib/tint";
+import type { CSSProperties } from "react";
 import { cx, Empty, Loading, Mono, Notice, StatusBadge } from "../../components/ui";
 import { useLiveProject, type LiveProject } from "../../hooks/useLiveProject";
 import { useStatus } from "../../hooks/status";
@@ -77,9 +79,12 @@ export default function ProjectLayout() {
   const live = useLiveProject(id);
   const p = live.project;
   const onLayers = useLocation().pathname.endsWith("/layers");
+  const api = useApi();
+  // The project's own colour (from its thumbnail) lights the header, so every reel's workspace feels like its own.
+  const tint = useImageTint(p?.thumb ? api.mediaUrl(p.id, p.thumb, p.updated) : null);
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col" style={{ "--tint": tint } as CSSProperties}>
       <RunningStrip current={id} />
       {live.error && !p ? (
         <div className="px-8 pt-6">
@@ -94,7 +99,7 @@ export default function ProjectLayout() {
       ) : (
         <>
           {/* 64 px header: breadcrumb left, status and cost right. */}
-          <header className="flex min-h-16 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-line-subtle px-8 py-3">
+          <header className="tint-glow flex min-h-16 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-line-subtle px-8 py-3">
             <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2">
               <Link to="/" className="text-body text-fg-secondary hover:text-fg-primary">
                 Projects

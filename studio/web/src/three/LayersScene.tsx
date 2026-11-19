@@ -144,7 +144,7 @@ function Stack({ layers, duration, time, exploded, selected, onSelect }: Omit<Pr
 export default function LayersScene({ busy, ...props }: Props) {
   return (
     <Scene3D busy={busy} label="Exploded layers of the edit along time. Use the flat view for a list of every block." className="h-full w-full" camera={{ position: [3.2, 2.4, 11.5], fov: 42 }}>
-      <color attach="background" args={[color.bg.inset]} />
+      {/* No background: the stage's CSS lighting shows through the transparent canvas. */}
       <fog attach="fog" args={[color.bg.inset, 16, 32]} />
       <StudioLights intensity={0.8} shadowSize={9} />
       <Stack {...props} />

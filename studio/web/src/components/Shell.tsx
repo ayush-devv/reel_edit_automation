@@ -24,7 +24,7 @@ const railItem = (active: boolean) =>
   );
 
 function ActiveBar() {
-  return <span className="absolute -left-1 top-2 bottom-2 w-0.5 rounded-full bg-signal" aria-hidden="true" />;
+  return <span className="absolute -left-1 top-2 bottom-2 w-0.5 rounded-full bg-signal shadow-[0_0_12px_2px_rgba(242,169,59,0.6)]" aria-hidden="true" />;
 }
 
 function RailLink({ to, label, icon, end, dot }: { to: string; label: string; icon: IconName; end?: boolean; dot?: { tone: string; label: string } | null }) {
@@ -129,8 +129,8 @@ function NavRail() {
   const { engine } = useStatus();
   const healthDot = useHealthDot();
   return (
-    <nav aria-label="Main" className="flex w-[72px] shrink-0 flex-col items-center gap-2 border-r border-line-subtle bg-bg-raised py-4">
-      <Link to="/" aria-label="Reel Studio home" className="mb-4 flex h-8 w-8 items-center justify-center rounded-card bg-fg-primary text-bg-base">
+    <nav aria-label="Main" className="flex w-[72px] shrink-0 flex-col items-center gap-2 border-r border-line-subtle bg-bg-raised/75 py-4 backdrop-blur-md">
+      <Link to="/" aria-label="Reel Studio home" className="mb-4 flex h-9 w-9 items-center justify-center rounded-card bg-[linear-gradient(135deg,#F2A93B,#45D0C1)] text-signal-on shadow-[0_6px_20px_-6px_rgba(242,169,59,0.7)]">
         <Icon name="film" size={18} />
       </Link>
       {NAV.map((n) => (

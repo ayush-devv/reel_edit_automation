@@ -136,14 +136,14 @@ export function drawSafeZones(): HTMLCanvasElement {
     ctx.roundRect(x0, y0, x1 - x0, y1 - y0, 18);
     ctx.stroke();
   }
-  ctx.strokeStyle = "#6EA2E0";
+  ctx.strokeStyle = "#45D0C1";
   ctx.lineWidth = 2;
   ctx.setLineDash([10, 8]);
   ctx.beginPath();
   ctx.roundRect(x0, y0, x1 - x0, y1 - y0, 18);
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = "#6EA2E0";
+  ctx.fillStyle = "#45D0C1";
   ctx.font = "500 15px Inter, system-ui, sans-serif";
   ctx.fillText("Safe zone", x0 + 14, y0 + 26);
   return c;

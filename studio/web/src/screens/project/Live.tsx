@@ -160,7 +160,7 @@ export default function Live() {
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-surface bg-bg-inset" aria-label="Pipeline">
+      <section className="stage-lit overflow-hidden rounded-surface" aria-label="Pipeline">
         {can3D ? (
           <div className="h-[340px]">
             <Suspense fallback={<div className="h-full" />}>

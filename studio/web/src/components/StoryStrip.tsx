@@ -39,7 +39,7 @@ export function StoryStrip({ projectId, versionKey }: { projectId: string; versi
   const span = Math.max(0.001, beats.at(-1)!.end - beats[0].start);
   let rot = 0;
   return (
-    <section aria-label="Story strip" className="sticky bottom-0 z-10 flex h-[72px] shrink-0 items-center gap-8 border-t border-line-subtle bg-bg-raised px-8">
+    <section aria-label="Story strip" className="sticky bottom-0 z-10 flex h-[72px] shrink-0 items-center gap-8 border-t border-line-subtle bg-bg-raised/80 px-8 backdrop-blur-md">
       <p className="shrink-0">
         <span className="font-mono text-timecode-lg tabular text-fg-primary">{fmt(Number.isFinite(total) && total > 0 ? total : span)}</span>
         <span className="ml-3 text-meta text-fg-muted">

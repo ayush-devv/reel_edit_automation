@@ -118,7 +118,7 @@ function Row({
 function Num({ label, value, onChange, step = 0.05, min, max, suffix }: { label: string; value: string; onChange: (v: string) => void; step?: number; min: number; max: number; suffix?: string }) {
   return (
     <div className="flex items-center gap-3">
-      <input type="range" aria-label={`${label} slider`} min={min} max={max} step={step} value={Number(value) || 0} onChange={(e) => onChange(e.target.value)} className="h-1 flex-1 accent-[#A9ACB2]" />
+      <input type="range" aria-label={`${label} slider`} min={min} max={max} step={step} value={Number(value) || 0} onChange={(e) => onChange(e.target.value)} className="h-1 flex-1 accent-[#45D0C1]" />
       <div className="relative w-28 shrink-0">
         <TextInput aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} inputMode="decimal" className="h-8 pr-9 font-mono text-mono" />
         {suffix && <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-label text-fg-muted">{suffix}</span>}
