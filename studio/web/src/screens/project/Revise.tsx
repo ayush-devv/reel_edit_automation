@@ -5,6 +5,7 @@ import { friendlyError } from "../../api/errors";
 import type { Project, Version } from "../../api/types";
 import { Icon } from "../../components/icons";
 import { Button, cx, IconButton, Mono, Notice, Panel, TextArea, TextInput } from "../../components/ui";
+import { useQuery } from "../../hooks/useQuery";
 import { ago, usd } from "../../lib/format";
 import { parseNotes } from "../../lib/notes";
 import { isJobTerminal } from "../../lib/status";
@@ -222,6 +223,8 @@ export function ClientNotes({ p }: { p: Project }) {
   const [busy, setBusy] = useState<"preview" | "apply" | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const links = useQuery(() => api.reviewLinks(p.id), [api, p.id], { intervalMs: 15000 });
+  const inbox = links.data?.notes ?? [];
 
   async function preview(src: string) {
     setBusy("preview");
@@ -260,6 +263,32 @@ export function ClientNotes({ p }: { p: Project }) {
     <Panel title="Client notes">
       {!notes ? (
         <div className="space-y-3">
+          {inbox.length > 0 && (
+            // Notes the client sent through a review link (Deliver). Nothing is sent to the Editor until you preview and apply.
+            <section aria-label="From the review link" className="rounded-control border-l-2 border-info bg-bg-raised px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-label text-info">
+                  From the review link · {inbox.length} message{inbox.length === 1 ? "" : "s"}
+                </p>
+                <Button
+                  className="h-8"
+                  onClick={() => setText((t) => [t.trim(), ...inbox.map((n) => n.text.trim())].filter(Boolean).join("\n"))}
+                >
+                  Use in the box
+                </Button>
+              </div>
+              <ul className="mt-2 max-h-48 space-y-3 overflow-y-auto">
+                {[...inbox].reverse().map((n, i) => (
+                  <li key={i}>
+                    <p className="text-meta text-fg-muted">
+                      {n.name || "Client"} · {ago(new Date(n.at * 1000).toISOString())}
+                    </p>
+                    <p className="whitespace-pre-line font-mono text-mono text-fg-primary">{n.text}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           <TextArea
             aria-label="Paste the client's notes"
             rows={5}

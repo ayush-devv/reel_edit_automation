@@ -23,7 +23,7 @@ from starlette.datastructures import UploadFile
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from reel import config
-from reel.studio import auth, catalog, costs, events, projects
+from reel.studio import auth, catalog, costs, events, projects, review_links
 from reel.studio.jobs import ESTIMATE_GB, JobConflict, JobManager, estimate_render_gb, estimate_run_gb
 from reel.studio.settings import MAX_JOBS_LIMIT, Settings, apply_prefs, load_prefs, save_prefs
 from reel.workspace import Workspace, atomic_write_bytes, atomic_write_json
@@ -75,6 +75,10 @@ class DeliverBody(BaseModel):
 
 class DeliveredBody(BaseModel):
     delivered: bool = True
+
+
+class ReviewLinkBody(BaseModel):
+    hours: float = Field(72, ge=1, le=24 * 30)
 
 
 class LabelBody(BaseModel):
@@ -586,9 +590,84 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         mgr.tick()  # a higher limit starts queued jobs now
         return settings_view()
 
+    # -------------------------------------------------------------- review links (owner side, token required)
+
+    @app.get("/api/projects/{pid}/review-links")
+    def review_links_list(pid: str):
+        ws = ws_of(pid)
+        return {"links": review_links.for_project(s.projects_root, pid), "notes": review_links.notes(ws),
+                "ready": review_links.can_make(ws)}
+
+    @app.post("/api/projects/{pid}/review-links")
+    def review_links_create(pid: str, body: ReviewLinkBody):
+        ws = ws_of(pid)
+        try:  # the small watermarked copy the client sees; (re)made from the current render
+            review_links.ensure_review_copy(ws)
+        except FileNotFoundError as exc:
+            raise ApiError(409, "no rendered reel yet", hint="finish the edit first") from exc
+        except Exception as exc:  # ffmpeg failed: say so, don't create a link that can't play
+            raise ApiError(500, "couldn't make the review copy", str(exc)[-400:]) from exc
+        return review_links.create(s.projects_root, pid, body.hours)
+
+    @app.delete("/api/projects/{pid}/review-links/{link_id}", status_code=204)
+    def review_links_revoke(pid: str, link_id: str):
+        ws_of(pid)
+        if not review_links.revoke(s.projects_root, pid, link_id):
+            raise ApiError(404, "no such link")
+        return Response(status_code=204)
+
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
     def api_not_found(rest: str):
         raise ApiError(404, f"no endpoint /api/{rest}")
+
+    # -------------------------------------------------------------- review links (client side, no token: the link is the key)
+
+    def _client_page(body: str, nonce: str, status: int = 200) -> HTMLResponse:
+        return HTMLResponse(body, status_code=status, headers={**review_links.SECURITY_HEADERS, "Content-Security-Policy": review_links.csp(nonce)})
+
+    def _gone() -> HTMLResponse:
+        nonce = secrets.token_urlsafe(16)
+        return _client_page(review_links.gone_page(nonce), nonce, 410)
+
+    def _link_ws(link_id: str) -> tuple[Path, dict] | None:
+        hit = review_links.resolve(s.projects_root, link_id)
+        if hit is None:
+            return None
+        ws = projects.project_dir(s.projects_root, hit[0])
+        return (ws, hit[1]) if ws is not None and review_links.review_copy(ws) is not None else None
+
+    @app.get("/r/{link_id}", include_in_schema=False)
+    def review_page(link_id: str, sent: int = 0):
+        hit = _link_ws(link_id)
+        if hit is None:
+            return _gone()
+        ws, link = hit
+        nonce = secrets.token_urlsafe(16)
+        title = projects.studio_meta(ws).get("name") or "Your reel"
+        return _client_page(review_links.page(title, link, nonce, link_id, "Thanks — your notes were sent." if sent else ""), nonce)
+
+    @app.get("/r/{link_id}/video", include_in_schema=False)
+    def review_video(link_id: str):
+        hit = _link_ws(link_id)
+        if hit is None:
+            raise StarletteHTTPException(410, "gone")
+        return FileResponse(review_links.review_copy(hit[0]), media_type="video/mp4", headers=review_links.SECURITY_HEADERS)
+
+    @app.post("/r/{link_id}/notes", include_in_schema=False)
+    async def review_notes(link_id: str, request: Request):
+        hit = _link_ws(link_id)
+        if hit is None:
+            return _gone()
+        ws, link = hit
+        if int(request.headers.get("content-length") or 0) > 64_000:
+            raise StarletteHTTPException(413, "too large")
+        form = await request.form()
+        err = review_links.add_note(s.projects_root, ws, link_id, str(form.get("name") or ""), str(form.get("text") or ""))
+        if err:
+            nonce = secrets.token_urlsafe(16)
+            title = projects.studio_meta(ws).get("name") or "Your reel"
+            return _client_page(review_links.page(title, link, nonce, link_id, err, flash_ok=False), nonce, 400)
+        return Response(status_code=303, headers={"Location": f"/r/{link_id}?sent=1", **review_links.SECURITY_HEADERS})
 
     # -------------------------------------------------------------- the web app (studio/web/dist), SPA fallback
 

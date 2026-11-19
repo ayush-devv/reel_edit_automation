@@ -631,3 +631,53 @@ def test_underscore_project_ids_are_projects_not_job_slots(env):
     assert c.post("/api/projects/_real/adjust", json={"kind": "look", "value": "warm"}).status_code == 200
     env["launcher"].finish("adjust")
     assert [v["label"] for v in c.get("/api/projects/_real/versions").json()] == ["Original edit", "Manual"]
+
+
+# ------------------------------------------------------------------ review links (client page without the token)
+
+
+def test_review_link_lifecycle_and_isolation(env, monkeypatch):
+    from reel.studio import review_links
+
+    made = []
+    monkeypatch.setattr(review_links, "_transcode", lambda src, dst: (made.append(src), dst.write_bytes(b"MP4DATA")))
+    ws = make_project(env["root"])
+    ws2 = make_project(env["root"], "p2")
+    (ws2 / "render" / "final.mp4").unlink()
+    c, bare = env["c"], TestClient(env["app"])
+    assert c.post("/api/projects/p2/review-links", json={"hours": 24}).status_code == 409  # no render to make a copy from
+    assert c.get("/api/projects/p2/review-links").json()["ready"] is False
+    assert bare.post("/api/projects/p1/review-links", json={"hours": 24}).status_code == 401  # owner side needs the token
+    link = c.post("/api/projects/p1/review-links", json={"hours": 24}).json()
+    assert made == [ws / "render" / "final.mp4"] and (ws / "export" / "review" / "review.mp4").read_bytes() == b"MP4DATA"
+    assert link["state"] == "active" and link["path"].startswith("/r/") and len(link["id"]) >= 24
+
+    page = bare.get(link["path"])  # the client needs no token
+    assert page.status_code == 200 and "Project p1" in page.text and "Send notes" in page.text
+    assert "default-src 'none'" in page.headers["content-security-policy"] and page.headers["x-robots-tag"].startswith("noindex")
+    assert "Project p2" not in page.text
+    assert bare.get(link["path"] + "/video").content == b"MP4DATA"
+
+    r = bare.post(link["path"] + "/notes", data={"name": " Priya ", "text": "0:12 faster\nlove it"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == link["path"] + "?sent=1"
+    assert bare.post(link["path"] + "/notes", data={"text": "   "}).status_code == 400
+    assert bare.post(link["path"] + "/notes", data={"text": "x" * 5000}).status_code == 400
+    got = c.get("/api/projects/p1/review-links").json()
+    assert got["ready"] and [n["text"] for n in got["notes"]] == ["0:12 faster\nlove it"] and got["notes"][0]["name"] == "Priya"
+    assert got["links"][0]["notes"] == 1
+    assert c.get("/api/projects/p2/review-links").json()["links"] == []  # links belong to one project
+
+    for bad in ("/r/short", "/r/" + "A" * 30, link["path"] + "x"):
+        assert bare.get(bad).status_code in (404, 410), bad
+    assert bare.get("/r/../api/projects").status_code == 401  # a link never opens the token-protected API
+    assert c.delete(f"/api/projects/p2/review-links/{link['id']}").status_code == 404  # another project's link
+    assert c.delete(f"/api/projects/p1/review-links/{link['id']}").status_code == 204
+    assert bare.get(link["path"]).status_code == 410 and bare.get(link["path"] + "/video").status_code == 410
+    assert bare.post(link["path"] + "/notes", data={"text": "late"}).status_code == 410
+
+    expiring = c.post("/api/projects/p1/review-links", json={"hours": 1}).json()
+    real_time = time.time
+    monkeypatch.setattr(time, "time", lambda: real_time() + 7200)
+    assert bare.get(expiring["path"]).status_code == 410
+    monkeypatch.setattr(time, "time", real_time)
+    assert c.post("/api/projects/p1/review-links", json={"hours": 0}).status_code == 400

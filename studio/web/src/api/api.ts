@@ -13,6 +13,8 @@ import type {
   PackageListing,
   Project,
   ProjectSummary,
+  ReviewLink,
+  ReviewLinks,
   Settings,
   SseEvent,
   TimelineView,
@@ -57,6 +59,9 @@ export interface Api {
   deliver(id: string, variants?: string[]): Promise<JobRef>;
   packageListing(id: string): Promise<PackageListing>;
   markDelivered(id: string): Promise<void>;
+  reviewLinks(id: string): Promise<ReviewLinks>;
+  createReviewLink(id: string, hours: number): Promise<ReviewLink>;
+  revokeReviewLink(id: string, linkId: string): Promise<void>;
   label(id: string, sendable: boolean, reason: string): Promise<void>;
   libraries(): Promise<Libraries>;
   indexLibrary(kind: "sfx" | "music", folder: string, source: string, license: string): Promise<JobRef>;

@@ -2,7 +2,7 @@
 // simulator so the live view, the queue and the job-driven screens behave like the real thing.
 import type { Api, JobRef } from "../api";
 import { ApiError } from "../errors";
-import { STAGES, type AdjustKind, type BrandEntry, type Job, type JobStatus, type Project, type ProjectSummary, type SseEvent, type Stage } from "../types";
+import { STAGES, type AdjustKind, type BrandEntry, type Job, type JobStatus, type Project, type ProjectSummary, type ReviewLink, type ReviewNote, type SseEvent, type Stage } from "../types";
 import { parseNotes } from "../../lib/notes";
 import { validateAdjust } from "../../lib/adjust";
 import { BRANDS, COSTS, HEALTH, LAB, LIBRARIES, PACKAGE, SETTINGS, makeProjects, makeTimeline } from "./fixtures";
@@ -16,7 +16,12 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
   const projects = new Map<string, Project>(makeProjects().map((p) => [p.id, p]));
   const brands: BrandEntry[] = clone(BRANDS);
   let settings = clone(SETTINGS);
-  const subs = new Map<string, Set<(ev: SseEvent) => void>>();
+  // Review links: one sample note on the hold project, so the Revise inbox has something to show.
+  const links = new Map<string, ReviewLink[]>();
+  const clientNotes = new Map<string, ReviewNote[]>([
+    ["glow-serum-testimonial", [{ at: Date.now() / 1000 - 3600, link: "mockLink", name: "Priya (DearMa)", text: "0:12 spell the brand DearMa\nlove the ending" }]],
+  ]);
+  const subs =new Map<string, Set<(ev: SseEvent) => void>>();
   let timer: ReturnType<typeof setInterval> | null = null;
   let jobSeq = 100;
 
@@ -349,6 +354,28 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
       const p = must(id);
       p.delivered_at = new Date().toISOString();
       touch(p);
+    },
+    async reviewLinks(id) {
+      await guard();
+      const p = must(id);
+      const t = now();
+      const list = (links.get(id) ?? []).map((l) => ({ ...l, state: l.state === "revoked" ? l.state : l.expires <= t ? ("expired" as const) : ("active" as const) }));
+      return { links: clone(list), notes: clone(clientNotes.get(id) ?? []), ready: !!p.media.final };
+    },
+    async createReviewLink(id, hours) {
+      await guard();
+      const p = must(id);
+      if (!p.media.final) throw new ApiError(409, "no review copy yet");
+      const lid = `mock${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`.slice(0, 28).padEnd(28, "x");
+      const l: ReviewLink = { id: lid, path: `/r/${lid}`, created: now(), expires: now() + hours * 3600, state: "active", notes: 0 };
+      links.set(id, [l, ...(links.get(id) ?? [])]);
+      return clone(l);
+    },
+    async revokeReviewLink(id, linkId) {
+      await guard();
+      const l = (links.get(id) ?? []).find((x) => x.id === linkId);
+      if (!l) throw new ApiError(404, "no such link");
+      l.state = "revoked";
     },
     async label() {
       await guard();

@@ -324,6 +324,31 @@ export interface PackageListing {
   warnings: string[];
 }
 
+/** A private client page (`path` is `/r/<id>`) with the review copy and a notes box. Times are epoch seconds. */
+export interface ReviewLink {
+  id: string;
+  path: string;
+  created: number;
+  expires: number;
+  state: "active" | "expired" | "revoked";
+  notes: number;
+}
+
+export interface ReviewNote {
+  at: number;
+  /** First 8 characters of the link id it came through. */
+  link: string;
+  name: string;
+  text: string;
+}
+
+/** GET /api/projects/{id}/review-links. `ready` = a review copy exists, so a link can be made. */
+export interface ReviewLinks {
+  links: ReviewLink[];
+  notes: ReviewNote[];
+  ready: boolean;
+}
+
 /** Current value of every guided adjustment (FR-8). */
 export interface AdjustState {
   caption_family: string | null;

@@ -61,6 +61,24 @@ describe("screens", () => {
     expect(screen.getByRole("link", { name: "Watch it live" })).toBeInTheDocument();
   });
 
+  it("deliver creates a review link and can turn it off", async () => {
+    const api = createMockApi();
+    render(<TestApp api={api} path={`/p/${HOLD}/deliver`} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Create review link" }, T));
+    const list = await screen.findByRole("list", { name: "Active review links" }, T);
+    expect(within(list).getByText(/\/r\/mock/)).toBeInTheDocument();
+    const id = (await api.reviewLinks(HOLD)).links[0].id;
+    await api.revokeReviewLink(HOLD, id);
+    expect((await api.reviewLinks(HOLD)).links[0].state).toBe("revoked");
+  });
+
+  it("revise shows notes sent through a review link and puts them in the box", async () => {
+    render(<TestApp api={createMockApi()} path={`/p/${HOLD}/revise`} />);
+    const inbox = await screen.findByRole("region", { name: "From the review link" }, T);
+    fireEvent.click(within(inbox).getByRole("button", { name: "Use in the box" }));
+    expect((screen.getByRole("textbox", { name: "Paste the client's notes" }) as HTMLTextAreaElement).value).toContain("0:12 spell the brand DearMa");
+  });
+
   it("project screens dock the story strip with the reel's beats", async () => {
     render(<TestApp api={createMockApi()} path={`/p/${HOLD}/review`} />);
     const strip = await screen.findByRole("region", { name: "Story strip" }, T);

@@ -5,7 +5,7 @@ import { useApi } from "../../api/context";
 import { friendlyError } from "../../api/errors";
 import type { PackageFile } from "../../api/types";
 import { Icon, type IconName } from "../../components/icons";
-import { Button, cx, IconButton, Loading, Mono, Notice, Panel } from "../../components/ui";
+import { Button, cx, IconButton, Loading, Mono, Notice, Panel, Select } from "../../components/ui";
 import { useQuery } from "../../hooks/useQuery";
 import { ago, bytes } from "../../lib/format";
 import { NotYet, useProject } from "./ProjectLayout";
@@ -29,6 +29,114 @@ function aspectOf(f: PackageFile) {
   if (f.path.includes("4x5")) return ASPECT.feed_4x5;
   if (f.path.includes("square")) return ASPECT.square;
   return ASPECT.final;
+}
+
+const left = (expires: number) => {
+  const h = (expires - Date.now() / 1000) / 3600;
+  return h >= 48 ? `${Math.round(h / 24)} days` : h >= 1 ? `${Math.round(h)} h` : `${Math.max(1, Math.round(h * 60))} min`;
+};
+
+/** FR-9 review link: a private client page with the review copy and a notes box, expiring after a set time. */
+function ReviewLinkPanel({ projectId }: { projectId: string }) {
+  const api = useApi();
+  const q = useQuery(() => api.reviewLinks(projectId), [api, projectId], { intervalMs: 15000 });
+  const [hours, setHours] = useState("72");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const active = (q.data?.links ?? []).filter((l) => l.state === "active");
+  const old = (q.data?.links ?? []).length - active.length;
+
+  async function create() {
+    setBusy("create");
+    setErr(null);
+    try {
+      const l = await api.createReviewLink(projectId, Number(hours));
+      await navigator.clipboard?.writeText(origin + l.path).then(() => setCopied(l.id), () => undefined);
+      q.reload();
+    } catch (e) {
+      setErr(friendlyError(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function revoke(id: string) {
+    if (!window.confirm("Turn this link off? The client will see “This review link no longer works”.")) return;
+    setBusy(id);
+    setErr(null);
+    try {
+      await api.revokeReviewLink(projectId, id);
+      q.reload();
+    } catch (e) {
+      setErr(friendlyError(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Panel title="Review link">
+      <p className="text-fg-secondary">A private page with the watermarked review copy and a notes box for the client. Their notes arrive in Revise.</p>
+      <p className="mt-2 text-meta text-fg-muted">The studio only listens on this Mac, so the link works elsewhere only if you expose it on purpose (for example with a tunnel).</p>
+      {q.data && !q.data.ready ? (
+        <p className="mt-3 text-meta text-fg-secondary">Available once the edit has rendered. Creating a link makes a small watermarked copy of the reel.</p>
+      ) : (
+        <div className="mt-4 flex items-end gap-2">
+          <div className="w-32">
+            <label htmlFor="rl-hours" className="mb-1.5 block text-meta text-fg-secondary">
+              Expires after
+            </label>
+            <Select id="rl-hours" value={hours} onChange={(e) => setHours(e.target.value)}>
+              <option value="24">1 day</option>
+              <option value="72">3 days</option>
+              <option value="168">7 days</option>
+              <option value="720">30 days</option>
+            </Select>
+          </div>
+          <Button icon="link" busy={busy === "create"} onClick={create}>
+            Create review link
+          </Button>
+        </div>
+      )}
+      {active.length > 0 && (
+        <ul className="mt-4 divide-y divide-line-subtle border-y border-line-subtle" aria-label="Active review links">
+          {active.map((l) => (
+            <li key={l.id} className="py-3">
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate font-mono text-mono text-fg-primary" title={origin + l.path}>
+                  {origin + l.path}
+                </span>
+                <IconButton
+                  icon={copied === l.id ? "check" : "copy"}
+                  label="Copy link"
+                  onClick={() => navigator.clipboard?.writeText(origin + l.path).then(() => setCopied(l.id), () => undefined)}
+                />
+                <a href={l.path} target="_blank" rel="noreferrer" aria-label="Open the client page" title="Open the client page" className="inline-flex h-8 w-8 items-center justify-center rounded-control text-fg-secondary hover:bg-bg-overlay hover:text-fg-primary">
+                  <Icon name="eye" size={16} />
+                </a>
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-3 text-meta text-fg-muted">
+                <span>
+                  Expires in {left(l.expires)} · {l.notes} note{l.notes === 1 ? "" : "s"}
+                  {copied === l.id && <span className="text-st-sendable"> · copied</span>}
+                </span>
+                <button type="button" className="text-fg-secondary hover:text-st-fail disabled:opacity-50" disabled={busy === l.id} onClick={() => revoke(l.id)}>
+                  Turn off…
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {old > 0 && <p className="mt-3 text-meta text-fg-muted">{old} expired or turned-off link{old === 1 ? "" : "s"}.</p>}
+      {err || q.error ? (
+        <div className="mt-3">
+          <Notice tone="error">{err ?? friendlyError(q.error)}</Notice>
+        </div>
+      ) : null}
+    </Panel>
+  );
 }
 
 export default function Deliver() {
@@ -192,13 +300,8 @@ export default function Deliver() {
             </>
           )}
         </Panel>
-        <Panel title="Review link">
-          <p className="text-fg-secondary">A private page with the review copy and a notes box for the client, expiring after a time you choose.</p>
-          <p className="mt-2 text-meta text-fg-muted">It’s only reachable from outside this Mac if you expose it on purpose (for example with a tunnel). Not available in this version yet.</p>
-          <Button className="mt-3" icon="link" disabled>
-            Create review link
-          </Button>
-        </Panel>
+        <ReviewLinkPanel projectId={p.id} />
+
         {msg && <Notice tone={msg.tone === "ok" ? "ok" : "error"}>{msg.text}</Notice>}
       </div>
     </div>
