@@ -127,18 +127,22 @@ def _rgb(hex_: str) -> list[float]:
 
 
 def load_for_render(meta: dict, accent: str | None = None) -> dict:
-    """The animation JSON for the overlay props. Recolourable files (our pack) swap their white for the accent."""
+    """The animation JSON for the overlay props. Recolourable files swap their drawing colour (`recolour_from`, white
+    by default — our pack; useAnimations icons are drawn in black) for the accent. A dark drawing colour never reaches
+    the video unrecoloured: without a usable accent it becomes white."""
     data = json.loads(Path(meta["file"]).read_text())
-    if not (meta.get("recolour") and accent and accent.startswith("#") and len(accent) == 7):
+    src = _rgb(meta.get("recolour_from") or "#FFFFFF")
+    ok_accent = bool(accent and accent.startswith("#") and len(accent) == 7)
+    if not meta.get("recolour") or (not ok_accent and src == [1.0, 1.0, 1.0]):
         return data
     data = copy.deepcopy(data)
-    target = _rgb(accent)
+    target = _rgb(accent) if ok_accent else [1.0, 1.0, 1.0]
 
     def walk(node):
         if isinstance(node, dict):
             if node.get("ty") in ("st", "fl") and isinstance(node.get("c"), dict) and node["c"].get("a") == 0:
                 k = node["c"].get("k")
-                if isinstance(k, list) and len(k) >= 3 and all(abs(x - 1) < 1e-6 for x in k[:3]):
+                if isinstance(k, list) and len(k) >= 3 and all(abs(x - s) < 1e-3 for x, s in zip(k[:3], src)):
                     node["c"]["k"] = [*target, *(k[3:] or [1])]
             for v in node.values():
                 walk(v)
@@ -147,4 +151,24 @@ def load_for_render(meta: dict, accent: str | None = None) -> dict:
                 walk(v)
 
     walk(data["layers"])
+    for a in data.get("assets") or []:  # precomps carry their own shapes
+        walk(a.get("layers", []))
     return data
+
+
+def menu(lib: dict[str, dict], text: str, k: int = 14) -> dict[str, dict]:
+    """What the Editor sees: our own pack always, plus the k library animations whose tags best match the talk (not
+    300 lines of icons in every prompt)."""
+    import re
+
+    words = {w.rstrip("s") for w in re.findall(r"[a-z]{3,}", (text or "").lower())}
+    own = {i: a for i, a in lib.items() if a.get("source") == "reel procedural"}
+    scored = []
+    for i, a in lib.items():
+        if i in own or a.get("trademark"):  # platform/brand logos: never offered in a client's reel
+            continue
+        tags = {t.lower().rstrip("s") for t in [*a.get("tags", []), *str(a.get("name", "")).replace("-", " ").split()]}
+        score = len(tags & words)
+        if score:
+            scored.append((-score, a.get("name", ""), i))
+    return {**own, **{i: lib[i] for _s, _n, i in sorted(scored)[:k]}}

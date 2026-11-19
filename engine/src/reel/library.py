@@ -155,6 +155,68 @@ def index_music(folder: Path, *, source: str, license_: str, rel_to: Path | None
     return out
 
 
+def add_file(path: Path, *, kind: str, licence_id: str, source: str, source_url: str = "", attribution: str = "", credit: str = "",
+             category: str | None = None, mood: str | None = None, root: Path = assets_mod.ASSETS_DIR) -> dict:
+    """Add ONE hand-picked file to a library with its provenance (asset-library phase C). The licence must be a row in
+    assets/licenses/registry.yaml and not blocked; a licence that needs attribution needs the attribution text. The file
+    is copied under assets/<kind>/added/<source>/ and measured like an indexed one. Never a bulk download."""
+    import datetime as dt
+    import shutil
+
+    from reel import licences
+
+    reg = licences.load_registry()
+    lic = reg.licences.get(licence_id)
+    if lic is None:
+        raise ValueError(f"licence {licence_id!r} is not in assets/licenses/registry.yaml (known: {', '.join(sorted(reg.licences))})")
+    if lic.blocked:
+        raise ValueError(f"licence {licence_id!r} is blocked: {lic.blocked}")
+    if lic.attribution_required and not attribution.strip():
+        raise ValueError(f"{lic.title} needs the exact attribution text (--attribution)")
+    if not path.is_file():
+        raise ValueError(f"no file {path}")
+    slug = re.sub(r"[^a-z0-9]+", "-", source.lower()).strip("-") or "added"
+    dest = root / kind / "added" / slug / path.name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(path, dest)
+    stored = _stored_path(dest, root)
+    prov = {"source": source, "license": lic.title, "licence_id": lic.id, "source_url": source_url, "attribution": attribution,
+            **({"credit": credit} if credit else {}), "sha256": hashlib.sha256(dest.read_bytes()).hexdigest(),
+            "downloaded_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
+    if kind == "sfx":
+        cat = category or sfx_category(Path(path.name))
+        if cat is None:
+            raise ValueError(f"can't tell the SFX category from the name {path.name!r}: pass --category ({', '.join(c for c, _ in SFX_CATEGORIES)})")
+        y, rate = _mono(dest)
+        entry = {"id": _id(cat, stored), "file": stored, "name": dest.stem, "category": cat, "duration_ms": int(round(y.size / rate * 1000)),
+                 "peak_ms": peak_ms(y, rate), "peak_dbfs": _peak_db(y), **prov}
+    elif kind == "music":
+        import librosa
+
+        from reel import music_structure
+
+        y, rate = librosa.load(str(dest), sr=22050, mono=True)
+        bpm, beat_ms, down_ms, tracker = music_structure.beats(y, rate)
+        entry = {"id": _id("music", stored), "file": stored, "title": dest.stem.replace("_", " "), "duration_ms": int(round(y.size / rate * 1000)),
+                 "bpm": bpm, "beats_ms": beat_ms, "downbeats_ms": down_ms, "beats_by": tracker, "mood": mood or "", **prov,
+                 **(music_structure.find_drop(y, rate, down_ms) or {})}
+    elif kind == "lottie":
+        from reel import lottie
+
+        lottie.SKIPPED.clear()
+        entry = lottie.entry_for(dest, source=source, license_=lic.title, rel_to=root, credit=credit)
+        if entry is None:
+            dest.unlink()
+            raise ValueError(f"refused: {lottie.SKIPPED[-1][1] if lottie.SKIPPED else 'failed the Lottie checks'}")
+        entry.update({k: v for k, v in prov.items() if k not in ("source", "license")})
+        lottie.write_index([entry], root=root)
+        return entry
+    else:
+        raise ValueError("kind must be sfx, music or lottie")
+    write_index(kind, [entry], root=root)
+    return entry
+
+
 def remeasure_music(root: Path = assets_mod.ASSETS_DIR) -> dict:
     """Re-measure beats, downbeats and the drop of every indexed track that is on this machine (the music
     index is committed; the audio is fetched). Other fields — title, mood, licence — are kept."""

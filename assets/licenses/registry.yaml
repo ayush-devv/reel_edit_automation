@@ -119,3 +119,4 @@ sources:
   "Pexels": {licence: pexels}
   "Pixabay": {licence: pixabay-content}
   "client": {licence: client-supplied}
+  "useAnimations": {licence: mit, notice: useanimations-LICENSE.txt}  # assets/lottie/useanimations, commit f7af6f5 (2026-10-30)
