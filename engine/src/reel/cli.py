@@ -217,6 +217,13 @@ def _cmd_label(args: argparse.Namespace) -> int:
 def _cmd_calibrate(args: argparse.Namespace) -> int:
     from reel import calibrate
 
+    if args.auto:
+        from reel import calibrate_auto
+
+        rep = calibrate_auto.run(Path(args.projects).resolve(), Path(args.gold).resolve(), args.project, args.trials,
+                                 Path(args.out).resolve() if args.out else calibrate_auto.DEFAULT_OUT)
+        print(json.dumps({k: rep[k] for k in ("rule", "known_good_reels", "gates", "seconds")}, indent=2))
+        return 0
     print(json.dumps(calibrate.report(calibrate.collect(Path(args.projects).resolve())), indent=2))
     return 0
 
@@ -404,8 +411,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--note")
     p.set_defaults(func=_cmd_label)
 
-    p = sub.add_parser("calibrate", help="Reviewer agreement + gate false-positive rates vs owner labels")
+    p = sub.add_parser("calibrate", help="Reviewer agreement + gate false-positive rates vs owner labels; --auto: pro finals + injected defects")
     p.add_argument("--projects", default="projects")
+    p.add_argument("--auto", action="store_true", help="ADR-0033: false alarms on gold-set pro finals, catches of injected defects")
+    p.add_argument("--project", default="_real_doac", help="(--auto) one of our rendered projects to inject defects into")
+    p.add_argument("--gold", default="samples/gold", help="(--auto) folder of pro finals (<reel>/final.mp4)")
+    p.add_argument("--trials", type=int, default=10)
+    p.add_argument("--out", default=None, help="(--auto) report folder (default eval/calibration)")
     p.set_defaults(func=_cmd_calibrate)
 
     p = sub.add_parser("library", help="index a local SFX or music folder into assets/")

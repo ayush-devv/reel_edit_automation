@@ -195,12 +195,20 @@ def face_cut(tl: Timeline, faces_props: list[dict]) -> GateResult:
 
 def caption_pixels(tl: Timeline, base: Path, overlay: Path, faces_props: list[dict], safe: dict, flashes: list[tuple[int, int]]) -> list[GateResult]:
     """Contrast, caption-over-face and safe-zone from the overlay alpha and the base pixels behind it."""
-    fps = tb.parse_rate(tl.fps)
     frames = page_frames(tl)
     if not frames:
         return [GateResult(g, True, detail="no captions") for g in ("caption_contrast", "caption_over_face", "safe_zone")]
-    ov = frames_at(overlay, frames, alpha=True)
-    bg = frames_at(base, frames)
+    return caption_pixels_from(tl, frames_at(overlay, frames, alpha=True), frames_at(base, frames), faces_props, safe, flashes)
+
+
+FAINT_ALPHA = 0.5  # caption pixels that never reach this opacity are see-through
+
+
+def caption_pixels_from(tl: Timeline, ov: dict, bg: dict, faces_props: list[dict], safe: dict, flashes: list[tuple[int, int]]) -> list[GateResult]:
+    """`ov` / `bg`: frame → RGBA overlay / RGB base samples (from frames_at). Contrast uses the fill colour the
+    overlay actually rendered (not only the tokens), so a caption drawn too faint or in the wrong colour is caught."""
+    fps = tb.parse_rate(tl.fps)
+    frames = page_frames(tl)
     t = tl.captions.tokens
     fill = hex_rgb(t.get("base_color") or t.get("speaker_a") or "#FFFFFF")[:3]
     on = lambda v: v == "true" or bool(re.fullmatch(r"#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?", v or ""))  # noqa: E731
@@ -215,8 +223,11 @@ def caption_pixels(tl: Timeline, base: Path, overlay: Path, faces_props: list[di
             continue
         a = o[..., 3] / 255.0
         h, w = a.shape
-        ys, xs = np.nonzero(a > 0.5)
+        ys, xs = np.nonzero(a > FAINT_ALPHA)
         if ys.size == 0:
+            if (a > 0.05).mean() > 0.002:  # a caption is drawn but nowhere opaque: see-through text
+                low.append(tc(f, fps))
+                worst = min(worst, 1.0)
             continue
         # background right behind the caption block (bbox, excluding text pixels)
         y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
@@ -224,9 +235,17 @@ def caption_pixels(tl: Timeline, base: Path, overlay: Path, faces_props: list[di
         behind = region.reshape(-1, 3) if region.size else b[y0:y1, x0:x1].reshape(-1, 3)
         if box:
             behind = (np.asarray(box[:3]) * box[3] + behind.mean(axis=0) * (1 - box[3]))[None, :]
-        ratio = contrast_ratio(fill, behind)
-        if stroke:
-            ratio = max(ratio, contrast_ratio(fill, stroke_rgb))
+        solid = o[..., :3][a > 0.9].reshape(-1, 3).astype(float)
+        if solid.shape[0] >= 20:
+            # legibility of what was actually rendered: the text's brightest and darkest parts (fill and outline)
+            # against the background, or against each other (an outline carries text on any background)
+            lum = solid @ np.array([0.2126, 0.7152, 0.0722])
+            lo, hi = solid[lum <= np.percentile(lum, 10)].mean(axis=0), solid[lum >= np.percentile(lum, 90)].mean(axis=0)
+            ratio = max(contrast_ratio(hi, behind), contrast_ratio(lo, behind), contrast_ratio(hi, lo) if stroke else 0.0)
+        else:  # too few opaque pixels to measure: fall back to what the style tokens promise
+            ratio = contrast_ratio(fill, behind)
+            if stroke:
+                ratio = max(ratio, contrast_ratio(fill, stroke_rgb))
         worst = min(worst, ratio)
         if ratio < MIN_CONTRAST:
             low.append(tc(f, fps))

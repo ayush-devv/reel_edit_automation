@@ -25,9 +25,14 @@ JS = {"js_runtimes": {"node": {}}, "compat_opts": {"no-certifi"}}  # system CA b
 ASR = MlxWhisper("mlx-community/whisper-large-v3-turbo")
 
 
-def meta(video_id: str) -> dict:
-    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True, **JS}) as y:
-        i = y.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+def meta(video_id: str) -> dict | None:
+    """None for videos we cannot read (members-only, private, age-gated, removed): skip, never crash the batch."""
+    try:
+        with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True, **JS}) as y:
+            i = y.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+    except yt_dlp.utils.DownloadError as e:
+        print(f"  skip {video_id}: {str(e).splitlines()[0][:120]}")
+        return None
     return {"id": video_id, "date": i.get("upload_date"), "duration": i.get("duration"), "title": i.get("title")}
 
 
@@ -115,8 +120,8 @@ def main() -> None:
     chan = a.handle.lstrip("@")
     cache = b.SRC / chan / "asr"
     cache.mkdir(parents=True, exist_ok=True)
-    shorts = [meta(s["id"]) for s in b.list_tab(a.handle, "shorts", a.shorts)]
-    eps = [meta(e["id"]) for e in b.list_tab(a.handle, "videos", a.episodes)]
+    shorts = [m for s in b.list_tab(a.handle, "shorts", a.shorts) if (m := meta(s["id"]))]
+    eps = [m for e in b.list_tab(a.handle, "videos", a.episodes) if (m := meta(e["id"]))]
     eps = [e for e in eps if 600 < (e["duration"] or 0) <= MAX_EPISODE_S and e["date"]]
     print(f"{chan}: {len(shorts)} shorts, {len(eps)} episodes > 10 min", flush=True)
     made = 0

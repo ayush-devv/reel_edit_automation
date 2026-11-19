@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from reel import autofix, calibrate, config, qa, tools, verdict
@@ -147,7 +148,16 @@ def test_caption_pixel_gates(tmp_path):
     assert not contrast.ok and contrast.measured["min_ratio"] < 1.5  # yellow on yellow
     assert not over_face.ok and safe_zone.ok
     stroked = _tl([_page(10, 40, "SAVE", "MONEY")], dur=50, tokens={"base_color": "#FFFF00", "stroke": "true"})
-    assert qa.caption_pixels(stroked, base, ov, [], safe, [])[0].ok  # outlined text passes on any background
+    # the gate judges what was rendered: a stroke token with no outline drawn does not save yellow-on-yellow …
+    assert not qa.caption_pixels(stroked, base, ov, [], safe, [])[0].ok
+    # … while an outline that is really there carries the text on any background
+    frames = qa.page_frames(stroked)
+    ovf, bgf = qa.frames_at(ov, frames, alpha=True), qa.frames_at(base, frames)
+    for f in list(ovf):
+        o = ovf[f] = ovf[f].copy()
+        ys, xs = np.nonzero(o[..., 3] > 128)
+        o[max(0, ys.min() - 3):ys.min(), xs.min():xs.max() + 1] = (0, 0, 0, 255)  # a dark outline band on the text
+    assert qa.caption_pixels_from(stroked, ovf, bgf, [], safe, [])[0].ok
 
 
 @pytest.mark.integration
