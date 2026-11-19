@@ -1,0 +1,128 @@
+{
+  "animations": [
+    {
+      "aspect": "square",
+      "description": "a heart pops in with an overshoot",
+      "duration_ms": 1000,
+      "file": "lottie/procedural/heart_pop.json",
+      "fps": 30.0,
+      "height": 512,
+      "id": "lt_0716f6cf",
+      "license": "owned",
+      "name": "heart_pop",
+      "recolour": true,
+      "source": "reel procedural",
+      "tags": [
+        "heart",
+        "love",
+        "like",
+        "favourite"
+      ],
+      "width": 512
+    },
+    {
+      "aspect": "square",
+      "description": "an arrow draws itself and bounces, pointing down",
+      "duration_ms": 1600,
+      "file": "lottie/procedural/arrow_bounce.json",
+      "fps": 30.0,
+      "height": 512,
+      "id": "lt_1180e486",
+      "license": "owned",
+      "name": "arrow_bounce",
+      "recolour": true,
+      "source": "reel procedural",
+      "tags": [
+        "arrow",
+        "point",
+        "look",
+        "down",
+        "here"
+      ],
+      "width": 512
+    },
+    {
+      "aspect": "square",
+      "description": "three rings pulse outward and fade",
+      "duration_ms": 1200,
+      "file": "lottie/procedural/pulse_ring.json",
+      "fps": 30.0,
+      "height": 512,
+      "id": "lt_3dc13dbf",
+      "license": "owned",
+      "name": "pulse_ring",
+      "recolour": true,
+      "source": "reel procedural",
+      "tags": [
+        "pulse",
+        "ring",
+        "attention",
+        "ping",
+        "focus"
+      ],
+      "width": 512
+    },
+    {
+      "aspect": "square",
+      "description": "a ring and a check mark draw themselves, then settle",
+      "duration_ms": 1500,
+      "file": "lottie/procedural/check_draw.json",
+      "fps": 30.0,
+      "height": 512,
+      "id": "lt_4d9daf49",
+      "license": "owned",
+      "name": "check_draw",
+      "recolour": true,
+      "source": "reel procedural",
+      "tags": [
+        "check",
+        "done",
+        "yes",
+        "correct",
+        "tick"
+      ],
+      "width": 512
+    },
+    {
+      "aspect": "square",
+      "description": "a four-point star flashes with rays bursting outward",
+      "duration_ms": 1000,
+      "file": "lottie/procedural/sparkle_burst.json",
+      "fps": 30.0,
+      "height": 512,
+      "id": "lt_557b36c1",
+      "license": "owned",
+      "name": "sparkle_burst",
+      "recolour": true,
+      "source": "reel procedural",
+      "tags": [
+        "sparkle",
+        "burst",
+        "wow",
+        "highlight",
+        "magic"
+      ],
+      "width": 512
+    },
+    {
+      "aspect": "wide",
+      "description": "a hand-drawn underline swipes across (wide)",
+      "duration_ms": 1000,
+      "file": "lottie/procedural/underline_swipe.json",
+      "fps": 30.0,
+      "height": 160,
+      "id": "lt_ca599533",
+      "license": "owned",
+      "name": "underline_swipe",
+      "recolour": true,
+      "source": "reel procedural",
+      "tags": [
+        "underline",
+        "emphasis",
+        "swipe",
+        "stroke"
+      ],
+      "width": 512
+    }
+  ]
+}

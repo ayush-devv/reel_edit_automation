@@ -5,7 +5,7 @@ import { useApi } from "../api/context";
 import { friendlyError } from "../api/errors";
 import { Icon } from "../components/icons";
 import { PageHeader } from "../components/Shell";
-import { Button, cx, Field, Notice, Panel, ProgressBar, Segmented, Select, TextArea, TextInput } from "../components/ui";
+import { Button, cx, Field, Notice, Panel, ProgressBar, Segmented, Select, TextArea, TextInput, Toggle } from "../components/ui";
 import { useStatus } from "../hooks/status";
 import { useQuery } from "../hooks/useQuery";
 import { EMPTY_FORM, formErrors, formWithDefaults, GENRES, GOALS, loadTemplates, PLATFORMS, saveTemplate, toBrief, type BriefForm } from "../lib/brief";
@@ -56,6 +56,9 @@ export default function NewEdit() {
   const [form, setForm] = useState<BriefForm>(EMPTY_FORM);
   const [brand, setBrand] = useState("");
   const [refUrl, setRefUrl] = useState("");
+  const keySet = !!settings.data?.pexels_key_set;
+  const [stockWanted, setStockWanted] = useState(true);
+  const stock = keySet && stockWanted;
   const [sent, setSent] = useState<{ loaded: number; total: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +116,7 @@ export default function NewEdit() {
     }
     setBusy(true);
     try {
-      const { id } = await api.createProject({ files, name: form.name.trim(), brief: toBrief(form), brand: brand || null, reference_url: refUrl.trim() || null }, (loaded, total) =>
+      const { id } = await api.createProject({ files, name: form.name.trim(), brief: toBrief(form), brand: brand || null, reference_url: refUrl.trim() || null, stock }, (loaded, total) =>
         setSent({ loaded, total }),
       );
       nav(`/p/${id}/live`);
@@ -234,6 +237,17 @@ export default function NewEdit() {
                   </option>
                 ))}
               </SF>
+              <Toggle
+                checked={stock}
+                disabled={!keySet}
+                onChange={setStockWanted}
+                label="Find stock b-roll for this talk"
+                description={
+                  keySet
+                    ? "The Editor writes searches from what is said and picks cutaways from Pexels (free for commercial use). Clips stay in this project."
+                    : "Needs a free Pexels key. Add it in Settings → Pexels API key."
+                }
+              />
               <TF label="Reference reel (optional)" value={refUrl} onChange={setRefUrl} placeholder="/Users/you/Downloads/reference.mp4" hint="A video file on this Mac (links aren’t supported). The Editor studies its pacing and caption style." />
             </div>
           </Panel>

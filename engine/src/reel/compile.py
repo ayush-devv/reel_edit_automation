@@ -47,7 +47,7 @@ TITLE_MAX_US = 3_000_000
 GRAPHIC_MIN_US = 1_200_000  # a graphic stays at least this long (it has to be read)
 TEXT_CARD_MIN_US = 2_000_000  # a full-screen card needs its word entrance plus a beat to read
 # entrance animation + time to read before the 0.3 s exit (counter: 1.3 s count-up; keyword marks draw after the words)
-GRAPHIC_MIN_US_BY_KIND = {"text_card": TEXT_CARD_MIN_US, "counter": 2_200_000, "keyword_card": 2_000_000, "callout": 1_600_000}
+GRAPHIC_MIN_US_BY_KIND = {"text_card": TEXT_CARD_MIN_US, "counter": 2_200_000, "keyword_card": 2_000_000, "callout": 1_600_000, "lottie": 1_200_000}
 WHOLE_REEL_GRAPHICS = {"progress_bar", "logo_watermark"}  # … and at most this long (or to the end of the first item, if sooner past the minimum)
 
 
@@ -657,7 +657,8 @@ def compile_timeline(
             continue  # validated upstream; never draw an empty logo
         graphics.append(GraphicEvent(id=g.id, kind=g.kind.value, start_f=start, end_f=min(end, total), text=g.text.strip(), emoji=g.emoji.strip(),
                                      value=g.value, style=g.style, position=g.position, x=g.x, y=g.y, accent=accent,
-                                     uri=brand_logo if g.kind.value == "logo_watermark" else "", count_end_f=count_end))
+                                     uri=brand_logo if g.kind.value == "logo_watermark" else g.asset if g.kind.value == "lottie" else "",
+                                     count_end_f=count_end))
 
     return Timeline(
         fps=f"{fps.numerator}/{fps.denominator}", width=width, height=height, duration_f=total,

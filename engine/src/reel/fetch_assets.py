@@ -146,6 +146,17 @@ def fetch_procedural(root: Path) -> list[dict]:
     return _annotate(entries, prov)
 
 
+def fetch_lottie_pack(root: Path) -> list[str]:
+    """Our own Lottie starter pack (reel.lottie_pack): owned, recolourable; indexed into assets/lottie/index.json."""
+    from reel import lottie, lottie_pack
+
+    folder = root / "lottie" / "procedural"
+    meta = lottie_pack.build_all(folder)
+    entries = lottie.index_folder(folder, source="reel procedural", license_="owned", rel_to=root, meta=meta)
+    lottie.write_index(entries, replace=True, root=root)
+    return [f"Lottie pack: skipped {f} ({why})" for f, why in lottie.SKIPPED]
+
+
 # ------------------------------------------------------------------ 2. Kenney (CC0)
 
 KENNEY_PACKS = {"interface-sounds": "Interface Sounds", "impact-sounds": "Impact Sounds", "ui-audio": "UI Audio", "digital-audio": "Digital Audio"}
@@ -472,6 +483,8 @@ def fetch(root: Path = assets_mod.ASSETS_DIR, *, procedural: bool = True, kenney
             _write_note(root, "incompetech-cc-by-4.0.txt", INCOMPETECH_NOTE)
         except Exception as e:  # noqa: BLE001
             problems.append(f"Incompetech: skipped ({type(e).__name__}: {e})")
+    if procedural:
+        problems += fetch_lottie_pack(root)
     if sfx:
         problems += keep_dates("sfx", sfx, root)
         library.write_index("sfx", sfx, replace=True, root=root)

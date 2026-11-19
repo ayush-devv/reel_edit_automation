@@ -97,7 +97,7 @@ STATUS: dict[str, tuple[str, str]] = {
     "cap.transition.light_leak": ("partial", "effects type=light_leak inside one item (place it on the last words before a cut)"),
     "cap.effect.motion_blur": ("partial", "inside whip transitions"),
     "cap.graphics.emoji": ("yes", "finish.graphics emoji_pop (Noto emoji SVG, pop + float)"),
-    "cap.graphics.sticker": ("partial", "emoji_pop only"),
+    "cap.graphics.sticker": ("yes", "finish.graphics lottie (Lottie animations: our starter pack + owner-indexed files) and emoji_pop"),
     "cap.graphics.lower_third": ("yes", "finish.graphics lower_third"),
     "cap.graphics.progress_bar": ("yes", "finish.graphics progress_bar"),
     "cap.graphics.logo_watermark": ("yes", "finish.graphics logo_watermark (brand logo)"),

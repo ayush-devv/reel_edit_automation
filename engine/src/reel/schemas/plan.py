@@ -192,6 +192,7 @@ class GraphicKind(str, Enum):
     cta_card = "cta_card"  # end card over the last line (text, e.g. "Follow for part 2"); style bar | card
     progress_bar = "progress_bar"  # thin bar filling across the top for the whole reel (words ignored)
     logo_watermark = "logo_watermark"  # the brand logo in a corner for the whole reel (needs a brand logo; words ignored); top_right | top_left
+    lottie = "lottie"  # an animation from the Lottie library (asset = its id); style small | medium | large; position upper_left | upper_right | center | beside_face | lower
 
 
 class Graphic(_Strict):
@@ -208,6 +209,7 @@ class Graphic(_Strict):
     x: float  # callout point target as read off the contact sheet: fraction (0–1) of the SOURCE frame shown there; -1 = not used
     y: float
     reason: str
+    asset: str = ""  # lottie: the animation id from the Lottie library; else ""
 
 
 class FinishPlan(_Strict):

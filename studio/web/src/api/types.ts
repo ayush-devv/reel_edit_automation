@@ -5,6 +5,7 @@ export const STAGES = [
   "mezzanine",
   "perception",
   "tables",
+  "stock",
   "broll",
   "reference",
   "story",

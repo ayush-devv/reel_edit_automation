@@ -147,6 +147,8 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
              "  - `text_card` (full screen, ≤ 8 words; dark | light | color) — a chapter or list beat; it hides the speaker, so use 0–2;",
              "  - `cta_card` (last item only; bar | card) — the brief's call to action;",
              "  - `progress_bar` and `logo_watermark` (whole reel; the logo needs a brand logo; top_right | top_left).",
+             "  - `lottie` (an animation from the Lottie library below; `asset` = its id; style small | medium | large; position upper_left | upper_right | center | beside_face | lower) — "
+             "a designed accent on one moment (a check on a claim, an arrow to a thing, a sparkle on a reveal), 0–3 per reel; it plays once from from_word and holds its last frame.",
              "  Top band = lower_third, emoji_pop upper_*, counter/keyword_card upper, cta bar: one at a time, never during the hook title (opening line). "
              "Emoji: one standard emoji (country flags and keycaps are not available).",
              "  Rules (pro motion design): sentence case, short claims without a full stop; two cards in a row never share size, entry and position; "
@@ -171,6 +173,13 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
         lines.append(f"- **{cat}**: " + ", ".join(f"`{e['id']}` {e.get('name', '')} ({e['duration_ms']} ms, peak at {e['peak_ms']} ms)" for e in items))
     lines.append("")
     lines += _library("Music library (bed starts so a beat lands on the first cut; ducked under speech)", inp.idx.music, ("title", "mood", "energy", "bpm", "feel", "duration_ms"))
+    lines += ["## Lottie library (graphic kind `lottie`; our pack is recoloured to the brand accent)", ""]
+    if not inp.idx.lottie:
+        lines += ["Empty — no lottie graphics.", ""]
+    for lid, a in sorted(inp.idx.lottie.items(), key=lambda kv: kv[1].get("name", "")):
+        lines.append(f"- `{lid}` {a.get('name', '')} — {a.get('description', '')} ({a.get('duration_ms', 0) / 1000:.1f} s, {a.get('aspect', '?')}; "
+                     f"tags: {', '.join(a.get('tags', [])[:6])}; {a.get('source', '')})")
+    lines.append("")
     lines += ["## B-roll (cutaways over the voice; `full` replaces the picture, `pip` = picture-in-picture card)", ""]
     if not inp.idx.broll:
         lines += ["Empty — use none.", ""]

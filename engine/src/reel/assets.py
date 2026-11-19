@@ -21,6 +21,7 @@ class Indexes:
     music: dict[str, dict] = field(default_factory=dict)
     broll: dict[str, dict] = field(default_factory=dict)
     caption_families: dict[str, dict] = field(default_factory=dict)
+    lottie: dict[str, dict] = field(default_factory=dict)
 
 
 def _load_json_list(path: Path, key: str, root: Path | None = None) -> dict[str, dict]:
@@ -55,4 +56,5 @@ def load(root: Path = ASSETS_DIR) -> Indexes:
         music=_load_json_list(root / "music" / "music_index.json", "tracks", root),
         broll=_load_json_list(root / "broll_owned" / "index.json", "clips"),
         caption_families=fams,
+        lottie=_load_json_list(root / "lottie" / "index.json", "animations", root),
     )

@@ -271,7 +271,8 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         projects.update_studio_meta(ws, name=name, created=time.time(), client=brief.client if brief else None, brand=brand_id,
                                     footage_s=round(footage, 2) or None)
         opts = {"input": str(raw_dir), "brief": str(ws / "brief.json") if brief else None, "brand": str(brand_file) if brand_file else None,
-                "reference": str(Path(reference).expanduser().resolve()) if reference else None, "language": None}
+                "reference": str(Path(reference).expanduser().resolve()) if reference else None, "language": None,
+                "stock": str(form.get("stock") or "").strip().lower() in ("1", "true", "on")}
         job = submit(pid, "run", cli(*_run_args(ws, opts)), ws=ws, est_gb=estimate_run_gb(footage or None), label="Edit")
         return {"id": pid, "job": job}
 
@@ -723,6 +724,8 @@ def _run_args(ws: Path, opts: dict, force: str | None = None) -> list[str]:
             args += [flag, str(opts[key])]
     if opts.get("skip_visual"):
         args.append("--skip-visual")
+    if opts.get("stock"):
+        args.append("--stock")
     if opts.get("skip_review"):
         args.append("--skip-review")
     if force:

@@ -2,7 +2,8 @@
 // straight-alpha layer, so nothing here relies on blend modes. Timings follow the bang-motion recipe
 // numbers (MIT, Bang Tutorial), re-implemented with Remotion interpolate/Easing — no GSAP.
 import React from "react";
-import { AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
+import { Lottie, type LottieAnimationData } from "@remotion/lottie";
+import { AbsoluteFill, Easing, Img, interpolate, Sequence, staticFile, useCurrentFrame } from "remotion";
 import { Box, FaceSpan, Graphic, OverlayProps } from "./types";
 
 const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
@@ -338,11 +339,46 @@ const Logo: React.FC<{ g: Graphic; p: OverlayProps }> = ({ g, p }) => {
   );
 };
 
+// ------------------------------------------------------------------ lottie: a library animation, played once from its word, holding its last frame
+
+const LOTTIE_WIDTH: Record<string, number> = { small: 0.2, "": 0.3, medium: 0.3, large: 0.42 };
+
+const LottieGraphic: React.FC<{ g: Graphic; p: OverlayProps }> = ({ g, p }) => {
+  const f = useCurrentFrame();
+  const data = g.data as { w?: number; h?: number } | null | undefined;
+  if (!data || !data.w || !data.h) return null;
+  const w = Math.round((LOTTIE_WIDTH[g.style] ?? 0.3) * p.width);
+  const h = Math.round((w * data.h) / data.w);
+  const face = faceAt(p.faces, g.start_f);
+  let left = (p.width - w) / 2;
+  let top = 0.3 * p.height - h / 2;
+  if (g.position === "upper_left") (left = p.safe.left + 24), (top = p.safe.top + 40);
+  if (g.position === "upper_right") (left = p.width - p.safe.right - w - 24), (top = p.safe.top + 40);
+  if (g.position === "lower") top = captionTop(p) - h - 16;
+  if (g.position === "beside_face" && face) {
+    const right = (face.x + face.w) * p.width;
+    left = right + w <= p.width - p.safe.right ? right : face.x * p.width - w;
+    top = (face.y + face.h / 2) * p.height - h / 2;
+  } else if (g.position !== "lower") {
+    top = placeClear(top, h, face, p);
+  }
+  left = Math.min(Math.max(left, p.safe.left), p.width - p.safe.right - w);
+  top = Math.min(Math.max(top, p.safe.top), captionTop(p) - h);
+  const out = exitK(f, g, p.fps);
+  return (
+    <div style={{ position: "absolute", left, top, width: w, height: h, opacity: out, filter: "drop-shadow(0 8px 18px rgba(0,0,0,.35))" }}>
+      <Sequence from={g.start_f} layout="none">
+        <Lottie animationData={g.data as LottieAnimationData} loop={false} style={{ width: w, height: h }} />
+      </Sequence>
+    </div>
+  );
+};
+
 // ------------------------------------------------------------------ dispatch
 
 const KINDS: Record<string, React.FC<{ g: Graphic; p: OverlayProps }>> = {
   emoji_pop: EmojiPop, keyword_card: KeywordCard, lower_third: LowerThird, callout: Callout, counter: Counter,
-  text_card: TextCard, cta_card: CtaCard, progress_bar: ProgressBar, logo_watermark: Logo,
+  text_card: TextCard, cta_card: CtaCard, progress_bar: ProgressBar, logo_watermark: Logo, lottie: LottieGraphic,
 };
 
 /** Full-screen cards sit under the captions; everything else over them. */

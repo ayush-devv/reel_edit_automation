@@ -33,6 +33,7 @@ export const STAGE_LABEL: Record<string, string> = {
   mezzanine: "Mezzanine",
   perception: "Perception",
   tables: "Tables",
+  stock: "Stock b-roll",
   broll: "B-roll",
   reference: "Reference",
   story: "Story",
@@ -52,6 +53,7 @@ export const STAGE_PLAIN: Record<string, string> = {
   mezzanine: "Mezzanine: converting footage to a steady edit-friendly format",
   perception: "Perception: transcribing speech and finding faces, shots and beats",
   tables: "Tables: building the word and shot tables the Editor reads",
+  stock: "Stock b-roll: finding cutaways for this talk on Pexels",
   broll: "B-roll: matching your b-roll clips to what is said",
   reference: "Reference: studying the reference reel the client likes",
   story: "Story: the Editor is choosing the hook and the lines to keep",
@@ -67,7 +69,7 @@ export const STAGE_PLAIN: Record<string, string> = {
 
 /** Stage groups for the pipeline stage (design system: Analyse, Decide, Build, Check and Deliver). */
 export const STAGE_GROUPS: { name: string; stages: string[] }[] = [
-  { name: "Analyse", stages: ["ingest", "mezzanine", "perception", "tables", "broll", "reference"] },
+  { name: "Analyse", stages: ["ingest", "mezzanine", "perception", "tables", "stock", "broll", "reference"] },
   { name: "Decide", stages: ["story", "finish"] },
   { name: "Build", stages: ["compile", "render", "overlay", "composite"] },
   { name: "Check & deliver", stages: ["qa", "package", "variants"] },
@@ -83,7 +85,7 @@ export const RENDER_STAGES =new Set(["render", "overlay", "composite", "variants
  * sends `eta_s: null`; the estimate is labelled as such on screen.
  */
 export const TYPICAL_STAGE_S: Record<string, number> = {
-  ingest: 6, mezzanine: 40, perception: 120, tables: 8, broll: 20, reference: 25, story: 75, finish: 60,
+  ingest: 6, mezzanine: 40, perception: 120, tables: 8, stock: 30, broll: 20, reference: 25, story: 75, finish: 60,
   compile: 4, render: 150, overlay: 90, composite: 30, qa: 70, package: 15, variants: 45,
 };
 

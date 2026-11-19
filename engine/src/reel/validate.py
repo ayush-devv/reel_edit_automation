@@ -161,7 +161,9 @@ GRAPHIC_STYLES = {
     "cta_card": ({"", "bar", "card"}, {""}),
     "progress_bar": ({""}, {""}),
     "logo_watermark": ({""}, {"", "top_left", "top_right"}),
+    "lottie": ({"", "small", "medium", "large"}, {"", "upper_left", "upper_right", "center", "beside_face", "lower"}),
 }
+LOTTIE_MAX = 3
 GRAPHIC_MAX_WORDS = {"keyword_card": 4, "lower_third": 6, "callout": 3, "counter": 4, "text_card": 8, "cta_card": 6}
 GRAPHICS_MAX = 12
 
@@ -432,9 +434,18 @@ def validate_graphics(fin, items, order, uid, need_item, in_item, idx, has_logo:
         if kind == "counter" and g.value > 0 and round(g.value, 2) != g.value:
             issues.append(Issue("counter_decimals", f"{path}.value", f"Counter value {g.value} has more than 2 decimals.",
                                 "Round it the way it is said (the counter shows the exact number)."))
+        if kind == "lottie":
+            known = getattr(idx, "lottie", {}) or {}
+            if not g.asset.strip():
+                issues.append(Issue("graphic_needs_asset", f"{path}.asset", "lottie needs an animation id in `asset`.", "Pick one from the Lottie library list."))
+            elif g.asset not in known:
+                issues.append(Issue("unknown_lottie", f"{path}.asset", f"'{g.asset}' is not in the Lottie library.", "Use an id from the Lottie library list."))
         if kind == "cta_card" and g.item != order[-1]:
             issues.append(Issue("cta_not_last", f"{path}.item", "The CTA card belongs on the last item.", f"Use item {order[-1]}."))
     issues += _top_band_clashes(fin, items, order)
+    if sum(g.kind.value == "lottie" for g in fin.graphics) > LOTTIE_MAX:
+        issues.append(Issue("too_many_lottie", "graphics", f"More than {LOTTIE_MAX} Lottie animations in one reel.",
+                            "Keep 0–3: an animation is an accent on a moment, not decoration."))
     if len(fin.graphics) > GRAPHICS_MAX:
         issues.append(Issue("too_many_graphics", "graphics", f"{len(fin.graphics)} graphics in one reel.",
                             f"Keep at most {GRAPHICS_MAX}: graphics compete with the speaker.", "warning"))
@@ -443,7 +454,7 @@ def validate_graphics(fin, items, order, uid, need_item, in_item, idx, has_logo:
 
 TOP_BAND = {("lower_third", ""), ("lower_third", "bar"), ("lower_third", "tag"), ("emoji_pop", ""), ("emoji_pop", "upper_left"),
             ("emoji_pop", "upper_right"), ("counter", ""), ("counter", "upper"), ("keyword_card", ""), ("keyword_card", "upper"),
-            ("cta_card", ""), ("cta_card", "bar")}
+            ("cta_card", ""), ("cta_card", "bar"), ("lottie", "upper_left"), ("lottie", "upper_right")}
 
 
 def _band(g) -> bool:

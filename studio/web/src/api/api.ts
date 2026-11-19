@@ -32,6 +32,8 @@ export interface NewProjectInput {
   brief: Brief;
   brand?: string | null;
   reference_url?: string | null;
+  /** Find stock b-roll on Pexels for this talk at edit time (needs the Pexels key in Settings). */
+  stock?: boolean;
 }
 
 /** Bytes sent so far, for the per-file progress bars (FR-2). */

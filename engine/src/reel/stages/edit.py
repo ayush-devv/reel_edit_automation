@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 from fractions import Fraction
 from pathlib import Path
@@ -68,27 +69,75 @@ def _model_key(ctx: StageContext) -> dict:
 # ------------------------------------------------------------------ client b-roll pool (optional)
 
 
+# ------------------------------------------------------------------ stock b-roll at edit time (optional, Pexels)
+
+
+def _stock_dir(ctx: StageContext) -> Path:
+    return ctx.ws.path("stock", "clips")
+
+
+def _stock_hash(ctx: StageContext) -> str:
+    """Hash the inputs that produce the searches, never the search results (Pexels changes over time):
+    a rerun with the same talk and brief keeps the clips it already has."""
+    from reel import stock
+
+    if not ctx.options.get("stock"):
+        return "off"
+    return hash_inputs({"summary": _fp(ctx, "tables/summary.md"), "brief": _opt_file(ctx.options.get("brief")),
+                        "key": bool(os.environ.get("PEXELS_API_KEY")), "caps": [stock.MAX_PER_QUERY, stock.MAX_CLIPS],
+                        "persona": file_fingerprint(stock.SCOUT), "v": VERSION})
+
+
+def _stock(ctx: StageContext) -> dict:
+    from reel import stock
+
+    if not ctx.options.get("stock"):
+        return {"status": "off"}
+    brief = ctx.options.get("brief")
+    if brief and Path(brief).exists() and not ctx.ws.path("brief.json").exists():
+        shutil.copyfile(brief, ctx.ws.path("brief.json"))  # the scout reads it from the workspace
+    status = stock.fetch_for_project(ctx.ws.root, _stock_dir(ctx), _caller(ctx), log_file=ctx.ws.path("log", "runs.jsonl"))
+    atomic_write_json(ctx.ws.path("stock", "status.json"), status)
+    if status["status"] != "ok":
+        log.warning("stock b-roll %s: %s", status["status"], status.get("reason") or "; ".join(status.get("errors", [])))
+    return {k: status[k] for k in ("status",)} | {"clips": len(status["clips"])}
+
+
+STOCK = Stage(name="stock", input_hash=_stock_hash, run=_stock,
+              outputs=lambda ctx: [ctx.ws.path("stock", "status.json")] if ctx.options.get("stock") else [])
+
+
+# ------------------------------------------------------------------ b-roll pool: the client's folder + this project's stock clips
+
+
+def _broll_folders(ctx: StageContext) -> list[Path]:
+    folders = [Path(ctx.options["broll"])] if ctx.options.get("broll") else []
+    if ctx.options.get("stock") and _stock_dir(ctx).is_dir():
+        folders.append(_stock_dir(ctx))
+    return folders
+
+
 def _broll_hash(ctx: StageContext) -> str:
     from reel import broll
 
-    folder = ctx.options.get("broll")
-    if not folder:
+    folders = _broll_folders(ctx)
+    if not folders:
         return "none"
-    files = sorted((f.name, f.stat().st_size, int(f.stat().st_mtime)) for f in Path(folder).iterdir() if f.suffix.lower() in broll.VIDEO_EXT)
+    files = sorted((f.name, f.stat().st_size, int(f.stat().st_mtime)) for d in folders for f in d.iterdir() if f.suffix.lower() in broll.VIDEO_EXT)
     return hash_inputs({"files": files, "fps": project.project_fps(ctx.ws).__str__(), "persona": file_fingerprint(broll.PERSONA), "v": VERSION})
 
 
 def _broll(ctx: StageContext) -> dict:
     from reel import broll
 
-    folder = ctx.options.get("broll")
-    if not folder:
+    folders = _broll_folders(ctx)
+    if not folders:
         return {"clips": 0}
-    return broll.index(ctx.ws, Path(folder), project.project_fps(ctx.ws), _caller(ctx))
+    return broll.index(ctx.ws, folders, project.project_fps(ctx.ws), _caller(ctx))
 
 
 BROLL = Stage(name="broll", input_hash=_broll_hash, run=_broll,
-              outputs=lambda ctx: [ctx.ws.path("broll", "index.json")] if ctx.options.get("broll") else [])
+              outputs=lambda ctx: [ctx.ws.path("broll", "index.json")] if _broll_folders(ctx) else [])
 
 
 # ------------------------------------------------------------------ reference style (optional)
@@ -518,4 +567,4 @@ VARIANTS = Stage(name="variants", input_hash=_variants_hash,
                                       *(ctx.ws.path("export", "variants", f"reel_{n}.mp4") for n in _deliverables(ctx))],
                  run=_variants)
 
-STAGES = [BROLL, REFERENCE, STORY, FINISH, COMPILE, RENDER, OVERLAY, COMPOSITE, QA, COVER, PACKAGE, VARIANTS]
+STAGES = [STOCK, BROLL, REFERENCE, STORY, FINISH, COMPILE, RENDER, OVERLAY, COMPOSITE, QA, COVER, PACKAGE, VARIANTS]

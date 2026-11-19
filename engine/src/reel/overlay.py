@@ -109,7 +109,15 @@ def build_props(tl: Timeline, root: Path, faces: dict | None, ocr: dict | None =
             hit = next((sp for sp in shot_spans if sp[0] <= g["start_f"] < sp[1]), None)
             if hit:
                 g["x"], g["y"] = source_point_to_output(hit[2], hit[3], hit[4], tl.width, tl.height, g["x"], g["y"], g["start_f"] - hit[0])
-    d["graphics"] = [g for g in d["graphics"] if g["kind"] != "emoji_pop" or g["uri"]]
+    from reel import assets as assets_mod
+    from reel import lottie
+
+    lib = assets_mod.load().lottie if any(g["kind"] == "lottie" for g in d["graphics"]) else {}
+    for g in d["graphics"]:
+        if g["kind"] == "lottie":  # the animation JSON travels in the props: no file or network access during the render
+            meta = lib.get(g["uri"])
+            g["data"] = lottie.load_for_render(meta, g.get("accent")) if meta else None
+    d["graphics"] = [g for g in d["graphics"] if (g["kind"] != "emoji_pop" or g["uri"]) and (g["kind"] != "lottie" or g.get("data"))]
     return {"fps": float(fps), "width": tl.width, "height": tl.height, "duration_f": tl.duration_f,
             "captions": d["captions"], "titles": d["titles"], "flashes": d["flashes"], "pips": d["pips"], "graphics": d["graphics"], "faces": spans, "safe": SAFE}
 

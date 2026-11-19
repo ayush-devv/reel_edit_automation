@@ -21,7 +21,7 @@ from pathlib import Path
 from reel.studio import costs
 from reel.workspace import _pid_alive, atomic_write_bytes, atomic_write_json
 
-STAGES = ["ingest", "mezzanine", "perception", "tables", "broll", "reference", "story", "finish", "compile", "render",
+STAGES = ["ingest", "mezzanine", "perception", "tables", "stock", "broll", "reference", "story", "finish", "compile", "render",
           "overlay", "composite", "qa", "package", "variants"]
 ID_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 MEDIA_PREFIXES = ("render/", "export/", "qa/sheets/", "qa/cuts/", "versions/")  # the NLE package is export/package/
@@ -93,8 +93,8 @@ def stages(ws: Path, job: str | None = None) -> list[dict]:
         if e:
             status = e.get("status", "pending")
             st.update(started=e.get("started"), finished=e.get("finished"), meta=e.get("meta") or {})
-            if status == "done" and e.get("input_hash") == "none" and not e.get("outputs"):
-                status = "skipped"  # optional stage with nothing to do (no b-roll folder, no reference reel)
+            if status == "done" and e.get("input_hash") in ("none", "off") and not e.get("outputs"):
+                status = "skipped"  # optional stage with nothing to do (no b-roll folder, no reference reel, stock b-roll off)
             elif status == "running" and not alive:
                 status = "failed"
                 st["error"] = "Interrupted: the run stopped before this stage finished. Retry resumes from here."
@@ -102,6 +102,10 @@ def stages(ws: Path, job: str | None = None) -> list[dict]:
                 st["error"] = e.get("error") or "failed"
             st["status"] = status
         out.append(st)
+    # A stage the project's run never had (added to the engine later, e.g. `stock`) is skipped once any later stage ran.
+    for n, st in enumerate(out):
+        if st["name"] not in entries and st["status"] == "pending" and any(o["name"] in entries for o in out[n + 1:]):
+            st["status"] = "skipped"
     return out
 
 

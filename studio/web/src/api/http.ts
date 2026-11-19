@@ -51,6 +51,7 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
     form.append("brief", JSON.stringify(input.brief));
     if (input.brand) form.append("brand", input.brand);
     if (input.reference_url) form.append("reference_url", input.reference_url);
+    if (input.stock) form.append("stock", "1");
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${base}/api/projects`);

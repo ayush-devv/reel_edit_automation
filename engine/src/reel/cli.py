@@ -49,7 +49,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     absolute = lambda p: str(Path(p).resolve()) if p else None  # noqa: E731
     options = {"input": str(src), "fps": args.fps, "encoder": args.encoder, "language": args.language,
                "brief": absolute(args.brief), "brand": absolute(args.brand), "asr_repo": args.asr_repo, "skip_visual": args.skip_visual,
-               "broll": absolute(args.broll), "reference": absolute(args.reference)}
+               "broll": absolute(args.broll), "reference": absolute(args.reference), "stock": bool(args.stock)}
     options["skip_review"] = args.skip_review
     options["voice_enhance"] = not args.no_voice_enhance
     prev = ws.path("run_options.json")
@@ -82,6 +82,15 @@ def _cmd_library(args: argparse.Namespace) -> int:
     from reel import library
 
     folder = Path(args.folder).resolve()
+    if args.kind == "lottie":
+        from reel import lottie
+
+        entries = lottie.index_folder(folder, source=args.source, license_=args.license)
+        path = lottie.write_index(entries, replace=args.replace)
+        print(f"indexed {len(entries)} Lottie animation(s) → {path}")
+        for f, why in lottie.SKIPPED:
+            print(f"refused: {f} ({why})")
+        return 0
     if args.kind == "sfx":
         entries = library.index_sfx(folder, source=args.source, license_=args.license)
     else:
@@ -448,6 +457,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--skip-review", action="store_true", help="QA gates only, no Reviewer call")
     p.add_argument("--reference", help="a finished reel the client likes: its pacing, captions and colour become the style to match")
     p.add_argument("--broll", help="folder of client b-roll clips (conformed, described by Claude, offered to the Editor)")
+    p.add_argument("--stock", action="store_true", help="find stock b-roll on Pexels for this talk at edit time (needs PEXELS_API_KEY)")
     p.set_defaults(func=_cmd_run)
 
     p = sub.add_parser("notes", help="apply a client's timestamped notes (e.g. '0:12 make this faster') as one revision")
@@ -491,8 +501,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", default=None, help="(--auto) report folder (default eval/calibration)")
     p.set_defaults(func=_cmd_calibrate)
 
-    p = sub.add_parser("library", help="index a local SFX or music folder into assets/")
-    p.add_argument("kind", choices=["sfx", "music"])
+    p = sub.add_parser("library", help="index a local SFX, music or Lottie folder into assets/")
+    p.add_argument("kind", choices=["sfx", "music", "lottie"])
     p.add_argument("folder")
     p.add_argument("--source", required=True, help='e.g. "Sonniss GDC 2024"')
     p.add_argument("--license", required=True, help="licence summary stored with every file")

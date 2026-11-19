@@ -47,9 +47,10 @@ def _id(path: Path) -> str:
     return "b_" + hashlib.sha1(path.name.encode() + str(path.stat().st_size).encode()).hexdigest()[:8]
 
 
-def conform(ws: Workspace, folder: Path, fps) -> list[dict]:
+def conform(ws: Workspace, folder: Path | list[Path], fps) -> list[dict]:
+    folders = folder if isinstance(folder, list) else [folder]
     out = []
-    for f in sorted(p for p in folder.iterdir() if p.suffix.lower() in VIDEO_EXT and not p.name.startswith(".")):
+    for f in sorted((p for d in folders for p in d.iterdir() if p.suffix.lower() in VIDEO_EXT and not p.name.startswith(".")), key=lambda p: p.name):
         cid = _id(f)
         p = probe(f)
         mezz = ws.path("broll", "mezz", f"{cid}.mov")
@@ -80,7 +81,7 @@ def describe(ws: Workspace, clips: list[dict], caller=claude_call.call) -> dict[
     return {d.id: d for d in got.clips}
 
 
-def index(ws: Workspace, folder: Path, fps, caller=claude_call.call) -> dict:
+def index(ws: Workspace, folder: Path | list[Path], fps, caller=claude_call.call) -> dict:
     clips = conform(ws, folder, fps)
     desc = describe(ws, clips, caller)
     for c in clips:
