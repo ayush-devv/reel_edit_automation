@@ -107,14 +107,21 @@ def test_credits_for_incompetech_track_and_none_for_owned_or_cc0():
     assert "CREDITS.txt" not in package.readme(_tl(("click_2", "sfx")), idx, None, "PASS", [])
 
 
-def test_relative_index_paths_resolve_against_assets_root(tmp_path):
-    (tmp_path / "sfx").mkdir()
+def test_relative_index_paths_resolve_and_missing_audio_is_not_offered(tmp_path):
+    (tmp_path / "sfx" / "procedural").mkdir(parents=True)
+    (tmp_path / "sfx" / "procedural" / "pop_bubble.wav").write_bytes(b"RIFF")
+    owner = tmp_path / "owner" / "hit.wav"
+    owner.parent.mkdir()
+    owner.write_bytes(b"RIFF")
     (tmp_path / "sfx" / "sfx_index.json").write_text(json.dumps({"sfx": [
         {"id": "pop_1", "file": "sfx/procedural/pop_bubble.wav", "duration_ms": 180, "peak_ms": 0},
-        {"id": "hit_2", "file": "/abs/owner/hit.wav", "duration_ms": 500, "peak_ms": 10}]}))
+        {"id": "hit_2", "file": str(owner), "duration_ms": 500, "peak_ms": 10},
+        {"id": "boom_3", "file": "sfx/procedural/boom_subdrop.wav", "duration_ms": 1500, "peak_ms": 10},  # index committed, audio not fetched
+        {"id": "hit_4", "file": "/unplugged/drive/hit.wav", "duration_ms": 500, "peak_ms": 10}]}))
     idx = assets.load(tmp_path)
     assert idx.sfx["pop_1"]["file"] == str((tmp_path / "sfx/procedural/pop_bubble.wav").resolve())
-    assert idx.sfx["hit_2"]["file"] == "/abs/owner/hit.wav"
+    assert idx.sfx["hit_2"]["file"] == str(owner)
+    assert set(idx.sfx) == {"pop_1", "hit_2"}
 
 
 def test_sfx_menu_alternates_sources():
