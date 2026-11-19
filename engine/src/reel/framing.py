@@ -6,7 +6,10 @@ Each base clip is split at the source's scene cuts. Per shot (after Google AutoF
 - `crop`, tracked: the face moves more than a dead zone → a smoothed, speed-capped path that follows
   one face (the one nearest the previous position, so a second face never steals the frame);
 - `fill`: two prominent faces too far apart for one vertical crop → the whole frame, fitted to the
-  width over a blurred, darkened copy of itself (nobody is cut in half).
+  width over a blurred, darkened copy of itself (nobody is cut in half);
+- speaker crops: in a would-be `fill` shot with active-speaker data (perception/speakers.json),
+  static crops on whoever is talking, switching at word gaps (≥ 1 s apart); stretches where the
+  speaker is uncertain (both talking, laughter) keep `fill`.
 A shot inherits the previous shot's centre when no face is visible.
 """
 
@@ -28,6 +31,9 @@ SMOOTH_S = 0.5  # gaussian smoothing (sigma) of the tracked path, seconds
 TRACK_STEP_S = 0.5  # one path keyframe per this many seconds (keeps the ffmpeg expression short)
 FILL_MIN_RATIO = 0.5  # second face at least this share of the largest face's area counts as "prominent"
 FILL_MIN_SHARE = 0.5  # share of samples with two prominent faces that don't fit one crop → fill
+MIN_SUBSHOT_US = 1_000_000  # speaker-switch cuts inside a wide shot are at least this far apart
+SPEAKER_MIN_COVER = 0.5  # speakers.json must cover at least this share of the shot …
+SPEAKER_MIN_SPEECH = 0.6  # … and name the speaker for at least this share of it (else: whole-frame fill)
 
 
 @dataclass
@@ -94,22 +100,83 @@ def smooth_path(pts: list[tuple[int, float]], crop_w: float) -> list[tuple[int, 
     return [(int(tt * 1e6), float(v)) for tt, v in zip(t, xs)]
 
 
+def _median_box(boxes: list[dict]) -> dict:
+    return {k: statistics.median(bx[k] for bx in boxes) for k in ("x", "y", "w", "h")}
+
+
+def speaker_box(window: list[dict], track_box: dict) -> dict:
+    """The speaker's face box in this stretch: per sample, the face nearest the track's centre
+    (faces.json boxes, so overlay face spans match what the crop shows); else the track's own box."""
+    tx = _cx(track_box)
+    near = [b for s in window if (fs := s.get("faces")) and abs(_cx(b := min(fs, key=lambda f: abs(_cx(f) - tx))) - tx) < 0.1]
+    return _median_box(near) if near else dict(track_box)
+
+
+def speaker_cuts(a: int, b: int, speakers: dict | None, min_us: int = MIN_SUBSHOT_US) -> list[tuple[int, int | None]] | None:
+    """A wide two-shot [a, b) split on the active speaker: [(start_us, track | None = whole frame)].
+
+    None when speakers.json can't drive it (no data, or tracked speech is not most of the shot's
+    speech). Segment edges are already at word gaps (perception/speakers.py); stretches shorter
+    than `min_us` join the previous one, so no cut is shorter than that and none falls mid-word."""
+    segs = [(max(a, g["start_us"]), min(b, g["end_us"]), g["track"]) for g in (speakers or {}).get("segments") or []
+            if g["start_us"] < b and g["end_us"] > a]
+    if not segs:
+        return None
+    total = sum(e - s for s, e, _ in segs)
+    tracked = sum(e - s for s, e, t in segs if t is not None)
+    if total < SPEAKER_MIN_COVER * (b - a) or tracked < SPEAKER_MIN_SPEECH * total:
+        return None
+    parts = [(a if k == 0 else s, t) for k, (s, _, t) in enumerate(segs)]  # uncovered head/tail joins its neighbour
+    merged: list[list] = []
+    for k, (s, t) in enumerate(parts):
+        end = parts[k + 1][0] if k + 1 < len(parts) else b
+        if merged and (merged[-1][1] == t or end - s < min_us):
+            continue  # same label, or too short: the previous stretch carries on
+        merged.append([s, t])
+    while len(merged) > 1 and merged[1][0] - merged[0][0] < min_us:  # a short opener joins the next stretch
+        merged[1][0] = merged[0][0]
+        merged.pop(0)
+    return [(s, t) for s, t in merged]
+
+
 def shots(c: VideoClip, fps: Fraction, cuts_us: list[int], samples: list[dict], fallback: tuple[float, float] = DEFAULT_CENTRE,
-          crop_w: float = 1.0) -> list[Shot]:
-    """`crop_w`: width of the vertical crop window as a share of the source width (1.0 = no horizontal crop)."""
+          crop_w: float = 1.0, speakers: dict | None = None) -> list[Shot]:
+    """`crop_w`: width of the vertical crop window as a share of the source width (1.0 = no horizontal crop).
+    `speakers`: this clip's speakers.json entry — a wide two-shot then crops to whoever is talking."""
     src0, src1 = c.src_in_us, c.src_out_us
     bounds = [src0] + [u for u in sorted(cuts_us) if src0 < u < src1] + [src1]
     out: list[Shot] = []
     prev = fallback
+    tracks = {t["id"]: t for t in (speakers or {}).get("tracks") or []}
+
+    def add(t_us: int, shot: Shot) -> None:
+        shot.start_f = round(tb.us_to_frame(t_us - src0, fps) / c.speed)
+        if out and shot.start_f <= out[-1].start_f:
+            return
+        if shot.path:
+            shot.path = [(max(f, shot.start_f), x) for f, x in shot.path]
+        out.append(shot)
+
     for a, b in zip(bounds, bounds[1:]):
         window = [s for s in samples if a <= s["t_us"] < b]
         boxes = [bx for s in window if (bx := _largest(s.get("faces") or []))]
         layout, path = "crop", None
         if boxes:
-            box = {k: statistics.median(bx[k] for bx in boxes) for k in ("x", "y", "w", "h")}
+            box = _median_box(boxes)
             centre = (box["x"] + box["w"] / 2, box["y"] + box["h"] / 2)
             if needs_fill(window, crop_w):
                 layout = "fill"
+                cuts = speaker_cuts(a, b, speakers) if crop_w < 1.0 else None
+                if cuts and any(t in tracks for _, t in cuts):
+                    ends = [s for s, _ in cuts[1:]] + [b]
+                    for (s, t), e in zip(cuts, ends):
+                        if t in tracks:
+                            sb = speaker_box([x for x in window if s <= x["t_us"] < e], tracks[t]["box"])
+                            add(s, Shot(0, (sb["x"] + sb["w"] / 2, sb["y"] + sb["h"] / 2), sb, "crop"))
+                        else:
+                            add(s, Shot(0, centre, box, "fill"))
+                    prev = centre
+                    continue
             elif crop_w < 1.0:
                 pts = follow(window, centre[0])
                 xs = sorted(p[1] for p in pts)
@@ -120,12 +187,7 @@ def shots(c: VideoClip, fps: Fraction, cuts_us: list[int], samples: list[dict], 
                     path = [(max(0, round(tb.us_to_frame(tu - src0, fps) / c.speed)), x) for tu, x in keep]
         else:
             box, centre = None, prev
-        start_f = round(tb.us_to_frame(a - src0, fps) / c.speed)
-        if out and start_f <= out[-1].start_f:
-            continue
-        if path:
-            path = [(max(f, start_f), x) for f, x in path]
-        out.append(Shot(start_f=start_f, centre=centre, box=box, layout=layout, path=path))
+        add(a, Shot(start_f=0, centre=centre, box=box, layout=layout, path=path))
         prev = centre
     return out or [Shot(0, fallback, None)]
 

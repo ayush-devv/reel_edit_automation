@@ -70,8 +70,9 @@ def text_zones(ocr: dict | None, asset: str, src_w: int, src_h: int, out_w: int,
     return out
 
 
-def build_props(tl: Timeline, root: Path, faces: dict | None, ocr: dict | None = None, scenes: dict | None = None) -> dict:
-    """Overlay props. Face spans are per shot (camera cuts inside a clip get their own framing)."""
+def build_props(tl: Timeline, root: Path, faces: dict | None, ocr: dict | None = None, scenes: dict | None = None,
+                speakers: dict | None = None) -> dict:
+    """Overlay props. Face spans are per shot (camera cuts and speaker switches inside a clip get their own framing)."""
     fps = tb.parse_rate(tl.fps)
     spans, sizes = [], {}
     for c in sorted((c for c in tl.video if c.id.startswith("v_")), key=lambda c: c.at_f):
@@ -79,7 +80,7 @@ def build_props(tl: Timeline, root: Path, faces: dict | None, ocr: dict | None =
             sizes[c.asset] = render.source_size(root / tl.assets[c.asset].uri)
         sw_, sh_ = sizes[c.asset]
         zones = text_zones(ocr, c.asset, sw_, sh_, tl.width, tl.height, faces)
-        shots = render.clip_shots(c, fps, faces, scenes, (sw_, sh_), (tl.width, tl.height))
+        shots = render.clip_shots(c, fps, faces, scenes, (sw_, sh_), (tl.width, tl.height), speakers)
         for k, shot in enumerate(shots):
             start = c.at_f + shot.start_f
             end = c.at_f + (shots[k + 1].start_f if k + 1 < len(shots) else c.dur_f)

@@ -4,7 +4,7 @@ PIPELINE = analysis only (no Claude calls) — used by tests and the eval harnes
 checks. EDIT_PIPELINE = analysis + Editor decisions + compile + render — what `reel run` uses.
 """
 
-from reel.stages import edit, ingest, mezzanine, perception, tables, voice
+from reel.stages import edit, ingest, mezzanine, perception, speakers, tables, voice
 
-PIPELINE = [ingest.STAGE, mezzanine.STAGE, perception.STAGE, voice.STAGE, tables.STAGE]
+PIPELINE = [ingest.STAGE, mezzanine.STAGE, perception.STAGE, voice.STAGE, speakers.STAGE, tables.STAGE]
 EDIT_PIPELINE = [*PIPELINE, *edit.STAGES]

@@ -33,7 +33,8 @@ STATUS: dict[str, tuple[str, str]] = {
     "cap.transform.scale": ("yes", "punch-ins"),
     "cap.transform.crop": ("auto", "cover crop to 9:16"),
     "cap.transform.reframe_vertical": ("auto", "face-centred per shot"),
-    "cap.transform.auto_reframe": ("auto", "per camera shot: locked off when the face is still, smoothed speed-capped tracking when it moves"),
+    "cap.transform.auto_reframe": ("auto", "per camera shot: locked off when the face is still, smoothed speed-capped tracking when it moves; "
+                                           "wide two-shots switch to the active speaker at word gaps"),
     "cap.transform.blurred_fill": ("auto", "two people too far apart for one vertical crop: whole frame over a blurred copy"),
     "cap.transform.punch_in": ("yes", "finish.punch_ins (instant or ramped)"),
     "cap.transform.keyframe_easing": ("yes", "punch-in ease"),
@@ -125,6 +126,7 @@ STATUS: dict[str, tuple[str, str]] = {
     "cap.analysis.filler_detection": ("auto", "filler + candidate filler flags"),
     "cap.analysis.beat_detection": ("partial", "music library indexing"),
     "cap.analysis.face_detection": ("auto", "MediaPipe 4 fps"),
+    "cap.analysis.speaker_diarization": ("auto", "active speaker from mouth movement + audio, 2-person shots (MediaPipe landmarker jawOpen; speaker per word)"),
     "cap.analysis.voice_activity": ("auto", "Silero VAD"),
     "cap.analysis.palette_extraction": ("auto", "k-means palette"),
     "cap.analysis.motion_estimation": ("auto", "frame difference energy"),
