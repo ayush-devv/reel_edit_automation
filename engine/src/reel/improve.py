@@ -13,6 +13,8 @@ changes or the reel-run budget.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import copy
 import json
 import subprocess
@@ -174,7 +176,7 @@ def commit_accepted(changes: list[Change], decision: dict) -> str | None:
 def _log(entry: dict) -> None:
     LOG.parent.mkdir(parents=True, exist_ok=True)
     with open(LOG, "a") as f:
-        f.write(json.dumps(entry, default=str) + "\n")
+        f.write(json.dumps({"time": datetime.now(timezone.utc).isoformat(timespec="seconds"), **entry}, default=str) + "\n")
 
 
 def run_night(evaluate: Evaluate, propose: Callable[[str], Proposal], *, runs: int = 3, rounds: int = 5, budget: int = 100,

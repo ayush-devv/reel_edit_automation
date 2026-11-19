@@ -43,3 +43,10 @@ def test_share_alike_and_non_commercial_are_never_indexed(tmp_path):
 
 def test_cc_by_credit_says_the_music_was_edited():
     assert "edited and synchronised" in package.credits_text(["Track by Someone, CC BY 4.0"])
+
+
+def test_unreadable_library_files_are_reported(tmp_path):
+    (tmp_path / "whoosh_broken.wav").write_bytes(b"not audio")
+    library.SKIPPED.clear()
+    assert library.index_sfx(tmp_path, source="x", license_="CC0-1.0") == []
+    assert library.SKIPPED and library.SKIPPED[0][0].endswith("whoosh_broken.wav")

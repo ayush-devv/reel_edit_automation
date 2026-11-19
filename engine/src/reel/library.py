@@ -16,6 +16,8 @@ import numpy as np
 from reel import assets as assets_mod
 from reel.workspace import atomic_write_json
 
+SKIPPED: list[tuple[str, str]] = []  # (file, reason) of files the last index calls could not read
+
 AUDIO_EXT = {".wav", ".aif", ".aiff", ".flac"}
 MUSIC_EXT = AUDIO_EXT | {".mp3", ".m4a"}
 
@@ -88,7 +90,8 @@ def index_sfx(folder: Path, *, source: str, license_: str, rel_to: Path | None =
             continue
         try:
             y, rate = _mono(f)
-        except Exception:  # noqa: BLE001 — unreadable files are skipped, not fatal
+        except Exception as exc:  # noqa: BLE001 — unreadable files are skipped, not fatal (and reported)
+            SKIPPED.append((str(f), f"{type(exc).__name__}: {str(exc).splitlines()[0][:120] if str(exc) else ''}"))
             continue
         dur = y.size / rate
         if dur <= 0.02 or dur > SFX_MAX_S:
@@ -124,7 +127,8 @@ def index_music(folder: Path, *, source: str, license_: str, rel_to: Path | None
     for f in sorted(p for p in folder.rglob("*") if p.suffix.lower() in MUSIC_EXT and not p.name.startswith(".")):
         try:
             y, rate = librosa.load(str(f), sr=22050, mono=True)
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 — skipped and reported
+            SKIPPED.append((str(f), f"{type(exc).__name__}: {str(exc).splitlines()[0][:120] if str(exc) else ''}"))
             continue
         bpm, beat_ms, down_ms = beats(y, rate)
         side = f.with_suffix(".json")

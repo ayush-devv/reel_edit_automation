@@ -94,6 +94,8 @@ def _cmd_library(args: argparse.Namespace) -> int:
     print(f"indexed {len(entries)} {args.kind} file(s) → {path}")
     for k, n in sorted(cats.items()):
         print(f"  {k:12} {n}")
+    for f, why in library.SKIPPED:
+        print(f"couldn't read: {f} ({why})")
     return 0
 
 
