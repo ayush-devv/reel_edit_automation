@@ -146,9 +146,9 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
     if not menu:
         lines += ["Empty — use none.", ""]
     for cat, items in menu.items():
-        lines.append(f"- **{cat}**: " + ", ".join(f"`{e['id']}` ({e['duration_ms']} ms, peak at {e['peak_ms']} ms)" for e in items))
+        lines.append(f"- **{cat}**: " + ", ".join(f"`{e['id']}` {e.get('name', '')} ({e['duration_ms']} ms, peak at {e['peak_ms']} ms)" for e in items))
     lines.append("")
-    lines += _library("Music library (bed starts so a beat lands on the first cut; ducked under speech)", inp.idx.music, ("title", "mood", "bpm", "energy", "duration_ms"))
+    lines += _library("Music library (bed starts so a beat lands on the first cut; ducked under speech)", inp.idx.music, ("title", "mood", "energy", "bpm", "feel", "duration_ms"))
     lines += ["## B-roll (cutaways over the voice; `full` replaces the picture, `pip` = picture-in-picture card)", ""]
     if not inp.idx.broll:
         lines += ["Empty — use none.", ""]

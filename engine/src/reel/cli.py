@@ -90,6 +90,35 @@ def _cmd_library(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_assets_fetch(args: argparse.Namespace) -> int:
+    from reel import fetch_assets
+
+    if args.sonniss_url and not args.include_sonniss:
+        print("--sonniss-url needs --include-sonniss (Sonniss licence v2.0 has a 'NO AI TRAINING OR USAGE' clause; legal review first)")
+        return 2
+    if args.include_sonniss and not args.sonniss_url:
+        print("--include-sonniss needs at least one --sonniss-url https://downloads.sonniss.com/<bundle>.zip")
+        return 2
+    res = fetch_assets.fetch(procedural=not args.no_procedural, kenney=not args.no_kenney, music=not args.no_music,
+                             sonniss_urls=args.sonniss_url if args.include_sonniss else None, sonniss_pattern=args.sonniss_pattern,
+                             sonniss_per_category=args.sonniss_per_category, refresh=args.refresh)
+    print(f"fetched {res['sfx_new']} SFX and {res['music_new']} music track(s) this run\n")
+    print("SFX library by category:")
+    for k, n in res["sfx_by_category"].items():
+        print(f"  {k:10} {n}")
+    print("SFX library by source:")
+    for k, n in res["sfx_by_source"].items():
+        print(f"  {k:32} {n}")
+    print("Music library by mood:")
+    for k, n in res["music_by_mood"].items():
+        print(f"  {k:10} {n}")
+    mb = {k: v / 1e6 for k, v in res["disk_bytes"].items()}
+    print(f"\ndisk: sfx {mb['sfx']:.1f} MB · music {mb['music']:.1f} MB")
+    for p in res["problems"]:
+        print(f"note: {p}")
+    return 0
+
+
 def _cmd_bakeoff(args: argparse.Namespace) -> int:
     import time
 
@@ -429,6 +458,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--license", required=True, help="licence summary stored with every file")
     p.add_argument("--replace", action="store_true", help="drop previously indexed files from the same source first")
     p.set_defaults(func=_cmd_library)
+
+    p = sub.add_parser("assets", help="asset libraries (SFX, music)")
+    asub = p.add_subparsers(dest="assets_cmd", required=True)
+    p = asub.add_parser("fetch", help="fill assets/ with procedural + Kenney CC0 SFX and Incompetech CC BY music, with licence provenance")
+    p.add_argument("--no-procedural", action="store_true", help="skip the synthesised SFX")
+    p.add_argument("--no-kenney", action="store_true", help="skip the Kenney CC0 packs")
+    p.add_argument("--no-music", action="store_true", help="skip the Incompetech music")
+    p.add_argument("--refresh", action="store_true", help="re-download music already on disk")
+    p.add_argument("--include-sonniss", action="store_true",
+                   help="also fetch Sonniss GDC SFX — OFF by default: licence v2.0 says 'NO AI TRAINING OR USAGE'; get a legal read first")
+    p.add_argument("--sonniss-url", action="append", help="Sonniss bundle zip on downloads.sonniss.com (repeatable)")
+    p.add_argument("--sonniss-pattern", help="regex on member paths to take (default: every categorised sound)")
+    p.add_argument("--sonniss-per-category", type=int, default=12)
+    p.set_defaults(func=_cmd_assets_fetch)
 
     p = sub.add_parser("bakeoff", help="Hinglish ASR bake-off on samples/hinglish (ADR-0007)")
     p.add_argument("--samples", default="samples/hinglish")

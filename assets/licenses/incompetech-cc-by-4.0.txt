@@ -1,0 +1,15 @@
+Incompetech — Kevin MacLeod — Creative Commons Attribution 4.0 (CC BY 4.0)
+https://creativecommons.org/licenses/by/4.0/
+
+Commercial use allowed; attribution REQUIRED wherever the work is used (for a reel: in the post
+caption / description). The exact credit for each track is stored in assets/music/music_index.json
+("attribution") and written to CREDITS.txt in every delivery package that uses the track.
+
+Credit format (incompetech.com track page, "Attribution Code", checked 2026-11-19):
+"<Title>" Kevin MacLeod (incompetech.com)
+Licensed under Creative Commons: By Attribution 4.0 License
+http://creativecommons.org/licenses/by/4.0/
+
+Source catalogue: https://incompetech.com/music/royalty-free/pieces.json
+Files: https://incompetech.com/music/royalty-free/mp3-royaltyfree/<file name>
+Never used: ShareAlike, NonCommercial or NoDerivatives licences.

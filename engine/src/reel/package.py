@@ -8,6 +8,7 @@
   timeline.otio            OpenTimelineIO (DaVinci Resolve, Premiere via plugin, Avid)
   edit_list.md             every decision with the Editor's reason
   README.md                what is baked where, how to open it, licences of assets used
+  CREDITS.txt              only when a used asset requires attribution (CC BY music) — paste into the caption
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from fractions import Fraction
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from reel import render
+from reel import library, render
 from reel import timebase as tb
 from reel.schemas.plan import FinishPlan, StoryPlan
 from reel.schemas.timeline import Timeline
@@ -198,7 +199,12 @@ def edit_list(tl: Timeline, story: StoryPlan, finish: FinishPlan, words) -> str:
     return "\n".join(lines) + "\n"
 
 
-def readme(tl: Timeline, idx, lufs_offset_db: float | None, verdict: str | None) -> str:
+def credits_text(lines: list[str]) -> str:
+    """CREDITS.txt: paste into the post caption — the licences of these tracks require it."""
+    return "Credits (paste into the post caption / description):\n\n" + "\n\n".join(lines) + "\n"
+
+
+def readme(tl: Timeline, idx, lufs_offset_db: float | None, verdict: str | None, credits: list[str] | None = None) -> str:
     used = {a.asset for a in tl.audio if a.role in ("sfx", "music")} | {c.asset for c in tl.video if c.id.startswith("br_")}
     by_file = {m.get("file"): k for k, m in idx.broll.items()}
     used |= {by_file[p.uri] for p in tl.pips if p.uri in by_file}
@@ -206,7 +212,11 @@ def readme(tl: Timeline, idx, lufs_offset_db: float | None, verdict: str | None)
     for aid in sorted(used):
         meta = idx.sfx.get(aid) or idx.music.get(aid) or idx.broll.get(aid) or {}
         credit = f" — credit {meta['credit']}" if meta.get("credit") else ""
-        lic.append(f"- `{aid}` ({meta.get('name') or meta.get('title') or ''}): {meta.get('source', '?')} — {meta.get('license', '?')}{credit}")
+        credit += " — attribution required (CREDITS.txt)" if meta.get("attribution") else ""
+        credit += f" — {meta['restrictions']}" if meta.get("restrictions") else ""
+        url = f" <{meta['license_url']}>" if meta.get("license_url") else ""
+        lic.append(f"- `{aid}` ({meta.get('name') or meta.get('title') or ''}): {meta.get('source', '?')} — {meta.get('license', '?')}{url}{credit}")
+    credits_row = "| CREDITS.txt | **attribution the music licence requires — paste it into the post caption** |\n" if credits else ""
     gain = f"{lufs_offset_db:+.1f} dB" if lufs_offset_db is not None else "see qa/verdict.md"
     return f"""# Reel package
 
@@ -221,7 +231,7 @@ Verdict: **{verdict or 'n/a'}** (see qa/verdict.md in the project).
 | timeline.fcpxml | Final Cut Pro: cut on the mezzanines (production audio), overlay on lane 1, stems on lanes −1…−3 (disabled) |
 | timeline.otio | OpenTimelineIO for DaVinci Resolve / Avid / Premiere (OTIO plugin) |
 | edit_list.md | every cut and finishing decision with the Editor's reason |
-
+{credits_row}
 **What is baked where.** The cut, speed changes and timing are in the timelines. Punch-ins, transitions, colour (per-clip correction + look) and the audio finishing are baked into `reel.mp4` and the stems, **not** rebuilt as NLE effects. The mezzanine clips are the ungraded, unzoomed source at the project frame rate. Re-grade or re-zoom there if needed.
 
 **Media paths** point into the project folder (absolute `file://` URLs). Keep the project where it is, or relink.
@@ -251,5 +261,10 @@ def build(ws, tl: Timeline, story: StoryPlan, finish: FinishPlan, words, idx, *,
     otio.adapters.write_to_file(otio_timeline(tl, ws.root, pkg, name), str(pkg / "timeline.otio"))
     atomic_write_bytes(pkg / "edit_list.md", edit_list(tl, story, finish, words).encode())
     offset = (mix.TARGET_I - lufs_in) if lufs_in is not None and lufs_in > mix.SILENT_LUFS else None
-    atomic_write_bytes(pkg / "README.md", readme(tl, idx, offset, verdict).encode())
+    credits = library.credit_lines(tl, idx)
+    if credits:
+        atomic_write_bytes(pkg / "CREDITS.txt", credits_text(credits).encode())
+    elif (pkg / "CREDITS.txt").exists():
+        (pkg / "CREDITS.txt").unlink()  # a revision dropped the credited track
+    atomic_write_bytes(pkg / "README.md", readme(tl, idx, offset, verdict, credits).encode())
     return {"files": sorted(str(p.relative_to(pkg)) for p in pkg.rglob("*") if p.is_file())}
