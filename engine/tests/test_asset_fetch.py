@@ -281,6 +281,15 @@ def _online(host: str) -> bool:
 @pytest.mark.integration
 @pytest.mark.skipif(not _online("kenney.nl") or not _online("incompetech.com"), reason="needs network")
 def test_live_sources_still_answer():
+    import ssl
+    import urllib.error
+
+    try:
+        fetch_assets.http_get(fetch_assets.PIECES_URL)
+    except urllib.error.URLError as e:  # no CA bundle (SSL_CERT_FILE unset) or a flaky network: not a code failure
+        if isinstance(e.reason, ssl.SSLError) or "CERTIFICATE" in str(e):
+            pytest.skip("TLS verification unavailable here; run with SSL_CERT_FILE set")
+        raise
     assert fetch_assets.kenney_zip_url("ui-audio").startswith("https://kenney.nl/download/")
     pieces = {p["filename"] for p in json.loads(fetch_assets.http_get(fetch_assets.PIECES_URL))}
     missing = set(fetch_assets.INCOMPETECH_TRACKS) - pieces
