@@ -174,6 +174,89 @@ def test_stage_falls_back_then_reruns_when_the_tool_appears(tmp_path, monkeypatc
     assert not ws.path("mezz", "c01.voice.wav").exists() and edit.enhanced_voice(StageContext(ws=ws)) == {}
 
 
+def _failing_enhance(exc):
+    def fake(binary, src, out, atten, *, work):  # writes a partial output, then fails
+        out.write_bytes(b"RIFF partial")
+        raise exc
+    return fake
+
+
+@pytest.mark.skipif(not FFMPEG, reason="needs ffmpeg")
+@pytest.mark.parametrize("exc", [tools.ToolError(["deep-filter"], 1, "thread panicked"),
+                                 RuntimeError("deep-filter output 10 samples @ 48000 Hz × 1 ch; need 99 @ 48000 × 2"),
+                                 subprocess.TimeoutExpired("deep-filter", 3600)])
+def test_enhance_failure_keeps_the_original_audio_and_never_blocks(exc, tmp_path, monkeypatch):
+    x, spans = _speech_like(8.0, SR)
+    ws = _workspace(tmp_path, x + np.random.default_rng(0).normal(0, 0.01, x.size), spans)
+    monkeypatch.setattr(enhance, "deep_filter", lambda: Path("/fake/deep-filter"))
+    monkeypatch.setattr(enhance, "enhance", _failing_enhance(exc))
+    s = run_pipeline(ws, [voice.STAGE])  # no raise: the step is skipped for that clip
+    c = json.loads(ws.path("perception", "voice_enhance.json").read_text())["clips"]["c01"]
+    assert s["stages"]["voice"]["status"] == "done"
+    assert c["applied"] is False and c["reason"].startswith(f"enhance failed: {type(exc).__name__}") and "voice" not in c
+    assert not ws.path("mezz", "c01.voice.wav").exists()  # partial output removed
+    assert edit.enhanced_voice(StageContext(ws=ws)) == {}  # the renderer reads the mezzanine audio
+
+
+@pytest.mark.skipif(not FFMPEG, reason="needs ffmpeg")
+def test_enhance_measurement_failure_after_a_good_output_drops_it(tmp_path, monkeypatch):
+    x, spans = _speech_like(8.0, SR)
+    ws = _workspace(tmp_path, x + np.random.default_rng(0).normal(0, 0.01, x.size), spans)
+    monkeypatch.setattr(enhance, "deep_filter", lambda: Path("/fake/deep-filter"))
+    monkeypatch.setattr(enhance, "enhance", _copy_enhance([]))
+    monkeypatch.setattr(enhance, "after", lambda *a: (_ for _ in ()).throw(ValueError("bad levels")))
+    run_pipeline(ws, [voice.STAGE])
+    c = json.loads(ws.path("perception", "voice_enhance.json").read_text())["clips"]["c01"]
+    assert c["applied"] is False and "samples" not in c and c["reason"] == "enhance failed: ValueError: bad levels"
+    assert not ws.path("mezz", "c01.voice.wav").exists()
+
+
+@pytest.mark.skipif(not FFMPEG, reason="needs ffmpeg")
+def test_enhance_leaves_no_partial_file_when_the_copy_fails(tmp_path, monkeypatch):
+    import soundfile as sf
+
+    src = tmp_path / "src.wav"
+    sf.write(str(src), np.zeros((SR, 2), np.float32), SR)
+    fake = tmp_path / "deep-filter"  # copies its input: `deep-filter -D --atten-lim-db X -o DIR FILE`
+    fake.write_text('#!/bin/sh\nmkdir -p "$5" && cp "$6" "$5/"\n')
+    fake.chmod(0o755)
+    out, work = tmp_path / "mezz" / "c01.voice.wav", tmp_path / "mezz" / ".voice_tmp"
+    out.parent.mkdir()
+    assert enhance.enhance(fake, src, out, 12.0, work=work)["samples"] == SR  # the fake binary works
+
+    out.unlink()
+
+    def broken_copy(src_, dst, n):
+        dst.write_bytes(b"RIFF partial")
+        raise OSError("disk full")
+
+    monkeypatch.setattr(enhance, "_copy_frames", broken_copy)
+    with pytest.raises(OSError):
+        enhance.enhance(fake, src, out, 12.0, work=work)
+    assert sorted(p.name for p in out.parent.iterdir()) == [".voice_tmp"] and list(work.iterdir()) == []
+
+
+@pytest.mark.skipif(not FFMPEG, reason="needs ffmpeg")
+def test_input_hash_covers_the_enhance_and_mix_code(tmp_path, monkeypatch):
+    from reel import mix
+
+    x, spans = _speech_like(4.0, SR)
+    ws = _workspace(tmp_path, x, spans)
+    monkeypatch.setattr(enhance, "deep_filter", lambda: None)
+    ctx = StageContext(ws=ws)
+    h0 = voice._input_hash(ctx)
+    for mod in (enhance, mix):
+        copy = tmp_path / f"copy_{Path(mod.__file__).name}"
+        shutil.copyfile(mod.__file__, copy)
+        monkeypatch.setattr(mod, "__file__", str(copy))
+        assert voice._input_hash(ctx) == h0  # same code, same hash
+        copy.write_text(copy.read_text() + "\n# changed\n")
+        h1 = voice._input_hash(ctx)
+        assert h1 != h0  # a code change re-runs the stage
+        monkeypatch.undo()
+        monkeypatch.setattr(enhance, "deep_filter", lambda: None)
+
+
 # ------------------------------------------------------------------ integration: the real binary
 
 

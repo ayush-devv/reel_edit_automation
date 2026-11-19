@@ -283,3 +283,188 @@ def test_landmarker_finds_who_talks_in_a_generated_two_shot(tmp_path):
     assert abs(switch - 4_000_000) <= 600_000
     assert asd.speaker_at({"c01": out}, "c01", 1_000_000) == left["id"]
     assert asd.speaker_at({"c01": out}, "c01", 6_000_000) == right["id"]
+
+
+# ------------------------------------------------------------------ streaming decode (bounded memory)
+
+
+def _ffmpeg_ok() -> bool:
+    from reel import config
+
+    try:
+        config.ffmpeg_path()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+@pytest.mark.skipif(not _ffmpeg_ok(), reason="needs ffmpeg")
+def test_streamed_frames_equal_a_one_shot_decode(tmp_path):
+    import subprocess
+
+    import numpy as np
+
+    from reel import config, tools
+
+    clip = tmp_path / "c.mov"
+    tools.ffmpeg(["-y", "-f", "lavfi", "-i", "testsrc2=size=480x270:rate=25:duration=3", "-c:v", "prores_ks", "-profile:v", "0", str(clip)])
+    w, h = asd.decode_size(asd.DECODE_WIDTH, 480, 270)
+    a, b = 500_000, 2_500_000
+    ref = subprocess.run(  # the previous whole-piece decode
+        [str(config.ffmpeg_path()), "-hide_banner", "-nostdin", "-loglevel", "error", "-ss", f"{a / 1e6:.6f}", "-t", f"{(b - a) / 1e6:.6f}",
+         "-i", str(clip), "-vf", f"fps={asd.ASD_FPS},scale={w}:{h}:flags=area", "-an", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        check=True, capture_output=True).stdout
+    n = len(ref) // (w * h * 3)
+    frames = list(asd._frames(clip, a, b, w, h))
+    assert len(frames) == n == 24 and all(f.shape == (h, w, 3) for f in frames)
+    assert np.array_equal(np.stack(frames), np.frombuffer(ref[: n * w * h * 3], dtype=np.uint8).reshape(n, h, w, 3))
+    # stopping early kills ffmpeg instead of leaving it running
+    gen = asd._frames(clip, 0, 3_000_000, w, h)
+    next(gen)
+    gen.close()
+
+
+@pytest.mark.skipif(not _ffmpeg_ok(), reason="needs ffmpeg")
+def test_streamed_decode_failure_raises(tmp_path):
+    import subprocess
+
+    with pytest.raises(subprocess.CalledProcessError):
+        list(asd._frames(tmp_path / "missing.mov", 0, 1_000_000, 64, 36))
+
+
+class _FakeLandmarker:
+    """Stands in for MediaPipe: the frame index is encoded in the pixels; the left face talks for
+    the first 4 s, the right face after."""
+
+    def __init__(self, log):
+        self.log, self.seen = log, []
+        log.append(self)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return None
+
+    def detect(self, crop, ts_ms):
+        k = int(crop[0, 0, 0]) + 256 * int(crop[0, 0, 1])
+        self.seen.append((k, ts_ms))
+        left = int(crop[0, 0, 2]) == 1  # region marker painted by the fake decoder
+        talking = (ts_ms < 4000) == left
+        return 0.5, 0.5, (0.35 + 0.3 * (k % 2)) if talking else 0.3, 0.0
+
+
+def _fake_stream(monkeypatch, n_frames_per_s=asd.ASD_FPS):
+    """Fake decoder + landmarker; asserts every face has consumed frame k before frame k+1 is decoded."""
+    import numpy as np
+
+    lms, calls = [], []
+
+    def frames(mezz, a, b, w, h):
+        calls.append((a, b, w, h))
+        n = int((b - a) / 1e6 * n_frames_per_s)
+        for k in range(n):
+            assert all(len(lm.seen) == k for lm in lms), "a frame was decoded before the previous one was consumed"
+            fr = np.zeros((h, w, 3), np.uint8)
+            fr[..., 0], fr[..., 1] = k % 256, k // 256
+            fr[:, : w // 2, 2] = 1  # left half
+            yield fr
+
+    monkeypatch.setattr(asd, "_frames", frames)
+    monkeypatch.setattr(asd, "_open_landmarker", lambda: _FakeLandmarker(lms))
+    return lms, calls
+
+
+def test_analyse_clip_streams_each_piece_once_to_every_face(monkeypatch):
+    lms, calls = _fake_stream(monkeypatch)
+    samples = [{"t_us": t, "faces": [LEFT, RIGHT]} for t in range(0, 8_000_000, 250_000)]
+    out = asd.analyse_clip(asd.Path("x.mov"), {"samples": samples}, [], src_size=(640, 360))
+    assert calls == [(0, 8_000_000, 640, 360)]  # one decoding pass for the piece, not one per face
+    assert len(lms) == 2 and out["frames"] == 96
+    want = [(k, int(asd._frame_time(0, k) // 1000)) for k in range(96)]
+    assert all(lm.seen == want for lm in lms)  # every face saw every frame, in order, at the old timestamps
+    assert [(t["id"], t["box"]["x"]) for t in out["tracks"]] == [(0, LEFT["x"]), (1, RIGHT["x"])]
+    assert [(s["start_us"], s["end_us"], s["track"]) for s in out["segments"]] == [(0, 4_000_000, 0), (4_000_000, 8_000_000, 1)]
+
+
+def test_single_pass_equals_one_pass_per_face(monkeypatch):
+    """landmark_piece (one pass, all faces) gives exactly what mouth_series gave per face."""
+    lms, _ = _fake_stream(monkeypatch)
+    frames = list(asd._frames(None, 0, 3_000_000, 320, 180))
+    lms.clear()
+    regions = [((0, 0, 100, 100), None), ((200, 0, 100, 100), None), ((0, 0, 100, 100), {"x": 0.9, "y": 0.9, "w": 0.1, "h": 0.1})]
+    together, n = asd.landmark_piece(iter(frames), 1_000_000, regions, (320, 180))
+    apart = [asd.mouth_series(frames, 1_000_000, r, f) for r, f in regions]
+    assert n == len(frames) and together == apart
+    assert together[0] and together[1] and together[2] == []  # face centred outside its box: ignored
+
+
+# ------------------------------------------------------------------ stage: failures retried, never fatal
+
+
+def _speakers_ws(tmp_path):
+    from reel.workspace import Workspace, atomic_write_json
+
+    ws = Workspace.create(tmp_path / "proj")
+    samples = [{"t_us": t, "faces": [LEFT, RIGHT]} for t in range(0, 4_000_000, 250_000)]
+    atomic_write_json(ws.path("perception", "faces.json"), {"c01": {"samples": samples}, "c02": {"samples": samples}})
+    return ws
+
+
+def _fake_analyse(monkeypatch, fail):
+    calls = []
+
+    def fake(mezz, faces, cuts, words=None, rms_db=None, hop_us=100_000, speech=None, **kw):
+        clip = mezz.stem
+        calls.append(clip)
+        if fail(clip, calls.count(clip)):
+            raise RuntimeError(f"boom {clip}")
+        return {"tracks": [{"id": 0, "box": LEFT}], "segments": [{"start_us": 0, "end_us": 1, "track": 0}], "words": {}, "pieces": [[0, 1]],
+                "landmark_s": float(len(calls))}  # volatile like the real timing field
+
+    monkeypatch.setattr(asd, "analyse_clip", fake)
+    return calls
+
+
+def test_speakers_stage_retries_failed_clips_only(tmp_path, monkeypatch):
+    import json
+
+    from reel.runner import run_pipeline
+    from reel.stages import speakers as stage
+
+    ws = _speakers_ws(tmp_path)
+    calls = _fake_analyse(monkeypatch, lambda clip, n: clip == "c01" and n == 1)  # c01 fails once
+    s1 = run_pipeline(ws, [stage.STAGE])  # never raises: speaker data is optional
+    out = json.loads(ws.path("perception", "speakers.json").read_text())
+    assert s1["stages"]["speakers"]["status"] == "done" and out["c01"]["error"] == "RuntimeError: boom c01" and out["c02"]["segments"]
+
+    s2 = run_pipeline(ws, [stage.STAGE])  # an error is never final: retried
+    out2 = json.loads(ws.path("perception", "speakers.json").read_text())
+    assert s2["stages"]["speakers"]["finished"] != s1["stages"]["speakers"]["finished"]
+    assert calls == ["c01", "c02", "c01"]  # c02 reused, not re-analysed
+    assert "error" not in out2["c01"] and out2["c01"]["segments"] and out2["c02"] == out["c02"]
+
+    run_pipeline(ws, [stage.STAGE])  # clean now: (at most) one cheap pass that reuses everything …
+    s4 = run_pipeline(ws, [stage.STAGE])
+    s5 = run_pipeline(ws, [stage.STAGE])  # … then skipped
+    assert calls == ["c01", "c02", "c01"] and s5["stages"]["speakers"]["finished"] == s4["stages"]["speakers"]["finished"]
+
+    faces = json.loads(ws.path("perception", "faces.json").read_text())
+    faces["c02"]["samples"] = faces["c02"]["samples"][:-1]
+    ws.path("perception", "faces.json").write_text(json.dumps(faces))
+    run_pipeline(ws, [stage.STAGE])  # c02's inputs changed: only c02 is redone
+    assert calls == ["c01", "c02", "c01", "c02"]
+
+
+def test_speakers_stage_persistent_error_retries_without_churning_the_file(tmp_path, monkeypatch):
+    from reel.runner import run_pipeline
+    from reel.stages import speakers as stage
+
+    ws = _speakers_ws(tmp_path)
+    calls = _fake_analyse(monkeypatch, lambda clip, n: clip == "c01")  # c01 always fails
+    s1 = run_pipeline(ws, [stage.STAGE])
+    b1 = ws.path("perception", "speakers.json").read_bytes()
+    s2 = run_pipeline(ws, [stage.STAGE])
+    assert s2["stages"]["speakers"]["status"] == "done" and s2["stages"]["speakers"]["finished"] != s1["stages"]["speakers"]["finished"]
+    assert calls == ["c01", "c02", "c01"]
+    assert ws.path("perception", "speakers.json").read_bytes() == b1  # downstream (base render) hashes stay put

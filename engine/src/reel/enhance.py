@@ -192,6 +192,7 @@ def enhance(binary: Path, src: Path, out: Path, atten_lim_db: float, *, work: Pa
     for p in (raw, padded):
         p.unlink(missing_ok=True)
     shutil.rmtree(df_out, ignore_errors=True)
+    tmp = out.with_name(f".{out.stem}.tmp.wav")
     try:
         tools.ffmpeg(["-y", "-i", str(src), "-map", "0:a:0", "-vn", "-c:a", "pcm_s16le", "-ar", str(config.AUDIO_RATE), str(raw)])
         with wave.open(str(raw)) as r:
@@ -205,11 +206,10 @@ def enhance(binary: Path, src: Path, out: Path, atten_lim_db: float, *, work: Pa
             got, rate, ch = r.getnframes(), r.getframerate(), r.getnchannels()
         if rate != config.AUDIO_RATE or ch != channels or got < n:
             raise RuntimeError(f"deep-filter output {got} samples @ {rate} Hz × {ch} ch; need {n} @ {config.AUDIO_RATE} × {channels}")
-        tmp = out.with_name(f".{out.stem}.tmp.wav")
         _copy_frames(result, tmp, n)
         tmp.replace(out)
     finally:
-        for p in (raw, padded):
+        for p in (raw, padded, tmp):  # tmp sits next to `out`, outside `work`: a failed copy leaves no partial file
             p.unlink(missing_ok=True)
         shutil.rmtree(df_out, ignore_errors=True)
     return {"samples": n, "channels": channels, "df_s": round(seconds, 2), "realtime_x": round(n / config.AUDIO_RATE / max(seconds, 1e-6), 1)}

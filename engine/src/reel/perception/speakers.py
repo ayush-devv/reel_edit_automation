@@ -8,8 +8,10 @@ Per piece:
 2. each track's face region is cropped from 12 fps frames and run through the MediaPipe Face
    Landmarker (VIDEO mode, blendshapes). Cropping per face instead of landmarking the whole frame
    keeps small faces in wide shots detectable (the landmarker's own detector misses faces under
-   ~8 % of the frame width). A track with no landmarks (the back of a head in an over-the-shoulder
-   shot) is dropped: it can never be attributed;
+   ~8 % of the frame width). The piece is decoded once and streamed frame by frame to every
+   track's own landmarker (memory: one frame, whatever the piece length). A track with no
+   landmarks (the back of a head in an over-the-shoulder shot) is dropped: it can never be
+   attributed;
 3. per 0.4 s window: mouth activity = mean |Δ jawOpen| + a small open-mouth level term,
    normalised by the piece's peak (p95) activity;
 4. a window is speech only if its audio RMS is ≥ 0.18 × the piece's peak AND a word or VAD
@@ -26,13 +28,17 @@ Output per clip (perception/speakers.json): tracks, speaker segments [{start_us,
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import itertools
 import os
 import ssl
 import subprocess
+import tempfile
 import time
 import urllib.request
 from pathlib import Path
+from typing import Iterable, Iterator
 
 import numpy as np
 
@@ -276,46 +282,134 @@ def segments(states: list, a: int, b: int, words: list[tuple[int, int]]) -> list
 # ------------------------------------------------------------------ model run
 
 
-def _decode(mezz: Path, a: int, b: int, width: int, src_w: int, src_h: int) -> np.ndarray:
+def decode_size(width: int, src_w: int, src_h: int) -> tuple[int, int]:
+    """(w, h) the frames are decoded at: `width` (or the source width), even, aspect kept."""
     w = min(width, src_w) // 2 * 2
-    h = int(round(src_h * w / src_w / 2)) * 2
-    proc = subprocess.run(
-        [str(config.ffmpeg_path()), "-hide_banner", "-nostdin", "-loglevel", "error", "-ss", f"{a / 1e6:.6f}", "-t", f"{(b - a) / 1e6:.6f}",
-         "-i", str(mezz), "-vf", f"fps={ASD_FPS},scale={w}:{h}:flags=area", "-an", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
-        check=True, capture_output=True)
-    n = len(proc.stdout) // (w * h * 3)
-    return np.frombuffer(proc.stdout[: n * w * h * 3], dtype=np.uint8).reshape(n, h, w, 3)
+    return w, int(round(src_h * w / src_w / 2)) * 2
 
 
-def mouth_series(frames: np.ndarray, t0_us: int, region: tuple[int, int, int, int],
-                 face: dict | None = None) -> list[tuple[int, float, float]]:
+def _frames(mezz: Path, a: int, b: int, w: int, h: int) -> Iterator[np.ndarray]:
+    """[a, b) of `mezz` at ASD_FPS as (h, w, 3) RGB frames, streamed one at a time from ffmpeg: memory
+    stays at one frame whatever the piece length (a static two-person camera can be one hour-long piece).
+    A trailing partial frame is dropped; a non-zero ffmpeg exit raises CalledProcessError."""
+    cmd = [str(config.ffmpeg_path()), "-hide_banner", "-nostdin", "-loglevel", "error", "-ss", f"{a / 1e6:.6f}", "-t", f"{(b - a) / 1e6:.6f}",
+           "-i", str(mezz), "-vf", f"fps={ASD_FPS},scale={w}:{h}:flags=area", "-an", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
+    size = w * h * 3
+    # stderr to a file, not a pipe: per-frame decode errors could fill a pipe and stall ffmpeg while we block on stdout
+    with tempfile.TemporaryFile() as err:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=err, stdin=subprocess.DEVNULL)
+        try:
+            while True:
+                buf = proc.stdout.read(size)  # BufferedReader.read(n) returns short only at EOF
+                if len(buf) < size:
+                    break
+                yield np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 3)
+            proc.stdout.close()
+            if proc.wait() != 0:
+                err.seek(0)
+                raise subprocess.CalledProcessError(proc.returncode, cmd, stderr=err.read())
+        finally:
+            if proc.poll() is None:  # consumer stopped early or raised: don't leave ffmpeg running
+                proc.kill()
+                proc.wait()
+            if proc.stdout and not proc.stdout.closed:
+                proc.stdout.close()
+
+
+class _Landmarker:
+    """MediaPipe Face Landmarker (VIDEO mode, one face, blendshapes). `detect` → (landmark centre x, y
+    within the crop (0–1), jawOpen, mouthClose), or None when no face is found."""
+
+    def __init__(self) -> None:
+        import mediapipe as mp
+
+        self._mp = mp
+        opts = mp.tasks.vision.FaceLandmarkerOptions(
+            base_options=mp.tasks.BaseOptions(model_asset_path=str(landmarker_model())),
+            running_mode=mp.tasks.vision.RunningMode.VIDEO, num_faces=1, output_face_blendshapes=True,
+            min_face_detection_confidence=0.4, min_face_presence_confidence=0.4, min_tracking_confidence=0.4)
+        self._lm = mp.tasks.vision.FaceLandmarker.create_from_options(opts)
+
+    def __enter__(self) -> "_Landmarker":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._lm.close()
+
+    def detect(self, crop: np.ndarray, ts_ms: int) -> tuple[float, float, float, float] | None:
+        mp = self._mp
+        res = self._lm.detect_for_video(mp.Image(image_format=mp.ImageFormat.SRGB, data=crop), ts_ms)
+        if not res.face_blendshapes:
+            return None
+        lms = res.face_landmarks[0]
+        bs = {c.category_name: c.score for c in res.face_blendshapes[0]}
+        return (float(np.mean([p.x for p in lms])), float(np.mean([p.y for p in lms])),
+                float(bs.get("jawOpen", 0.0)), float(bs.get("mouthClose", 0.0)))
+
+
+def _open_landmarker() -> _Landmarker:
+    return _Landmarker()
+
+
+class _MouthTrack:
+    """(t_us, jawOpen, mouthClose) series of the face inside `region` (pixels of a fw × fh frame), fed
+    frame by frame. `face` (normalised box the track's faces stayed in): a landmarked face centred
+    outside it is someone else's (a padded crop around the back of a head can reach the other
+    person's face) and is ignored."""
+
+    def __init__(self, lm, region: tuple[int, int, int, int], fw: int, fh: int, face: dict | None = None) -> None:
+        self.lm, self.region, self.fw, self.fh, self.face = lm, region, fw, fh, face
+        self.series: list[tuple[int, float, float]] = []
+
+    def feed(self, frame: np.ndarray, t_us: int) -> None:
+        x, y, w, h = self.region
+        hit = self.lm.detect(np.ascontiguousarray(frame[y:y + h, x:x + w]), int(t_us // 1000))
+        if hit is None:
+            return
+        mx, my, jaw, close = hit
+        if self.face is not None:
+            cx, cy = (x + w * mx) / self.fw, (y + h * my) / self.fh
+            f = self.face
+            if not (f["x"] <= cx <= f["x"] + f["w"] and f["y"] <= cy <= f["y"] + f["h"]):
+                return
+        self.series.append((t_us, round(jaw, 4), round(close, 4)))
+
+
+def _frame_time(t0_us: int, k: int) -> int:
+    return t0_us + int(round(k / ASD_FPS * 1e6))
+
+
+def mouth_series(frames: Iterable[np.ndarray], t0_us: int, region: tuple[int, int, int, int],
+                 face: dict | None = None, frame_size: tuple[int, int] | None = None) -> list[tuple[int, float, float]]:
     """(t_us, jawOpen, mouthClose) for the face inside `region` of each frame (frames without a face skipped).
-    `face` (normalised box the track's faces stayed in): a landmarked face centred outside it is someone else's
-    (a padded crop around the back of a head can reach the other person's face) and is ignored."""
-    import mediapipe as mp
+    `frame_size` = (w, h) of the frames (default: from the first frame). One face; `analyse_clip` feeds
+    every face of a piece in a single decoding pass instead."""
+    it = iter(frames)
+    first = next(it, None)
+    if first is None:
+        return []
+    fw, fh = frame_size or (first.shape[1], first.shape[0])
+    with _open_landmarker() as lm:  # fresh per (piece, face): no state across cuts
+        tr = _MouthTrack(lm, region, fw, fh, face)
+        for k, fr in enumerate(itertools.chain([first], it)):
+            tr.feed(fr, _frame_time(t0_us, k))
+    return tr.series
 
-    x, y, w, h = region
-    fh, fw = frames.shape[1:3] if len(frames) else (1, 1)
-    opts = mp.tasks.vision.FaceLandmarkerOptions(
-        base_options=mp.tasks.BaseOptions(model_asset_path=str(landmarker_model())),
-        running_mode=mp.tasks.vision.RunningMode.VIDEO, num_faces=1, output_face_blendshapes=True,
-        min_face_detection_confidence=0.4, min_face_presence_confidence=0.4, min_tracking_confidence=0.4)
-    out = []
-    with mp.tasks.vision.FaceLandmarker.create_from_options(opts) as lm:  # fresh per (piece, face): no state across cuts
+
+def landmark_piece(frames: Iterable[np.ndarray], t0_us: int, regions: list[tuple[tuple[int, int, int, int], dict | None]],
+                   frame_size: tuple[int, int]) -> tuple[list[list[tuple[int, float, float]]], int]:
+    """Mouth series of every face of one piece in a single pass over `frames` (each frame goes to every
+    face's own landmarker, then is dropped): ([series per region], frame count)."""
+    fw, fh = frame_size
+    n = 0
+    with contextlib.ExitStack() as stack:  # one fresh landmarker per (piece, face): no state across cuts
+        tracks = [_MouthTrack(stack.enter_context(_open_landmarker()), region, fw, fh, face) for region, face in regions]
         for k, fr in enumerate(frames):
-            t = t0_us + int(round(k / ASD_FPS * 1e6))
-            res = lm.detect_for_video(mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(fr[y:y + h, x:x + w])),
-                                      int(t // 1000))
-            if res.face_blendshapes:
-                if face is not None:
-                    lms = res.face_landmarks[0]
-                    cx = (x + w * float(np.mean([p.x for p in lms]))) / fw
-                    cy = (y + h * float(np.mean([p.y for p in lms]))) / fh
-                    if not (face["x"] <= cx <= face["x"] + face["w"] and face["y"] <= cy <= face["y"] + face["h"]):
-                        continue
-                bs = {c.category_name: c.score for c in res.face_blendshapes[0]}
-                out.append((t, round(float(bs.get("jawOpen", 0.0)), 4), round(float(bs.get("mouthClose", 0.0)), 4)))
-    return out
+            t = _frame_time(t0_us, k)
+            for tr in tracks:
+                tr.feed(fr, t)
+            n = k + 1
+    return [tr.series for tr in tracks], n
 
 
 def analyse_clip(mezz: Path, faces: dict, cuts_us: list[int], words: list[tuple[int, int, int]] | None = None,
@@ -335,20 +429,22 @@ def analyse_clip(mezz: Path, faces: dict, cuts_us: list[int], words: list[tuple[
     src_w, src_h = src_size
     spans = [(s, e) for _, s, e in (words or [])]
     t0, frames_n, next_id = time.time(), 0, 0
+    fw, fh = decode_size(DECODE_WIDTH, src_w, src_h)
     for a, b in pieces:
         tracks = face_tracks(samples, a, b)
         if len(tracks) < 2:
             continue
-        frames = _decode(mezz, a, b, DECODE_WIDTH, src_w, src_h)
-        frames_n += len(frames)
-        fh, fw = frames.shape[1:3] if len(frames) else (src_h, src_w)
-        live = []
+        regions = []
         for tr in tracks:
             bxs = [f for _, f in tr["boxes"]]
             x0, y0 = min(f["x"] for f in bxs), min(f["y"] for f in bxs)
             union = {"x": x0, "y": y0, "w": max(f["x"] + f["w"] for f in bxs) - x0, "h": max(f["y"] + f["h"] for f in bxs) - y0}
-            series = mouth_series(frames, a, crop_region(bxs, fw, fh), union)
-            if len(series) >= MIN_LANDMARK_SHARE * max(1, len(frames)):
+            regions.append((crop_region(bxs, fw, fh), union))
+        all_series, n = landmark_piece(_frames(mezz, a, b, fw, fh), a, regions, (fw, fh))
+        frames_n += n
+        live = []
+        for tr, series in zip(tracks, all_series):
+            if len(series) >= MIN_LANDMARK_SHARE * max(1, n):
                 live.append((next_id, tr, series))
                 result["tracks"].append({"id": next_id, "box": tr["box"], "start_us": a, "end_us": b})
                 next_id += 1
