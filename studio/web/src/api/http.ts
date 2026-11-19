@@ -106,7 +106,8 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
     costs: (days = 30) => get(`/api/costs?days=${days}`),
     settings: () => get("/api/settings"),
     saveSettings: (s: Settings) => request("PUT", "/api/settings", s),
-    mediaUrl: (id, path) => withToken(`/api/projects/${enc(id)}/media/${path.split("/").map(enc).join("/")}`),
+    mediaUrl: (id, path, v) =>
+      withToken(`/api/projects/${enc(id)}/media/${path.split("/").map(enc).join("/")}`) + (v === undefined ? "" : `&v=${enc(String(v))}`),
     libraryMediaUrl: (kind, id) => withToken(`/api/libraries/${kind}/${enc(id)}/media`),
     packageZipUrl: (id) => withToken(`/api/projects/${enc(id)}/package.zip`),
     subscribe: (id, onEvent, onError) => subscribeEvents(withToken(`/api/projects/${enc(id)}/events`), onEvent, onError),

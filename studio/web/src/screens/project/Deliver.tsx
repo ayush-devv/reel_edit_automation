@@ -114,7 +114,7 @@ export default function Deliver() {
                 <li key={f.path} className="flex flex-col gap-2">
                   <div className="flex h-56 items-end justify-center rounded-card bg-bg-inset p-3">
                     <div className={cx("h-full max-w-full overflow-hidden rounded-[6px] border border-line-strong bg-[linear-gradient(160deg,#3a2a2f,#141018)]", aspectOf(f))}>
-                      {f.thumb && <img src={api.mediaUrl(p.id, f.thumb)} alt="" className="h-full w-full object-cover" />}
+                      {f.thumb && <img src={api.mediaUrl(p.id, f.thumb, p.updated)} alt="" className="h-full w-full object-cover" />}
                     </div>
                   </div>
                   <p className="font-medium text-fg-primary">{f.label}</p>
@@ -122,8 +122,8 @@ export default function Deliver() {
                     <Mono className="text-fg-muted">{bytes(f.bytes)}</Mono>
                     <span className="ml-auto flex gap-1">
                       <IconButton icon={copied === f.path ? "check" : "copy"} label={`Copy path of ${f.label}`} onClick={() => copy(f)} />
-                      {api.mediaUrl(p.id, f.path) && (
-                        <a href={api.mediaUrl(p.id, f.path)} download aria-label={`Download ${f.label}`} title="Download" className="inline-flex h-8 w-8 items-center justify-center rounded-input text-fg-secondary hover:bg-bg-overlay hover:text-fg-primary">
+                      {api.mediaUrl(p.id, f.path, p.updated) && (
+                        <a href={api.mediaUrl(p.id, f.path, p.updated)} download aria-label={`Download ${f.label}`} title="Download" className="inline-flex h-8 w-8 items-center justify-center rounded-input text-fg-secondary hover:bg-bg-overlay hover:text-fg-primary">
                           <Icon name="download" size={16} />
                         </a>
                       )}

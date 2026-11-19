@@ -72,7 +72,10 @@ export const STAGE_GROUPS: { name: string; stages: string[] }[] = [
   { name: "Check & deliver", stages: ["qa", "package", "variants"] },
 ];
 
-export const RENDER_STAGES = new Set(["render", "overlay", "composite", "variants"]);
+/** A job is finished in any state other than queued/running (contract v1.1: done | failed | cancelled). */
+export const isJobTerminal = (status: string | undefined): boolean => !!status && status !== "queued" && status !== "running";
+
+export const RENDER_STAGES =new Set(["render", "overlay", "composite", "variants"]);
 
 /**
  * Typical seconds per stage for a ~60 s reel. A fallback for the time-left estimate when the API

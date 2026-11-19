@@ -65,7 +65,8 @@ export interface Api {
   costs(days?: number): Promise<Costs>;
   settings(): Promise<Settings>;
   saveSettings(s: Settings): Promise<void>;
-  mediaUrl(id: string, path: string): string;
+  /** `v` busts the browser cache when a re-render rewrites the same path (e.g. the version number). */
+  mediaUrl(id: string, path: string, v?: string | number): string;
   /** v1.1: preview a library file (sfx/music/broll). "" when unavailable. */
   libraryMediaUrl(kind: "sfx" | "music" | "broll", id: string): string;
   packageZipUrl(id: string): string;

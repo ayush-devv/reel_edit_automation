@@ -37,7 +37,7 @@ function FlatLayers({ layers, duration, time, selected, onSelect }: { layers: La
                   aria-label={`${l.label}: ${b.label}, ${fmt(b.start)}–${fmt(b.end)}`}
                   title={b.label}
                   className={cx("absolute inset-y-1 overflow-hidden rounded-[4px] px-1.5 text-left text-[11px] font-medium text-black/85 transition-[filter] duration-hover hover:brightness-110", selected === key && "ring-2 ring-white")}
-                  style={{ left: `${(b.start / duration) * 100}%`, width: `calc(${((b.end - b.start) / duration) * 100}% - 2px)`, background: l.color, opacity: selected && selected !== key ? 0.7 : 1 }}
+                  style={{ left: `${(b.start / duration) * 100}%`, width: `calc(${((b.end - b.start) / duration) * 100}% - 2px)`, background: l.color }}
                 >
                   <span className="block truncate leading-[inherit]">{l.kind === "audio" ? "" : b.label}</span>
                 </button>

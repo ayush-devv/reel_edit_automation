@@ -7,6 +7,7 @@ import { Icon } from "../../components/icons";
 import { Button, cx, IconButton, Mono, Notice, Panel, TextArea, TextInput } from "../../components/ui";
 import { ago, usd } from "../../lib/format";
 import { parseNotes } from "../../lib/notes";
+import { isJobTerminal } from "../../lib/status";
 import { useProject } from "./ProjectLayout";
 
 interface Msg {
@@ -50,7 +51,7 @@ function CompareDialog({ p, v, onClose }: { p: Project; v: Version; onClose: () 
       </div>
       <div className="mt-4 flex justify-center rounded-card bg-bg-inset p-3">
         {src ? (
-          <video key={src} src={api.mediaUrl(p.id, src)} autoPlay controls className="max-h-[60vh] rounded-card" onEnded={() => setWhich((w) => (w === "old" ? "new" : w))} />
+          <video key={src} src={api.mediaUrl(p.id, src, which === "old" ? prev?.n : v.n)} autoPlay controls className="max-h-[60vh] rounded-card" onEnded={() => setWhich((w) => (w === "old" ? "new" : w))} />
         ) : (
           <p className="px-4 py-10 text-center text-fg-secondary">The rendered files for these versions aren’t available here{api.mode === "mock" ? " (sample data)" : ""}.</p>
         )}
@@ -64,16 +65,31 @@ function CompareDialog({ p, v, onClose }: { p: Project; v: Version; onClose: () 
 
 function Chat({ p }: { p: Project }) {
   const api = useApi();
-  const { lastRevision } = useProject();
+  const { lastRevision, jobs } = useProject();
   const [text, setText] = useState("");
   const [pending, setPending] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [compare, setCompare] = useState<Version | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const jobStatus = jobId ? jobs[jobId]?.status : undefined;
 
   useEffect(() => {
-    if (lastRevision) setPending(null);
+    if (lastRevision) {
+      setPending(null);
+      setJobId(null);
+    }
   }, [lastRevision]);
+  // FR-6: if the Editor's change fails the validator (twice), the job ends without a revision event.
+  useEffect(() => {
+    if (!jobId || !isJobTerminal(jobStatus)) return;
+    if (jobStatus !== "done") {
+      setErr("The Editor couldn’t make that change safely — nothing changed.");
+      setText((t) => t || pending || "");
+    }
+    setPending(null);
+    setJobId(null);
+  }, [jobId, jobStatus, pending]);
   const msgs = chatFrom(p, pending);
   useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: "nearest" });
@@ -86,7 +102,8 @@ function Chat({ p }: { p: Project }) {
     setPending(req);
     setText("");
     try {
-      await api.revise(p.id, req);
+      const r = await api.revise(p.id, req);
+      setJobId(r.job);
     } catch (e) {
       setPending(null);
       setText(req);

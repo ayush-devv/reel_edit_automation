@@ -148,3 +148,25 @@ Added by the web app (`studio/web/`) for screens the v1 table didn't cover. Ever
 - per-reel scores of an eval run (FR-11);
 - story-list adjustments (reorder, remove, restore, trim lines; FR-8 / AC-12) — only the `adjust` kinds above exist;
 - b-roll files on project create (FR-2).
+
+**Behaviour the web app relies on**
+- **SPA fallback.** `reel studio` serves `studio/web/dist/index.html` for any GET that isn't under `/api/` and isn't a file in `dist`, so deep links such as `/p/<id>/review` survive a reload (AC-4).
+- **Jobs.**
+  - `Job.status` and the SSE `job.status` are one of `queued | running | done | failed | cancelled`.
+  - The SSE `job.id` equals the `{ job }` returned by the POST that started it.
+  - A revise/notes job that ends `failed` without a `revision` event means the Editor's change failed the validator twice; nothing changed (FR-6).
+- **Media URLs.** The web app may append `&v=<version or updated>` to media URLs as a cache-buster, because re-renders rewrite the same path. The API ignores unknown query parameters.
+- **`POST /api/projects/{id}/adjust` value types:**
+
+| kind | value |
+|---|---|
+| `caption_family` | string (family id) |
+| `caption_token` | `{ key: string, value: string }` (colours as `#RRGGBB`) |
+| `look` | string (`reel.color.LOOKS` id) |
+| `look_strength` | number 0–1 |
+| `music_track` | string (music id or `"none"`) |
+| `music_gain_db` | number −30…−6 |
+| `sfx_off`, `punch_ins_off` | boolean |
+| `grain` | number 0–0.6 |
+| `vignette` | number 0–0.7 |
+| `max_pause_ms` | integer: 0, or 300–3000 |

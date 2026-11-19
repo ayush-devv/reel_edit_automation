@@ -63,6 +63,8 @@ describe("http client", () => {
     const api = createHttpApi(vi.fn() as unknown as typeof fetch);
     expect(api.mediaUrl("p 1", "render/final.mp4")).toBe("/api/projects/p%201/media/render/final.mp4?token=t%2Fk");
     expect(api.packageZipUrl("p1")).toBe("/api/projects/p1/package.zip?token=t%2Fk");
+    // cache-buster so a re-rendered file at the same path reloads
+    expect(api.mediaUrl("p1", "render/final.mp4", 3)).toBe("/api/projects/p1/media/render/final.mp4?token=t%2Fk&v=3");
     const off = api.subscribe("p1", () => {});
     off();
   });

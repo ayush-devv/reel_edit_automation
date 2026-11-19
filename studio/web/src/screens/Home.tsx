@@ -40,7 +40,7 @@ function ProjectCard({ p }: { p: ProjectSummary }) {
         to={projectHref(p)}
         className="group block overflow-hidden rounded-card border border-line-subtle bg-bg-raised transition-[transform,border-color] duration-hover ease-std hover:-translate-y-0.5 hover:border-ai focus-visible:border-ai"
       >
-        <Thumb id={p.id} src={p.thumb ? api.mediaUrl(p.id, p.thumb) : null} label={p.name}>
+        <Thumb id={p.id} src={p.thumb ? api.mediaUrl(p.id, p.thumb, p.updated) : null} label={p.name}>
           <div className="absolute left-2 top-2">
             <StatusBadge badge={b} stage={p.stage} count={b === "hold" ? holdCount : undefined} />
           </div>

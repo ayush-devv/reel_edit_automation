@@ -1,6 +1,6 @@
 // FR-4 Review: 3D phone preview, verdict, proof list with inline fix (AC-6), Reviewer notes, quality
 // checks, the owner's "Would you post this?" label, cover image.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApi } from "../../api/context";
 import { friendlyError } from "../../api/errors";
@@ -10,6 +10,7 @@ import { PhonePreview } from "../../components/Player";
 import { Button, cx, Loading, Mono, Notice, Panel, TextInput } from "../../components/ui";
 import { useQuery } from "../../hooks/useQuery";
 import { tcToSeconds } from "../../lib/format";
+import { isJobTerminal } from "../../lib/status";
 import { useReelPlayer, type ReelPlayer } from "../../lib/reelPlayer";
 import { useProject } from "./ProjectLayout";
 
@@ -205,7 +206,7 @@ function LabelControl({ p }: { p: Project }) {
 
 function useReviewPlayer(p: Project): ReelPlayer | null {
   const api = useApi();
-  const src = p.media.final ? api.mediaUrl(p.id, p.media.final) : null;
+  const src = p.media.final ? api.mediaUrl(p.id, p.media.final, p.versions.at(-1)?.n ?? p.updated) : null;
   const tl = useQuery(() => (src ? Promise.resolve(null) : api.timeline(p.id).then((t) => t.timeline)), [api, p.id, src]);
   const timeline = useMemo(() => tl.data ?? null, [tl.data]);
   const player = useReelPlayer(src || null, timeline);
@@ -217,9 +218,14 @@ export default function Review() {
   const api = useApi();
   const player = useReviewPlayer(p);
   const [proofErr, setProofErr] = useState<string | null>(null);
-  const [proofJob, setProofJob] = useState<string | null>(null);
-  const jobState = proofJob ? jobs[proofJob]?.status : undefined;
-  const proofBusy = !!proofJob && jobState !== "done" && jobState !== "failed";
+  // The fix job: busy until its SSE `job` event turns terminal, or a snapshot no longer lists the word.
+  const [proofJob, setProofJob] = useState<{ id: string; word: number } | null>(null);
+  const jobState = proofJob ? jobs[proofJob.id]?.status : undefined;
+  const wordGone = !!proofJob && !p.proof.some((w) => w.i === proofJob.word);
+  const proofBusy = !!proofJob && !isJobTerminal(jobState) && !wordGone;
+  useEffect(() => {
+    if (proofJob && jobState && isJobTerminal(jobState) && jobState !== "done" && !wordGone) setProofErr("The caption fix didn’t finish. Nothing changed — try again.");
+  }, [proofJob, jobState, wordGone]);
 
   if (p.status !== "sendable" && p.status !== "hold") {
     return (
@@ -238,7 +244,7 @@ export default function Review() {
     setProofErr(null);
     try {
       const r = await api.proof(p.id, [{ i: w.i, text }]);
-      setProofJob(r.job);
+      setProofJob({ id: r.job, word: w.i });
     } catch (e) {
       setProofErr(friendlyError(e));
     }
@@ -276,7 +282,7 @@ export default function Review() {
           <LabelControl p={p} />
           <Panel title="Cover image">
             {p.media.cover ? (
-              <img src={api.mediaUrl(p.id, p.media.cover)} alt="Cover image for the reel" className="mx-auto max-h-56 rounded-card" />
+              <img src={api.mediaUrl(p.id, p.media.cover, p.versions.at(-1)?.n ?? p.updated)} alt="Cover image for the reel" className="mx-auto max-h-56 rounded-card" />
             ) : (
               <p className="text-fg-secondary">The cover is picked from the strongest frame at the end of the edit. None yet for this version.</p>
             )}

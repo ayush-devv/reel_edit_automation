@@ -27,14 +27,17 @@ export function useLiveProject(id: string): LiveProject {
 
   useEffect(() => {
     mounted.current = true;
+    let gotSnapshot = false;
     setError(null);
     setProject((prev) => (prev && prev.id === id ? prev : null));
+    // The GET is only a head start: once the SSE snapshot has arrived it is the fresher state.
     api
       .project(id)
-      .then((p) => mounted.current && setProject(p))
+      .then((p) => mounted.current && !gotSnapshot && setProject(p))
       .catch((e) => mounted.current && setError(e));
     const onEvent = (ev: SseEvent) => {
       if (!mounted.current) return;
+      if (ev.type === "snapshot") gotSnapshot = true;
       setConnected(true);
       if (ev.type === "log") setLogs((l) => [...l.slice(-399), ev.data.line]);
       else if (ev.type === "job") setJobs((j) => ({ ...j, [ev.data.id]: { kind: ev.data.kind, status: ev.data.status } }));
