@@ -163,7 +163,7 @@ FINISH = Stage(name="finish", input_hash=_finish_hash, outputs=lambda ctx: [ctx.
 def _compile_hash(ctx: StageContext) -> str:
     return hash_inputs({f: _fp(ctx, f) for f in ("plan/story.json", "plan/finish.json", "perception/words.json",
                                                  "perception/edges.json", "source/manifest.json", "perception/palette.json",
-                                                 "broll/index.json")}
+                                                 "broll/index.json", "perception/vad.json", "perception/scenes.json")}
                        | {"assets": _assets_fp(), "brand": _opt_file(ctx.options.get("brand")), "proof": _fp(ctx, "qa/proof_confirmed.json"),
                           "logo": _logo_source_fp(ctx), "code": _code_fp("compile", "adapt", "script"), "v": VERSION})
 
@@ -208,7 +208,8 @@ def _compile(ctx: StageContext) -> dict:
     logo = _brand_logo(ctx, inp.brand)
     accent = (inp.brand.colors.accent or inp.brand.colors.primary) if inp.brand else None
     tl = compile_timeline(story, fin, inp.words, inp.clips, inp.fps, inp.idx, edges=inp.edges, brand_family=family, brand_tokens=tokens,
-                          brand_look=inp.brand.look if inp.brand else None, word_fixes=fixes, brand_accent=accent, brand_logo=logo)
+                          brand_look=inp.brand.look if inp.brand else None, word_fixes=fixes, brand_accent=accent, brand_logo=logo,
+                          vad=inp.vad, scene_cuts=inp.scenes)
     from reel import adapt
 
     pal = _read_json(ctx, "perception", "palette.json") or {}

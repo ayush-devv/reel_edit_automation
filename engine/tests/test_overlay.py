@@ -263,3 +263,25 @@ def test_brand_colours_must_be_hex():
     assert BrandColors(accent="#f06").accent == "#FF0066"
     with pytest.raises(Exception):
         BrandColors(accent="red")
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not READY, reason="needs pinned ffmpeg + renderer")
+def test_top_band_graphics_step_off_a_close_up_face(tmp_path):
+    from reel import tools
+    from reel.schemas.timeline import GraphicEvent
+
+    events = [GraphicEvent(id="k", kind="keyword_card", start_f=0, end_f=40, text="Which half are you", style="under", accent="#FFD400"),
+              GraphicEvent(id="c", kind="counter", start_f=40, end_f=90, text="{n} teaspoons", value=8, accent="#FFD400")]
+    tl = Timeline(fps="25/1", width=1080, height=1920, duration_f=90, assets={}, video=[], audio=[], graphics=events)
+    props = overlay.build_props(tl, tmp_path, None)
+    props["faces"] = [{"start_f": 0, "end_f": 90, "box": {"x": 0.25, "y": 0.10, "w": 0.5, "h": 0.30}, "text": []}]  # tight close-up, high in frame
+    ov = tmp_path / "ov.mov"
+    overlay.render_overlay(props, ov)
+    raw = tools.run([str(config.ffmpeg_path()), "-v", "error", "-i", str(ov), "-vf", "select='eq(n\\,30)+eq(n\\,80)',alphaextract,scale=108:192",
+                     "-fps_mode", "passthrough", "-f", "rawvideo", "-pix_fmt", "gray", "-"]).stdout
+    frames = np.frombuffer(raw, dtype=np.uint8).reshape(-1, 192, 108)
+    for a in frames:
+        face_rows = a[int(0.10 * 192):int(0.40 * 192), 27:81]
+        assert (face_rows > 128).mean() < 0.01  # nothing drawn on the face
+        assert (a[int(0.40 * 192):int(0.58 * 192)] > 128).mean() > 0.01  # the graphic moved below it, above the captions

@@ -35,6 +35,22 @@ def word_table(ws: Workspace) -> WordTable:
     return WordTable.model_validate_json(path.read_text())
 
 
+def vad_speech(ws: Workspace) -> dict[str, list[list[int]]]:
+    """Voice-activity speech spans per clip (µs), for pause tightening inside smeared ASR words."""
+    path = ws.path("perception", "vad.json")
+    if not path.exists():
+        return {}
+    return {k: v.get("speech", []) for k, v in json.loads(path.read_text()).items() if isinstance(v, dict)}
+
+
+def scene_cuts(ws: Workspace) -> dict[str, list[int]]:
+    """Camera cuts inside each source clip (µs)."""
+    path = ws.path("perception", "scenes.json")
+    if not path.exists():
+        return {}
+    return {k: v.get("cuts_us", []) for k, v in json.loads(path.read_text()).items() if isinstance(v, dict)}
+
+
 def edges(ws: Workspace) -> dict[int, tuple[int, int]] | None:
     """Heard word edges from the tables stage (None if not computed yet)."""
     path = ws.path("perception", "edges.json")

@@ -89,6 +89,57 @@ def pause_groups(item_words: list[Word], max_pause_us: int, edges: dict[int, tup
     return groups
 
 
+def split_on_silence(start_us: int, end_us: int, group: list[Word], speech: list[list[int]], max_pause_us: int) -> list[tuple[int, int, list[Word]]]:
+    """Cut silences the word times hide. ASR word times smear across pauses (a 0.1 s "I" stretched to 0.8 s over a
+    silence), so a long pause can sit inside a word's span. Voice-activity gaps longer than `max_pause_us` inside the
+    range split it; each part keeps the words that start in it (a part with no word joins its neighbour)."""
+    if not max_pause_us or not speech:
+        return [(start_us, end_us, group)]
+    silences = [(a[1], b[0]) for a, b in zip(speech, speech[1:])
+                if b[0] - a[1] > max_pause_us and start_us + HEARD_PAD_US < a[1] and b[0] < end_us - HEARD_PAD_US]
+    parts, cur = [], start_us
+    for s0, s1 in silences:
+        parts.append((cur, s0 + HEARD_PAD_US))
+        cur = s1 - HEARD_PAD_US
+    parts.append((cur, end_us))
+    out: list[tuple[int, int, list[Word]]] = []
+    for a, b in parts:
+        ws = [w for w in group if a <= w.start_us < b] if out else [w for w in group if w.start_us < b]
+        if ws:
+            out.append((a, b, ws))
+        elif out:  # nothing starts here (a smeared word spans it): keep it with the previous part
+            pa, _pb, pw = out[-1]
+            out[-1] = (pa, b, pw)
+    leftover = [w for w in group if w.start_us >= parts[-1][1]]
+    if leftover and out:
+        a, b, ws = out[-1]
+        out[-1] = (a, b, ws + leftover)
+    return out or [(start_us, end_us, group)]
+
+
+SNAP_US = 160_000  # a source camera cut this close to a shot edge would flash a few frames of the other angle
+MIN_ANGLE_US = 250_000  # … unless the other angle is shown at least this long
+
+
+def snap_off_camera_cuts(start_us: int, end_us: int, group: list[Word], cuts_us: list[int],
+                         edges: dict[int, tuple[int, int]] | None = None, lo_us: int = 0, hi_us: int | None = None) -> tuple[int, int]:
+    """Keep a shot from starting or ending a few frames away from a camera cut in the source (a stray frame of the
+    other angle). In the silent pad around the words the edge moves onto the cut; inside speech the other angle is
+    kept long enough to read as a cut instead (never trims a word, never reaches into the words cut out on either
+    side: `lo_us` / `hi_us` are the neighbouring words' heard edges)."""
+    edges = edges or {}
+    first = edges.get(group[0].i, (group[0].start_us, group[0].end_us))[0]
+    last = edges.get(group[-1].i, (group[-1].start_us, group[-1].end_us))[1]
+    for c in cuts_us:
+        if start_us < c <= start_us + SNAP_US:
+            start_us = c if c <= first else max(lo_us, min(start_us, c - MIN_ANGLE_US))
+        if end_us - SNAP_US <= c < end_us:
+            end_us = c if c >= last else max(end_us, c + MIN_ANGLE_US)
+            if hi_us is not None:
+                end_us = min(end_us, hi_us)
+    return start_us, end_us
+
+
 def _source_range(item_words: list[Word], clip_words: list[Word], clip: ClipInfo,
                   edges: dict[int, tuple[int, int]] | None = None) -> tuple[int, int]:
     """Cut points: heard speech edges (step 4 snapping) when known, else ASR edges; plus a breath,
@@ -113,7 +164,7 @@ def _source_range(item_words: list[Word], clip_words: list[Word], clip: ClipInfo
 UNRELIABLE_SHARE = 0.15  # above this share of suspect/zero-length kept words, captions fall back to phrases
 
 
-def clean_caption_words(ws: list) -> list:
+def clean_caption_words(ws: list, prev_text: str | None = None) -> list:
     """Captions read like writing, not raw ASR: stutters ("i i thought") drop the repeat, "i" → "I",
     and a line starts with a capital. The audio is unchanged; only the on-screen text is tidied."""
     out = []
@@ -127,7 +178,8 @@ def clean_caption_words(ws: list) -> list:
             t = t.replace(core, core.lower())
         if key in ("i", "i'm", "i've", "i'll", "i'd"):
             t = "I" + t[1:]
-        if (not out or out[-1].text.rstrip()[-1:] in ".?!") and t[:1].islower():
+        before = out[-1].text if out else prev_text  # the line before, in OUTPUT order (a join is not a new sentence)
+        if (before is None or before.rstrip()[-1:] in ".?!") and t[:1].islower():
             t = t[:1].upper() + t[1:]
         out.append(w.model_copy(update={"text": t}) if t != w.text else w)
     return out
@@ -357,6 +409,8 @@ def compile_timeline(
     word_fixes: dict[int, str] | None = None,
     brand_accent: str | None = None,
     brand_logo: str | None = None,
+    vad: dict[str, list[list[int]]] | None = None,
+    scene_cuts: dict[str, list[int]] | None = None,
 ) -> Timeline:
     """Brand kit (family lock + tokens) overrides the Editor's caption choices (ADR-0017)."""
     finish = finish or empty_finish()
@@ -373,8 +427,17 @@ def compile_timeline(
         if clip is None or not item_words or any(w is None or w.clip != it.clip for w in item_words):
             raise CompileError(f"item {it.id}: invalid clip/word range — run `reel validate` first")
         shots: list[list] = []
+        ranges = []
         for group in pause_groups(item_words, max_pause_us, edges):
             start_us, end_us = _source_range(group, words.clip_words(it.clip), clip, edges)
+            ranges += split_on_silence(start_us, end_us, group, (vad or {}).get(it.clip, []), max_pause_us)
+        cw = words.clip_words(it.clip)
+        pos = {w.i: k for k, w in enumerate(cw)}
+        for start_us, end_us, group in ranges:
+            k0, k1 = pos[group[0].i], pos[group[-1].i]
+            lo = (edges or {}).get(cw[k0 - 1].i, (0, cw[k0 - 1].end_us))[1] if k0 > 0 else 0
+            hi = (edges or {}).get(cw[k1 + 1].i, (cw[k1 + 1].start_us, 0))[0] if k1 + 1 < len(cw) else clip.duration_us
+            start_us, end_us = snap_off_camera_cuts(start_us, end_us, group, (scene_cuts or {}).get(it.clip, []), edges, lo, hi)
             in_f = tb.us_to_frame(start_us, fps, mode="floor")
             out_f = min(tb.us_to_frame(end_us, fps, mode="ceil"), tb.us_to_frame(clip.duration_us, fps, mode="floor"))
             if out_f <= in_f:
@@ -479,8 +542,10 @@ def compile_timeline(
     kept = [by[i] for it in story.items for i in range(it.word_start, it.word_end + 1) if not by[i].filler]
     timing = "phrase" if unreliable_timing(kept) else "word"
     pages: list[CaptionPage] = []
+    prev_caption: str | None = None
     for it in story.items:
-        ws = clean_caption_words([by[i] for i in range(it.word_start, it.word_end + 1) if not by[i].filler])
+        ws = clean_caption_words([by[i] for i in range(it.word_start, it.word_end + 1) if not by[i].filler], prev_caption)
+        prev_caption = ws[-1].text if ws else prev_caption
         # one line per page (pro reference: 1–3 word pages on a fixed line); fuller pages only when speech is fast
         for group in balanced_pages(ws, max_words, page_char_budget(tokens)):
             cw = [CaptionWord(i=w.i, text=caption_text((word_fixes or {}).get(w.i, w.text), cap_script), start_f=word_out_frame(w, it.id),
@@ -588,9 +653,9 @@ def compile_timeline(
 
 
 def dry_run(story: StoryPlan, words: WordTable, clips: dict[str, ClipInfo], fps: Fraction, idx: Indexes,
-            edges: dict[int, tuple[int, int]] | None = None) -> str:
+            edges: dict[int, tuple[int, int]] | None = None, vad: dict | None = None, scene_cuts: dict | None = None) -> str:
     """Read-back script Claude sees before committing a story (ADR-0016)."""
-    tl = compile_timeline(story, None, words, clips, fps, idx, edges=edges)
+    tl = compile_timeline(story, None, words, clips, fps, idx, edges=edges, vad=vad, scene_cuts=scene_cuts)
     by = words.by_index()
     lines = []
     tightened = 0

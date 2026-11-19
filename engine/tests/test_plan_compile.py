@@ -268,3 +268,36 @@ def test_a_new_punch_cuts_a_running_ramp_short():
     assert v.scale[-1].v == 1.4  # the later punch wins and holds
     mid = v.scale[-2]
     assert 1.0 < mid.v < 1.2  # the first ramp stopped part-way, where the second punch began
+
+
+def test_silence_hidden_inside_a_smeared_word_is_cut():
+    from reel.compile import split_on_silence
+
+    ws = [Word(i=0, clip="c", text="i", start_us=0, end_us=800_000), Word(i=1, clip="c", text="thought", start_us=800_000, end_us=1_000_000)]
+    speech = [[0, 150_000], [700_000, 1_000_000]]  # VAD: "I" ends at 0.15 s; the ASR stretched it to 0.8 s
+    parts = split_on_silence(0, 1_100_000, ws, speech, 400_000)
+    assert len(parts) == 2 and [w.i for w in parts[0][2]] == [0] and [w.i for w in parts[1][2]] == [1]
+    assert parts[0][1] == 150_000 + 100_000 and parts[1][0] == 700_000 - 100_000  # cut inside the silence, breath kept
+    assert len(split_on_silence(0, 1_100_000, ws, speech, 0)) == 1  # max_pause 0 keeps every pause
+
+
+def test_shot_edges_snap_off_nearby_camera_cuts():
+    from reel.compile import snap_off_camera_cuts
+
+    ws = [Word(i=0, clip="c", text="hello", start_us=1_000_000, end_us=1_400_000)]
+    # cut 2 frames after the shot starts, before the first word: start on the cut (no stray frame of the old angle)
+    assert snap_off_camera_cuts(900_000, 1_500_000, ws, [960_000])[0] == 960_000
+    # cut just before the end, after the last word: end on the cut
+    assert snap_off_camera_cuts(900_000, 1_500_000, ws, [1_450_000])[1] == 1_450_000
+    # cut inside the word near the start: keep ≥ 0.25 s of the old angle instead, never past the previous word
+    start, _ = snap_off_camera_cuts(1_000_000, 1_500_000, ws, [1_100_000], lo_us=950_000)
+    assert start == 950_000
+
+
+def test_captions_do_not_capitalise_a_line_that_continues_a_sentence():
+    from reel.compile import clean_caption_words
+
+    w = [Word(i=0, clip="c", text="we", start_us=0, end_us=1), Word(i=1, clip="c", text="drink", start_us=1, end_us=2)]
+    assert clean_caption_words(w, prev_text="and then")[0].text == "we"
+    assert clean_caption_words(w, prev_text="it works.")[0].text == "We"
+    assert clean_caption_words(w)[0].text == "We"  # the reel's first line

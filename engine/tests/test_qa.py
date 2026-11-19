@@ -304,3 +304,21 @@ def test_tracked_and_fill_shots_render_frame_exact(tmp_path):
                                      "-f", "rawvideo", "-pix_fmt", "gray", "-"]).stdout, dtype=np.uint8).reshape(1920, 1080)
     top, mid = frame[100:500].astype(float), frame[800:1100].astype(float)
     assert np.abs(np.diff(top, axis=1)).mean() < 0.5 * np.abs(np.diff(mid, axis=1)).mean()
+
+
+def test_over_the_shoulder_shot_frames_the_visible_face_not_the_back_of_a_head():
+    from fractions import Fraction
+
+    from reel import framing
+
+    prov = Provenance(item="k0", words=[0, 0])
+    c = VideoClip(id="v_k0", asset="c01", at_f=0, dur_f=100, src_in_us=0, src_out_us=4_000_000, src=prov)
+    # two prominent "faces" far apart (would be a fill), but the landmarker read only the one on the right
+    two = [{"t_us": t, "faces": [{"x": 0.05, "y": 0.3, "w": 0.25, "h": 0.4}, {"x": 0.7, "y": 0.25, "w": 0.22, "h": 0.35}]}
+           for t in range(0, 4_000_000, 250_000)]
+    speakers = {"pieces": [[0, 4_000_000]], "tracks": [{"id": 1, "box": {"x": 0.7, "y": 0.25, "w": 0.22, "h": 0.35}, "start_us": 0, "end_us": 4_000_000}],
+                "segments": []}
+    shots = framing.shots(c, Fraction(25), [], two, crop_w=0.316, speakers=speakers)
+    assert len(shots) == 1 and shots[0].layout == "crop" and shots[0].centre[0] == pytest.approx(0.81)
+    # without speaker data the old behaviour stays (fill)
+    assert framing.shots(c, Fraction(25), [], two, crop_w=0.316)[0].layout == "fill"

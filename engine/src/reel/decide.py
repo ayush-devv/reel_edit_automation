@@ -52,6 +52,8 @@ class Inputs:
     edges: dict[int, tuple[int, int]] | None
     brief: brief_mod.Brief | None
     brand: brief_mod.Brand | None
+    vad: dict[str, list[list[int]]] | None = None
+    scenes: dict[str, list[int]] | None = None
 
     @property
     def source_s(self) -> float:
@@ -61,7 +63,8 @@ class Inputs:
 def load_inputs(ws: Workspace, brief_path: str | None = None, brand_path: str | None = None) -> Inputs:
     return Inputs(ws=ws, words=project.word_table(ws), clips=project.clip_infos(ws), fps=project.project_fps(ws),
                   idx=project.indexes(ws), kids=knowledge.node_ids(), edges=project.edges(ws),
-                  brief=brief_mod.load_brief(brief_path), brand=brief_mod.load_brand(brand_path))
+                  brief=brief_mod.load_brief(brief_path), brand=brief_mod.load_brand(brand_path),
+                  vad=project.vad_speech(ws), scenes=project.scene_cuts(ws))
 
 
 def all_required(node):
@@ -286,7 +289,7 @@ def cut_signature(story: StoryPlan) -> tuple:
 
 
 def readback(inp: Inputs, story: StoryPlan) -> str:
-    return dry_run(story, inp.words, inp.clips, inp.fps, inp.idx, edges=inp.edges)
+    return dry_run(story, inp.words, inp.clips, inp.fps, inp.idx, edges=inp.edges, vad=inp.vad, scene_cuts=inp.scenes)
 
 
 def story_pass(inp: Inputs, caller: Caller = claude_call.call) -> dict:

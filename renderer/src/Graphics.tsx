@@ -29,6 +29,28 @@ function faceAt(faces: FaceSpan[], f: number): Box | null {
   return faces.find((s) => f >= s.start_f && f < s.end_f)?.box ?? null;
 }
 
+/** Top of the caption band: graphics never reach into it. */
+const captionTop = (p: OverlayProps) => 0.58 * p.height;
+
+/** Vertical placement that keeps a block of height `h` off the speaker's face (the face on screen when the
+ *  graphic appears): above the face if there is room under the platform UI, else just below it, never into
+ *  the caption band. Exported for tests. */
+export function placeClear(top: number, h: number, face: Box | null, p: OverlayProps): number {
+  const minTop = p.safe.top;
+  const maxTop = captionTop(p) - h - 16;
+  let t = Math.min(Math.max(top, minTop), maxTop);
+  if (!face) return t;
+  const fy0 = face.y * p.height - 24;
+  const fy1 = (face.y + face.h) * p.height + 24;
+  if (t + h <= fy0 || t >= fy1) return t;  // already clear
+  const above = fy0 - h;
+  if (above >= minTop) return above;
+  if (fy1 <= maxTop) return fy1;
+  return Math.max(minTop, maxTop);  // no clear spot: the lowest position above the captions
+}
+
+const safeW = (p: OverlayProps) => p.width - p.safe.left - p.safe.right;
+
 /** Luminance of a #RRGGBB colour, 0–1 (for readable text on an accent fill). */
 export function luminance(hex: string): number {
   const h = hex.replace("#", "");
@@ -37,9 +59,13 @@ export function luminance(hex: string): number {
 }
 const inkOn = (bg: string) => (luminance(bg) > 0.55 ? "#0B0D12" : "#FFFFFF");
 
-/** Count-up formatting: Indian digit grouping for big numbers, one decimal if the target has one. */
+/** Count-up formatting: Indian digit grouping for big numbers, as many decimals as the target has (max 2). */
+export function decimalsOf(target: number): number {
+  if (Number.isInteger(target)) return 0;
+  return Math.round(target * 10) / 10 === target ? 1 : 2;
+}
 export function formatCount(v: number, target: number): string {
-  const dec = Number.isInteger(target) ? 0 : 1;
+  const dec = decimalsOf(target);
   return v.toLocaleString("en-IN", { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
 
@@ -61,7 +87,11 @@ const EmojiPop: React.FC<{ g: Graphic; p: OverlayProps }> = ({ g, p }) => {
     const right = (face.x + face.w) * p.width;
     left = right + size * 0.2 + size <= p.width - p.safe.right ? right + size * 0.2 : face.x * p.width - size * 1.2;
     top = Math.max(p.safe.top, face.y * p.height - size * 0.3);
+  } else {
+    top = placeClear(top, size, face, p);
   }
+  left = Math.min(Math.max(left, p.safe.left), p.width - p.safe.right - size);
+  top = Math.min(Math.max(top, p.safe.top), captionTop(p) - size);
   const out = exitK(f, g, p.fps);
   if (!g.uri) return null;
   return (
@@ -77,9 +107,10 @@ const KeywordCard: React.FC<{ g: Graphic; p: OverlayProps }> = ({ g, p }) => {
   const f = useCurrentFrame();
   const local = f - g.start_f;
   const words = g.text.split(/\s+/).filter(Boolean);
-  const maxW = p.width - p.safe.left - p.safe.right - 40;
+  const maxW = safeW(p) - 40;
   const chars = Math.max(1, g.text.length);
-  const size = Math.round(Math.min(124, maxW / (chars * 0.6)));
+  // weight 800 runs ~0.68 em per character; each word adds its side margins (0.24 em) and the mark adds padding
+  const size = Math.round(Math.min(124, maxW / (chars * 0.68 + words.length * 0.24 + 0.6)));
   const stagger = sec(0.09, p.fps);
   const lastIn = (words.length - 1) * stagger + sec(0.55, p.fps);
   const style = g.style || "pill";
@@ -88,7 +119,8 @@ const KeywordCard: React.FC<{ g: Graphic; p: OverlayProps }> = ({ g, p }) => {
   const markK = filled ? tween(local, 0, sec(0.35, p.fps), power3Out) : tween(local, lastIn + sec(0.2, p.fps), sec(0.5, p.fps), power3Out);
   const wordDelay = filled ? sec(0.15, p.fps) : 0;
   const ink = style === "pill" || style === "box" ? inkOn(g.accent) : "#FFFFFF";
-  const top = g.position === "center" ? 0.4 * p.height : p.safe.top + 90;
+  const want = g.position === "center" ? 0.46 * p.height : p.safe.top + 90;
+  const top = placeClear(want, size * 1.25, faceAt(p.faces, g.start_f), p);
   const out = exitK(f, g, p.fps);
   const mark: React.CSSProperties = {
     position: "absolute", left: -18, right: -18, transformOrigin: "left center", transform: `scaleX(${markK})`, zIndex: -1, borderRadius: 14,
@@ -98,7 +130,7 @@ const KeywordCard: React.FC<{ g: Graphic; p: OverlayProps }> = ({ g, p }) => {
     ...(style === "under" ? { top: "96%", height: Math.max(8, size * 0.09), background: g.accent } : {}),
   };
   return (
-    <div style={{ position: "absolute", top, left: 0, right: 0, display: "flex", justifyContent: "center", opacity: out,
+    <div style={{ position: "absolute", top, left: p.safe.left, right: p.safe.right, display: "flex", justifyContent: "center", opacity: out,
                   transform: `translateY(${(1 - out) * -40}px)` }}>
       <div style={{ position: "relative", isolation: "isolate", padding: "0 10px" }}>
         {style !== "plain" ? <div style={mark} /> : null}
@@ -126,12 +158,14 @@ const LowerThird: React.FC<{ g: Graphic; p: OverlayProps }> = ({ g, p }) => {
   const local = f - g.start_f;
   const k = tween(local, 0, sec(0.5, p.fps), power3Out);
   const k2 = tween(local, sec(0.15, p.fps), sec(0.5, p.fps), power3Out);
-  const [name, ...rest] = g.text.split(/\s*[·|—-]\s*/);
+  // separator needs spaces around it: "Co-founder" and "Jean-Paul" stay whole
+  const [name, ...rest] = g.text.split(/\s+[·|—–-]\s+/);
   const role = rest.join(" · ");
   const out = exitK(f, g, p.fps);
   const bar = g.style !== "tag";
   return (
-    <div style={{ position: "absolute", left: p.safe.left + 20, top: p.safe.top + 40, opacity: out, clipPath: `inset(0 ${(1 - k) * 100}% 0 0)` }}>
+    <div style={{ position: "absolute", left: p.safe.left + 20, top: placeClear(p.safe.top + 40, role ? 130 : 90, faceAt(p.faces, g.start_f), p),
+                  maxWidth: safeW(p) - 40, opacity: out, clipPath: `inset(0 ${(1 - k) * 100}% 0 0)` }}>
       <div style={{ display: "flex", alignItems: "stretch", background: bar ? "rgba(11,13,18,0.82)" : g.accent, borderRadius: bar ? 10 : 999,
                     padding: bar ? "16px 28px 16px 22px" : "12px 30px", borderLeft: bar ? `8px solid ${g.accent}` : undefined }}>
         <div style={{ fontFamily: FONT, color: bar ? "#FFFFFF" : inkOn(g.accent) }}>
@@ -180,7 +214,7 @@ const Callout: React.FC<{ g: Graphic; p: OverlayProps }> = ({ g, p }) => {
   }
   const out = exitK(f, g, p.fps);
   const labelK = tween(local, sec(0.5, p.fps), sec(0.4, p.fps), power3Out);
-  const labelTop = Math.min(cy + ry + 30, p.height - p.safe.bottom - 90);
+  const labelTop = Math.min(cy + ry + 30, captionTop(p) - 70);
   return (
     <AbsoluteFill style={{ opacity: out }}>
       <svg width={p.width} height={p.height} style={{ position: "absolute", inset: 0, transform: `rotate(${style === "circle" ? -3 : 0}deg)`,
@@ -206,13 +240,19 @@ const Counter: React.FC<{ g: Graphic; p: OverlayProps }> = ({ g, p }) => {
   const pop = tween(local, 0, sec(0.35, p.fps), backOut(1.6));
   const k = tween(local, sec(0.1, p.fps), sec(1.2, p.fps), Easing.out(Easing.cubic));
   const v = g.value * k;
-  const shown = Number.isInteger(g.value) ? Math.round(v) : Math.round(v * 10) / 10;
-  const [pre, post] = g.text.split("{n}");
+  const d = 10 ** decimalsOf(g.value);
+  const shown = k >= 1 ? g.value : Math.round(v * d) / d;
+  const [pre = "", post = ""] = g.text.split("{n}");
   const out = exitK(f, g, p.fps);
-  const top = g.position === "center" ? 0.4 * p.height : p.safe.top + 80;
+  // size from the FINAL string so the layout never jumps or wraps while counting
+  const finalChars = (pre + formatCount(g.value, g.value) + post).length;
+  const size = Math.round(Math.min(150, (safeW(p) - 20) / Math.max(1, finalChars * 0.66)));
+  const want = g.position === "center" ? 0.46 * p.height : p.safe.top + 80;
+  const top = placeClear(want, size * 1.2, faceAt(p.faces, g.start_f), p);
   return (
-    <div style={{ position: "absolute", top, left: 0, right: 0, textAlign: "center", opacity: out, transform: `scale(${0.6 + 0.4 * pop})` }}>
-      <span style={{ fontFamily: FONT, fontWeight: 900, fontSize: 150, color: "#FFFFFF", textShadow: TITLE_SHADOW, fontVariantNumeric: "tabular-nums" }}>
+    <div style={{ position: "absolute", top, left: p.safe.left, right: p.safe.right, textAlign: "center", opacity: out, whiteSpace: "nowrap",
+                  transform: `scale(${0.6 + 0.4 * pop})` }}>
+      <span style={{ fontFamily: FONT, fontWeight: 900, fontSize: size, color: "#FFFFFF", textShadow: TITLE_SHADOW, fontVariantNumeric: "tabular-nums" }}>
         {pre}<span style={{ color: g.accent }}>{formatCount(shown, g.value)}</span>{post}
       </span>
     </div>
@@ -230,13 +270,17 @@ const TextCard: React.FC<{ g: Graphic; p: OverlayProps }> = ({ g, p }) => {
   const bg = g.style === "light" ? "#F4EFE6" : g.style === "color" ? g.accent : "#0B0D12";
   const ink = inkOn(bg);
   const words = g.text.split(/\s+/).filter(Boolean);
-  const maxW = p.width - p.safe.left - p.safe.right - 40;
+  const maxW = safeW(p) - 40;
   const longest = Math.max(...words.map((w) => w.length), 1);
-  const size = Math.round(Math.min(140, maxW / (longest * 0.62)));
+  // the card's text lives between the platform UI and the caption band (the speech captions keep running below)
+  const areaTop = p.safe.top + 40;
+  const areaH = captionTop(p) - 40 - areaTop;
+  let size = Math.round(Math.min(140, maxW / (longest * 0.62)));
+  while (size > 48 && Math.ceil((g.text.length * 0.6 * size) / maxW) * size * 1.08 > areaH) size -= 4;
   const breathe = 1 + 0.04 * interpolate(local, [0, dur], [0, 1], clamp);
   return (
-    <AbsoluteFill style={{ background: bg, clipPath: `inset(${(1 - wipe) * 100}% 0 0 0)`, transform: `translateY(${-leave * 100}%)`,
-                           display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <AbsoluteFill style={{ background: bg, clipPath: `inset(${(1 - wipe) * 100}% 0 0 0)`, transform: `translateY(${-leave * 100}%)` }}>
+      <div style={{ position: "absolute", top: areaTop, height: areaH, left: 0, right: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ maxWidth: maxW, textAlign: "center", fontFamily: FONT, fontWeight: 800, fontSize: size, lineHeight: 1.08, color: ink,
                     transform: `scale(${breathe})`, textWrap: "balance" }}>
         {words.map((w, i) => {
@@ -246,6 +290,7 @@ const TextCard: React.FC<{ g: Graphic; p: OverlayProps }> = ({ g, p }) => {
                                    filter: `blur(${(1 - k) * 12}px)` }}>{w}</span>
           );
         })}
+      </div>
       </div>
     </AbsoluteFill>
   );
@@ -260,7 +305,7 @@ const CtaCard: React.FC<{ g: Graphic; p: OverlayProps }> = ({ g, p }) => {
   const scale = 2.2 - 1.2 * slam;
   const pulse = local > sec(0.6, p.fps) ? 1 + 0.03 * Math.sin(((local - sec(0.6, p.fps)) / p.fps) * Math.PI * 2 / 1.4) : 1;
   const card = g.style === "card";
-  const top = card ? 0.42 * p.height : p.safe.top + 60;
+  const top = card ? Math.min(0.42 * p.height, captionTop(p) - 200) : p.safe.top + 60;
   return (
     <div style={{ position: "absolute", top, left: 0, right: 0, display: "flex", justifyContent: "center", opacity: Math.min(1, slam * 3) }}>
       <div style={{ fontFamily: FONT, fontWeight: 800, fontSize: card ? 76 : 58, color: inkOn(g.accent), background: g.accent,
@@ -285,7 +330,8 @@ const Logo: React.FC<{ g: Graphic; p: OverlayProps }> = ({ g, p }) => {
   const k = tween(f, g.start_f, sec(0.5, p.fps), power3Out);
   const right = g.position !== "top_left";
   return (
-    <Img src={staticFile(g.uri)} style={{ position: "absolute", top: p.safe.top - 60, width: 140, opacity: 0.85 * k,
+    <Img src={staticFile(g.uri)} style={{ position: "absolute", top: p.safe.top + 10, width: 140, height: 120, objectFit: "contain",
+                                           objectPosition: right ? "right top" : "left top", opacity: 0.85 * k,
                                            ...(right ? { right: p.safe.right } : { left: p.safe.left }) }} />
   );
 };

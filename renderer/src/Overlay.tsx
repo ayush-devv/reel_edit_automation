@@ -294,7 +294,8 @@ function useFonts(tokens: Record<string, string>) {
   const [handle] = useState(() => delayRender("fonts"));
   useEffect(() => {
     const fam = fontFamily(tokens.font);
-    const specs = [`${num(tokens.weight, 700)} 80px "${fam}"`, `800 80px "${fam}"`, `900 80px "Inter"`, `500 80px "Inter"`];
+    const specs = [`${num(tokens.weight, 700)} 80px "${fam}"`, `800 80px "${fam}"`, `900 80px "Inter"`, `800 80px "Inter"`,
+                   `700 80px "Inter"`, `500 80px "Inter"`];
     Promise.all(specs.map((s) => document.fonts.load(s)))
       .then(() => document.fonts.ready)
       .then(() => continueRender(handle))

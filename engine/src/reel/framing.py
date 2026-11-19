@@ -139,6 +139,18 @@ def speaker_cuts(a: int, b: int, speakers: dict | None, min_us: int = MIN_SUBSHO
     return [(s, t) for s, t in merged]
 
 
+def only_visible_face(a: int, b: int, speakers: dict | None, tracks: dict) -> dict | None:
+    """The single visible-face track of an analysed multi-face stretch covering most of [a, b) — the signature of an
+    over-the-shoulder angle (speakers.json keeps only faces the landmarker could read). None otherwise."""
+    if not speakers or b <= a:
+        return None
+    covered = sum(max(0, min(b, pe) - max(a, ps)) for ps, pe in speakers.get("pieces") or [])
+    if covered < 0.5 * (b - a):
+        return None
+    vis = [t for t in tracks.values() if t.get("start_us", 0) < b and t.get("end_us", 0) > a]
+    return vis[0] if len(vis) == 1 else None
+
+
 def shots(c: VideoClip, fps: Fraction, cuts_us: list[int], samples: list[dict], fallback: tuple[float, float] = DEFAULT_CENTRE,
           crop_w: float = 1.0, speakers: dict | None = None) -> list[Shot]:
     """`crop_w`: width of the vertical crop window as a share of the source width (1.0 = no horizontal crop).
@@ -161,6 +173,14 @@ def shots(c: VideoClip, fps: Fraction, cuts_us: list[int], samples: list[dict], 
         window = [s for s in samples if a <= s["t_us"] < b]
         boxes = [bx for s in window if (bx := _largest(s.get("faces") or []))]
         layout, path = "crop", None
+        one = only_visible_face(a, b, speakers, tracks)
+        if boxes and one is not None and crop_w < 1.0:
+            # over-the-shoulder angle: the second "face" is the back of a head (the landmarker found no face there):
+            # frame the one person whose face we can see, never the back of a head or a two-shot fill
+            box = dict(one["box"])
+            add(a, Shot(start_f=0, centre=(box["x"] + box["w"] / 2, box["y"] + box["h"] / 2), box=box, layout="crop"))
+            prev = (box["x"] + box["w"] / 2, box["y"] + box["h"] / 2)
+            continue
         if boxes:
             box = _median_box(boxes)
             centre = (box["x"] + box["w"] / 2, box["y"] + box["h"] / 2)

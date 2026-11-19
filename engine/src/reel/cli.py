@@ -398,7 +398,7 @@ def _cmd_compile(args: argparse.Namespace) -> int:
     if errors(issues):
         print(json.dumps({"ok": False, "issues": [i.as_dict() for i in errors(issues)]}, indent=2, ensure_ascii=False))
         return 2
-    tl = compile_timeline(story, finish, words, clips, fps, idx, edges=project.edges(ws))
+    tl = compile_timeline(story, finish, words, clips, fps, idx, edges=project.edges(ws), vad=project.vad_speech(ws), scene_cuts=project.scene_cuts(ws))
     out = ws.path("timeline", "timeline.json")
     atomic_write_json(out, tl.model_dump(mode="json"))
     print(f"timeline: {out} · {tl.duration_f} frames @ {tl.fps} · {len(tl.video)} video clips · {len(tl.captions.pages if tl.captions else [])} caption pages")
@@ -415,7 +415,7 @@ def _cmd_dry_run(args: argparse.Namespace) -> int:
     if errors(issues):
         print(json.dumps({"ok": False, "issues": [i.as_dict() for i in errors(issues)]}, indent=2, ensure_ascii=False))
         return 2
-    print(dry_run(story, words, clips, fps, idx, edges=project.edges(ws)))
+    print(dry_run(story, words, clips, fps, idx, edges=project.edges(ws), vad=project.vad_speech(ws), scene_cuts=project.scene_cuts(ws)))
     return 0
 
 
