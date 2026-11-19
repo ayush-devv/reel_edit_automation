@@ -106,7 +106,7 @@ def apply_vocabulary(words: list[Word], vocabulary: list[str]) -> list[Word]:
     terms = sorted({t for term in vocabulary for t in term.split() if len(_norm(t)) >= 3}, key=str.casefold)
     out = []
     for k, w in enumerate(words):
-        stripped = w.text.strip(".,!?;:\"'")
+        stripped = w.text.strip(".,!?;:\"'।॥")
         tail = w.text[len(stripped):] if w.text.startswith(stripped) else ""
         prev = words[k - 1].text if k else ""
         prev_is_filler = k > 0 and (words[k - 1].filler or _norm(prev) in EN_FILLERS)

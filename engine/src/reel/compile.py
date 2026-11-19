@@ -172,22 +172,26 @@ def _source_range(item_words: list[Word], clip_words: list[Word], clip: ClipInfo
 UNRELIABLE_SHARE = 0.15  # above this share of suspect/zero-length kept words, captions fall back to phrases
 
 
+SENTENCE_END = ".?!।॥"  # the danda (।) and double danda (॥) end Hindi sentences
+PUNCT = ".,!?;:।॥"
+
+
 def clean_caption_words(ws: list, prev_text: str | None = None) -> list:
     """Captions read like writing, not raw ASR: stutters ("i i thought") drop the repeat, "i" → "I",
     and a line starts with a capital. The audio is unchanged; only the on-screen text is tidied."""
     out = []
     for w in ws:
-        key = w.text.strip(".,!?;:").casefold()
-        if out and key and key == out[-1].text.strip(".,!?;:").casefold():
+        key = w.text.strip(PUNCT).casefold()
+        if out and key and key == out[-1].text.strip(PUNCT).casefold():
             continue
         t = w.text
-        core = t.strip(".,!?;:")
+        core = t.strip(PUNCT)
         if len(core) > 4 and core.isupper():  # ASR writes shouted words in caps ("ORANGE."); acronyms (≤ 4) stay
             t = t.replace(core, core.lower())
         if key in ("i", "i'm", "i've", "i'll", "i'd"):
             t = "I" + t[1:]
         before = out[-1].text if out else prev_text  # the line before, in OUTPUT order (a join is not a new sentence)
-        if (before is None or before.rstrip()[-1:] in ".?!") and t[:1].islower():
+        if (before is None or before.rstrip()[-1:] in SENTENCE_END) and t[:1].islower():
             t = t[:1].upper() + t[1:]
         out.append(w.model_copy(update={"text": t}) if t != w.text else w)
     return out
@@ -211,13 +215,13 @@ LEANS_BACK = {"ka", "ki", "ke", "ko", "se", "me", "mein", "par", "ne", "tak", "h
 
 
 def _bare(text: str) -> str:
-    return text.strip(".,!?;:—\"'“”").casefold()
+    return text.strip(PUNCT + "—\"'“”").casefold()
 
 
 def _break_cost(w, nxt) -> float:
     """Cost of ending a caption page after word `w`: free after punctuation, cheap at a pause,
     expensive inside a phrase (after a word that leans forward, or before one that leans back)."""
-    if nxt is None or w.text.rstrip()[-1:] in ".,!?;:—":
+    if nxt is None or w.text.rstrip()[-1:] in PUNCT + "—":
         return 0.0
     gap_ms = (nxt.start_us - w.end_us) / 1000
     cost = 0.5 if gap_ms >= 250 else 2.0 if gap_ms >= 120 else 3.0
