@@ -79,7 +79,7 @@ describe("applyEvent", () => {
     let p = applyEvent(running(), { type: "decision", data: d });
     p = applyEvent(p, { type: "decision", data: d });
     expect(p!.decisions.filter((x) => x.title === "Hook: x")).toHaveLength(1);
-    p = applyEvent(p, { type: "done", data: { status: "hold" } });
+    p = applyEvent(p, { type: "done", data: { status: "hold", job: "done", kind: "proof" } });
     expect(p!.status).toBe("hold");
     expect(p!.stage).toBeNull();
   });

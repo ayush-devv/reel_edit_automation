@@ -23,7 +23,10 @@ function Health() {
               <Icon name={t.ok ? "check" : "x"} size={12} />
             </span>
             <div className="min-w-0">
-              <p className="font-medium text-fg-primary">{t.name}</p>
+              <p className="font-medium text-fg-primary">
+                {t.name}
+                {!t.ok && !t.required && <span className="ml-2 text-label font-normal text-fg-muted">optional</span>}
+              </p>
               <p className={cx(t.ok ? "text-fg-secondary" : "text-st-fail")}>{t.detail}</p>
             </div>
           </li>
@@ -38,6 +41,7 @@ function Health() {
           <dt className="text-label text-fg-muted">Memory in use</dt>
           <dd className="font-mono text-[15px] tabular">
             {health.memory_gb.used.toFixed(1)} / {health.memory_gb.budget} GB
+            {typeof health.memory_gb.system?.available === "number" && <span className="block text-label font-normal text-fg-muted">{health.memory_gb.system.available.toFixed(1)} GB free on this Mac</span>}
           </dd>
         </div>
         <div>
@@ -116,7 +120,7 @@ function SettingsForm() {
           setBusy(true);
           setMsg(null);
           try {
-            await api.saveSettings(key ? { ...s, pexels_key: key } : s);
+            setS(await api.saveSettings(key ? { ...s, pexels_key: key } : s));
             setKey("");
             setMsg({ tone: "ok", text: "Saved." });
             refresh();
@@ -138,6 +142,19 @@ function SettingsForm() {
             <option value="platform.tiktok">TikTok</option>
           </Select>
         </Field>
+        <Field label="Default language" hint="New edits start with these; each brief can change them.">
+          <Segmented
+            label="Default language"
+            value={String(s.default_brief.language ?? "auto")}
+            onChange={(v) => setS({ ...s, default_brief: { ...s.default_brief, language: v === "auto" ? null : (v as "en" | "hi" | "hinglish") } })}
+            options={[
+              { value: "auto", label: "Auto" },
+              { value: "en", label: "English" },
+              { value: "hi", label: "Hindi" },
+              { value: "hinglish", label: "Hinglish" },
+            ]}
+          />
+        </Field>
         <fieldset>
           <legend className="mb-2 text-label text-fg-secondary">Default extra deliverables</legend>
           <div className="flex gap-6">
@@ -157,8 +174,8 @@ function SettingsForm() {
         <Field label="Pexels API key" htmlFor="pexels" hint={s.pexels_key_set ? "A key is saved on this Mac. Enter a new one to replace it." : "Stored only on this Mac. Enables stock search in Libraries."}>
           <TextInput id="pexels" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={s.pexels_key_set ? "••••••••••••" : "Paste your key"} />
         </Field>
-        <Field label="Projects folder" htmlFor="pdir" hint="Where footage, renders and packages are stored.">
-          <TextInput id="pdir" value={s.projects_dir} onChange={(e) => setS({ ...s, projects_dir: e.target.value })} className="font-mono text-[13px]" />
+        <Field label="Projects folder" htmlFor="pdir" hint="Where footage, renders and packages are stored. To use another folder, restart with: reel studio --projects <folder>">
+          <TextInput id="pdir" value={s.projects_dir} readOnly className="font-mono text-[13px] text-fg-secondary" />
         </Field>
         <div className="flex items-center gap-3">
           <Button type="submit" variant="primary" busy={busy}>

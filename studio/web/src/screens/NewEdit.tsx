@@ -8,7 +8,7 @@ import { PageHeader } from "../components/Shell";
 import { Button, cx, Field, Notice, Panel, ProgressBar, Segmented, Select, TextArea, TextInput } from "../components/ui";
 import { useStatus } from "../hooks/status";
 import { useQuery } from "../hooks/useQuery";
-import { EMPTY_FORM, formErrors, GENRES, GOALS, loadTemplates, PLATFORMS, saveTemplate, toBrief, type BriefForm } from "../lib/brief";
+import { EMPTY_FORM, formErrors, formWithDefaults, GENRES, GOALS, loadTemplates, PLATFORMS, saveTemplate, toBrief, type BriefForm } from "../lib/brief";
 import { bytes, prettyId } from "../lib/format";
 import { screenFiles, takePendingFiles } from "../lib/pendingFiles";
 
@@ -50,6 +50,7 @@ export default function NewEdit() {
   const nav = useNavigate();
   const { health, jobs } = useStatus();
   const brands = useQuery(() => api.brands(), [api]);
+  const settings = useQuery(() => api.settings(), [api]);
   const [files, setFiles] = useState<File[]>([]);
   const [rejected, setRejected] = useState<{ name: string; reason: string }[]>([]);
   const [form, setForm] = useState<BriefForm>(EMPTY_FORM);
@@ -69,6 +70,15 @@ export default function NewEdit() {
     setRejected(bad);
     if (ok.length && !form.name) set("name", ok[0].name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " "));
   };
+
+  // Settings → default brief / deliverables fill the empty form once (the name the files suggested is kept).
+  const defaultsApplied = useRef(false);
+  useEffect(() => {
+    if (!settings.data || defaultsApplied.current) return;
+    defaultsApplied.current = true;
+    const d = formWithDefaults(settings.data.default_brief, settings.data.default_deliverables);
+    setForm((f) => ({ ...d, name: f.name }));
+  }, [settings.data]);
 
   useEffect(() => {
     const pending = takePendingFiles();
@@ -224,7 +234,7 @@ export default function NewEdit() {
                   </option>
                 ))}
               </SF>
-              <TF label="Reference reel (optional)" value={refUrl} onChange={setRefUrl} placeholder="https://… a reel the client likes" hint="The Editor studies its pacing and caption style." />
+              <TF label="Reference reel (optional)" value={refUrl} onChange={setRefUrl} placeholder="/Users/you/Downloads/reference.mp4" hint="A video file on this Mac (links aren’t supported). The Editor studies its pacing and caption style." />
             </div>
           </Panel>
         </div>

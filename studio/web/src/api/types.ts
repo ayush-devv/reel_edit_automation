@@ -1,4 +1,4 @@
-// Types for the Reel Studio local API — docs/product/studio-api.md (v1 + "v1.1 additions (web app)").
+// Types for the Reel Studio local API — docs/product/studio-api.md (v1). Mock mode mirrors these exactly.
 
 export const STAGES = [
   "ingest",
@@ -36,9 +36,9 @@ export interface ProjectSummary {
   verdict: Verdict | null;
   needs_attention: string[];
   thumb: string | null;
-  // v1.1 additions (optional so a v1 API still type-checks at runtime)
-  client?: string | null;
-  delivered_at?: string | null;
+  client: string | null;
+  /** ISO; set by POST …/delivered. Finished + delivered sorts last (FR-1). */
+  delivered_at: string | null;
 }
 
 export interface Stage {
@@ -56,14 +56,16 @@ export interface Decision {
   title: string;
   detail: string;
   knowledge: string[];
-  // v1.1 (optional): cost of the Claude call that produced it, from log/runs.jsonl
+  /** AI cost of the Claude calls behind it (on the hook, captions and Reviewer decisions). */
   cost_usd?: number;
 }
 
 export interface Gate {
+  /** Engine gate id, e.g. "reading_speed". */
   name: string;
   status: "pass" | "warn" | "fail";
   detail: string;
+  measured: Record<string, unknown>;
 }
 
 export interface ProofWord {
@@ -79,19 +81,27 @@ export interface ReviewIssue {
   at: string;
   category: string;
   text: string;
-  // v1.1 (optional): severity and suggested fix, from the Reviewer's issue schema
-  severity?: "blocker" | "major" | "minor";
-  fix?: string;
+  severity: "blocker" | "major" | "minor" | null;
+  fix: string;
 }
 
 export interface Version {
   n: number;
   created: string;
+  /** "Original edit" | "Revision: “<request>”" | "Client notes" | "Caption fix" | "Manual" | "Restored v<n>" */
   label: string;
   final?: string;
-  // v1.1 (optional)
-  reply?: string;
-  cost_usd?: number;
+  /** The Editor's one-line reply (revisions), or what changed (Manual, Caption fix, Restored). */
+  reply: string;
+  cost_usd: number | null;
+}
+
+export interface Call {
+  time: number | null;
+  label: string;
+  cost_usd: number;
+  duration_s: number | null;
+  ok: boolean;
 }
 
 export interface Project extends ProjectSummary {
@@ -99,35 +109,51 @@ export interface Project extends ProjectSummary {
   brand: string | null;
   stages: Stage[];
   decisions: Decision[];
-  verdict_detail: { verdict: string; reasons: string[]; gates: Gate[] } | null;
+  verdict_detail: { verdict: string; reasons: string[]; warnings: string[]; gates: Gate[] } | null;
   proof: ProofWord[];
-  review: { summary: string; issues: ReviewIssue[] } | null;
-  media: { final?: string; review_copy?: string; cover?: string; sheets: string[]; cut_strips: string[] };
+  review: { summary: string; sendable: boolean | null; strengths: string[]; issues: ReviewIssue[] } | null;
+  media: { final?: string; review_copy?: string; cover?: string; sheets: string[]; cut_strips: string[]; variants: string[] };
   versions: Version[];
+  calls: Call[];
+  platform_notes: string[];
+  /** Seconds left in the run; null = unknown (the web app estimates from typical stage times). */
+  eta_s: number | null;
 }
 
 export interface HealthTool {
   name: string;
   ok: boolean;
   detail: string;
+  required: boolean;
 }
 
 export interface Health {
   engine: "ok";
   version: string;
+  toolchain_ok: boolean;
   tools: HealthTool[];
   claude: boolean;
   disk_free_gb: number;
   jobs: { running: number; queued: number; limit: number };
-  memory_gb: { used: number; budget: number };
+  memory_gb: { used: number; budget: number; system: { total?: number; available?: number } };
+  projects_root: string;
 }
+
+export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled" | "lost";
 
 export interface Job {
   id: string;
+  /** Project id, or a global slot: "_lab", "_library". */
   project: string;
   kind: string;
-  started: string | null;
-  status: string;
+  status: JobStatus;
+  label: string;
+  /** Epoch seconds. */
+  created: number;
+  started: number | null;
+  finished: number | null;
+  est_gb: number;
+  returncode: number | null;
 }
 
 export interface Jobs {
@@ -169,7 +195,7 @@ export interface Brand {
   cta_style?: string | null;
 }
 
-/** v1.1: GET /api/brands returns the id beside the Brand body. */
+/** GET /api/brands returns the id beside the Brand body. */
 export interface BrandEntry {
   id: string;
   brand: Brand;
@@ -181,6 +207,7 @@ export interface SfxItem {
   duration_ms: number;
   source: string;
   license: string;
+  file: string | null;
 }
 export interface MusicItem {
   id: string;
@@ -190,49 +217,67 @@ export interface MusicItem {
   duration_ms: number;
   source: string;
   license: string;
-  attribution: string;
+  attribution: string | null;
 }
 export interface BrollItem {
   id: string;
   description: string;
   shot: string;
+  tags: string[];
   duration_ms: number;
   source: string;
   license: string;
+  file: string | null;
 }
 export interface CaptionFamily {
   id: string;
   for: string[];
   mood: string;
+  max_words: number | null;
+  tokens: Record<string, string>;
 }
 export interface Libraries {
   sfx: SfxItem[];
   music: MusicItem[];
   broll: BrollItem[];
   caption_families: CaptionFamily[];
-  // v1.1 (optional)
-  unreadable?: { kind: string; file: string; reason: string }[];
+  unreadable: { kind: string; file: string; reason: string }[];
 }
 
 export interface EvalRun {
   id: string;
-  at: string;
+  at: string | null;
   split: "tuning" | "holdout";
+  /** Mean primary score, 0–1. */
   primary: number;
   families: Record<string, number>;
+  vetoed: number;
+  reels: { id: string; primary: number | null; verdict: string | null; vetoes: string[] }[];
+}
+export interface CalibrationGate {
+  name: string;
+  mode: "warn" | "block";
+  /** 0–1; null when it can't be measured yet. */
+  false_alarm_rate: number | null;
+  catch_rate: number | null;
+  promote_to_block: boolean;
 }
 export interface Calibration {
-  agreement: number;
+  /** Reviewer agreement with the owner's labels, 0–1; null before any label. */
+  agreement: number | null;
   n_labels: number;
   trusted: boolean;
-  gates: { name: string; false_alarm_rate: number; mode: "warn" | "block" }[];
+  gates: CalibrationGate[];
+  rule: string | null;
 }
 export interface ImproveEntry {
-  at: string;
+  at: string | null;
+  round: number | null;
   change: string;
-  outcome: "accepted" | "rejected" | "pending";
-  gain?: number | null;
-  reason?: string | null;
+  outcome: "accepted" | "rejected" | "invalid" | "dry_run";
+  /** Primary-score gain, 0–1 scale. */
+  gain: number | null;
+  reason: string | null;
 }
 export interface GoldPair {
   id: string;
@@ -246,13 +291,13 @@ export interface Lab {
   lock_reason: string | null;
   calibration: Calibration | null;
   improve_history: ImproveEntry[];
-  // v1.1 (optional)
-  runs?: EvalRun[];
-  gold_pairs?: GoldPair[];
+  runs: EvalRun[];
+  gold_pairs: GoldPair[];
 }
 
 export interface Costs {
   total_usd: number;
+  calls: number;
   by_project: { id: string; usd: number }[];
   by_day: { date: string; usd: number }[];
 }
@@ -272,17 +317,36 @@ export interface PackageFile {
   label: string;
   kind: "final" | "variant" | "review_copy" | "timeline" | "captions" | "stems" | "overlay" | "edit_list" | "other";
   bytes: number;
-  thumb?: string | null;
+  thumb: string | null;
 }
 export interface PackageListing {
   files: PackageFile[];
   warnings: string[];
 }
 
-/** v1.1: GET /api/projects/{id}/timeline */
+/** Current value of every guided adjustment (FR-8). */
+export interface AdjustState {
+  caption_family: string | null;
+  caption_tokens: Record<string, string>;
+  look: string;
+  look_strength: number;
+  grain: number;
+  vignette: number;
+  music_track: string;
+  music_gain_db: number;
+  max_pause_ms: number | null;
+  sfx: number;
+  punch_ins: number;
+}
+
+/** GET /api/projects/{id}/timeline */
 export interface TimelineView {
   timeline: Timeline;
+  /** Keyed like the layer blocks: plan item (k01), punch-in clip (v_k04), dialogue clip (a_k04), sfx/pip/effect/graphic id, hook_title, grade, captions, music. */
   reasons: Record<string, string>;
+  /** Kept lines: item id → beat and spoken text. */
+  story: Record<string, { beat: string; text: string }>;
+  adjust: AdjustState;
 }
 
 export interface Keyframe {
@@ -325,8 +389,10 @@ export type AdjustKind =
   | "max_pause_ms";
 
 export interface NotesPreview {
+  /** anchored[i] belongs to the i-th non-empty line sent. */
   anchored: string[];
-  unreadable?: string[];
+  notes: { t: number | null; text: string }[];
+  unreadable: string[];
 }
 
 export type SseEvent =
@@ -334,6 +400,7 @@ export type SseEvent =
   | { type: "stage"; data: Stage }
   | { type: "decision"; data: Decision }
   | { type: "log"; data: { line: string } }
-  | { type: "job"; data: { id: string; kind: string; status: string } }
-  | { type: "revision"; data: { reply: string; version: number } }
-  | { type: "done"; data: { status: string } };
+  | { type: "job"; data: { id: string; kind: string; status: JobStatus; label: string } }
+  | { type: "revision"; data: { reply: string; request: string; version: number | null } }
+  /** `status` = the project's status after the job; `job` = the job's own end status. A fresh snapshot follows. */
+  | { type: "done"; data: { status: ProjectStatus; job: JobStatus; kind: string } };

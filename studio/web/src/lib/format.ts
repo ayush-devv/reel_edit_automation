@@ -29,10 +29,15 @@ export function bytes(n: number): string {
   return `${n} B`;
 }
 
-/** "00:00:12.40" or "0:12.4" → seconds. */
+/** "00:00:12.40", "0:12.4" or the first timecode in a Reviewer range like "0:03.2, 0:38.2–0:44.2" → seconds (0 if none). */
 export function tcToSeconds(tc: string): number {
-  const parts = tc.split(":").map(Number);
-  return parts.reduce((a, p) => a * 60 + p, 0);
+  const m = /(\d+(?::\d+){0,2}(?:\.\d+)?)/.exec(tc ?? "");
+  if (!m) return 0;
+  const n = m[1].split(":").map(Number).reduce((a, p) => a * 60 + p, 0);
+  return Number.isFinite(n) ? n : 0;
 }
+
+/** "reading_speed" → "Reading speed". */
+export const gateLabel = (id: string) => (id ? id[0].toUpperCase() + id.slice(1).replace(/_/g, " ") : id);
 
 export const prettyId = (id: string) => id.replace(/^[a-z]+\./, "").replace(/_/g, " ");

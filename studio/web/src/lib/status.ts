@@ -4,7 +4,8 @@ import type { ProjectSummary } from "../api/types";
 export type Badge = "hold" | "failed" | "sendable" | "editing" | "queued" | "delivered" | "draft";
 
 export function badgeOf(p: Pick<ProjectSummary, "status" | "delivered_at">): Badge {
-  if (p.delivered_at) return "delivered";
+  // Same rule as the API's attention order: delivered counts once the edit is finished.
+  if (p.delivered_at && (p.status === "sendable" || p.status === "hold")) return "delivered";
   switch (p.status) {
     case "running":
       return "editing";
@@ -72,14 +73,14 @@ export const STAGE_GROUPS: { name: string; stages: string[] }[] = [
   { name: "Check & deliver", stages: ["qa", "package", "variants"] },
 ];
 
-/** A job is finished in any state other than queued/running (contract v1.1: done | failed | cancelled). */
+/** A job is finished in any state other than queued/running (done | failed | cancelled | lost). */
 export const isJobTerminal = (status: string | undefined): boolean => !!status && status !== "queued" && status !== "running";
 
 export const RENDER_STAGES =new Set(["render", "overlay", "composite", "variants"]);
 
 /**
  * Typical seconds per stage for a ~60 s reel. A fallback for the time-left estimate when the API
- * doesn't send `eta_s` (v1.1); the estimate is labelled as such on screen.
+ * sends `eta_s: null`; the estimate is labelled as such on screen.
  */
 export const TYPICAL_STAGE_S: Record<string, number> = {
   ingest: 6, mezzanine: 40, perception: 120, tables: 8, broll: 20, reference: 25, story: 75, finish: 60,

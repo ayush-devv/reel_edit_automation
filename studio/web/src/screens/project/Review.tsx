@@ -9,7 +9,7 @@ import { Icon } from "../../components/icons";
 import { PhonePreview } from "../../components/Player";
 import { Button, cx, Loading, Mono, Notice, Panel, TextInput } from "../../components/ui";
 import { useQuery } from "../../hooks/useQuery";
-import { tcToSeconds } from "../../lib/format";
+import { gateLabel, tcToSeconds } from "../../lib/format";
 import { isJobTerminal } from "../../lib/status";
 import { useReelPlayer, type ReelPlayer } from "../../lib/reelPlayer";
 import { useProject } from "./ProjectLayout";
@@ -39,6 +39,13 @@ function VerdictCard({ p }: { p: Project }) {
           </Link>
         )}
       </div>
+      {v && v.warnings.length > 0 && (
+        <ul className="mt-3 space-y-1 text-label font-normal text-fg-secondary" aria-label="Warnings">
+          {v.warnings.map((w) => (
+            <li key={w}>Warning · {w}</li>
+          ))}
+        </ul>
+      )}
       {v && v.reasons.length > 0 && (
         <ul className="mt-4 space-y-2 border-t border-line-subtle pt-4">
           {v.reasons.map((r) => (
@@ -117,9 +124,13 @@ function ReviewerNotes({ issues, summary, onSeek }: { issues: ReviewIssue[]; sum
                   <span className={cx("uppercase tracking-[0.06em]", i.severity === "blocker" ? "text-st-fail" : i.severity === "major" ? "text-st-hold" : "text-fg-secondary")}>{i.severity ?? "note"}</span>
                   <span className="text-fg-muted">·</span>
                   <span className="text-fg-secondary">{i.category}</span>
-                  <button type="button" onClick={() => onSeek(tcToSeconds(i.at))} className="ml-auto font-mono text-mono text-cyan hover:underline" aria-label={`Jump to ${i.at}`}>
-                    {i.at.replace(/^00:/, "")}
-                  </button>
+                  {i.at ? (
+                    <button type="button" onClick={() => onSeek(tcToSeconds(i.at))} className="ml-auto max-w-[50%] truncate font-mono text-mono text-cyan hover:underline" title={i.at} aria-label={`Jump to ${i.at}`}>
+                      {i.at.replace(/^00:/, "")}
+                    </button>
+                  ) : (
+                    <span className="ml-auto text-fg-muted">whole reel</span>
+                  )}
                 </div>
                 <p className="mt-1 text-fg-primary">{i.text}</p>
                 {i.fix && <p className="mt-1 text-fg-secondary">Suggested fix: {i.fix}</p>}
@@ -160,7 +171,7 @@ function Gates({ p }: { p: Project }) {
               <Icon name={g.status === "pass" ? "check" : g.status === "warn" ? "alert" : "x"} size={12} />
             </span>
             <div className="min-w-0">
-              <p className="text-fg-primary">{g.name}</p>
+              <p className="text-fg-primary">{gateLabel(g.name)}</p>
               <p className="font-mono text-mono text-fg-muted">{g.detail}</p>
             </div>
           </li>
@@ -244,7 +255,7 @@ export default function Review() {
     setProofErr(null);
     try {
       const r = await api.proof(p.id, [{ i: w.i, text }]);
-      setProofJob({ id: r.job, word: w.i });
+      setProofJob({ id: r.job.id, word: w.i });
     } catch (e) {
       setProofErr(friendlyError(e));
     }

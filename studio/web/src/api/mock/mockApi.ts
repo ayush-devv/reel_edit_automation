@@ -2,7 +2,7 @@
 // simulator so the live view, the queue and the job-driven screens behave like the real thing.
 import type { Api, JobRef } from "../api";
 import { ApiError } from "../errors";
-import { STAGES, type AdjustKind, type BrandEntry, type Project, type ProjectSummary, type SseEvent, type Stage } from "../types";
+import { STAGES, type AdjustKind, type BrandEntry, type Job, type JobStatus, type Project, type ProjectSummary, type SseEvent, type Stage } from "../types";
 import { parseNotes } from "../../lib/notes";
 import { validateAdjust } from "../../lib/adjust";
 import { BRANDS, COSTS, HEALTH, LAB, LIBRARIES, PACKAGE, SETTINGS, makeProjects, makeTimeline } from "./fixtures";
@@ -20,7 +20,20 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
   let timer: ReturnType<typeof setInterval> | null = null;
   let jobSeq = 100;
 
-  const job = (): JobRef => ({ job: `job-${++jobSeq}` });
+  const now = () => Date.now() / 1000;
+  const makeJob = (project: string, kind: string, label: string, status: JobStatus = "running"): Job => ({
+    id: `j${(++jobSeq).toString(16)}`,
+    project,
+    kind,
+    status,
+    label,
+    created: now(),
+    started: status === "running" ? now() : null,
+    finished: null,
+    est_gb: 2.5,
+    returncode: null,
+  });
+  const job = (project = "_lab", kind = "eval", label = ""): JobRef => ({ job: makeJob(project, kind, label) });
   const emit = (id: string, ev: SseEvent) => subs.get(id)?.forEach((fn) => fn(clone(ev)));
   const must = (id: string) => {
     const p = projects.get(id);
@@ -66,9 +79,9 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
       duration_s: 38.4,
       verdict_detail: clone(ref.verdict_detail),
       review: clone(ref.review),
-      versions: [{ n: 1, created: new Date().toISOString(), label: "First edit", reply: "Initial cut from the brief.", cost_usd: p.cost_usd }],
+      versions: [{ n: 1, created: new Date().toISOString(), label: "Original edit", reply: "", cost_usd: null }],
     });
-    emit(p.id, { type: "done", data: { status: "sendable" } });
+    emit(p.id, { type: "done", data: { status: "sendable", job: "done", kind: "run" } });
     emit(p.id, { type: "snapshot", data: clone(p) });
   }
 
@@ -114,23 +127,25 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
   }
 
   /** Re-render simulation for proof / revise / adjust / notes jobs (no stage animation). */
-  function laterJob(p: Project, kind: string, after: () => void, ms = 1800): JobRef {
-    const ref = job();
-    emit(p.id, { type: "job", data: { id: ref.job, kind, status: "running" } });
+  /** Like the API: `job` running → `job` done → `done` → a fresh `snapshot`. */
+  function laterJob(p: Project, kind: string, label: string, after: () => void, ms = 1800): JobRef {
+    const ref = job(p.id, kind, label);
+    emit(p.id, { type: "job", data: { id: ref.job.id, kind, status: "running", label } });
     setTimeout(() => {
       after();
       touch(p);
-      emit(p.id, { type: "job", data: { id: ref.job, kind, status: "done" } });
+      emit(p.id, { type: "job", data: { id: ref.job.id, kind, status: "done", label } });
+      emit(p.id, { type: "done", data: { status: p.status, job: "done", kind } });
       emit(p.id, { type: "snapshot", data: clone(p) });
     }, ms);
     return ref;
   }
 
-  function addVersion(p: Project, label: string, reply: string, cost: number) {
+  function addVersion(p: Project, label: string, reply: string, cost: number | null) {
     const n = (p.versions.at(-1)?.n ?? 0) + 1;
     p.versions.push({ n, created: new Date().toISOString(), label, reply, cost_usd: cost });
-    p.cost_usd = +(p.cost_usd + cost).toFixed(3);
-    p.decisions.push({ at: Date.now() / 1000, kind: "revision", title: label, detail: reply, knowledge: [], cost_usd: cost });
+    p.cost_usd = +(p.cost_usd + (cost ?? 0)).toFixed(3);
+    if (label.startsWith("Revision") || label === "Client notes") p.decisions.push({ at: now(), kind: "revision", title: label, detail: reply, knowledge: [] });
     return n;
   }
 
@@ -150,7 +165,7 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
     async jobs() {
       await guard();
       const all = [...projects.values()];
-      const toJob = (p: Project) => ({ id: `job-${p.id}`, project: p.id, kind: "run", started: p.status === "running" ? p.updated : null, status: p.status });
+      const toJob = (p: Project): Job => ({ ...makeJob(p.id, "run", "Edit", p.status === "running" ? "running" : "queued"), id: `job-${p.id}` });
       return { running: all.filter((p) => p.status === "running").map(toJob), queued: all.filter((p) => p.status === "queued").map(toJob) };
     },
     async projects() {
@@ -193,11 +208,14 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
         verdict_detail: null,
         proof: [],
         review: null,
-        media: { sheets: [], cut_strips: [] },
+        media: { sheets: [], cut_strips: [], variants: [] },
         versions: [],
+        calls: [],
+        platform_notes: [],
+        eta_s: null,
       };
       projects.set(id, p);
-      return { id };
+      return { id, job: makeJob(id, "run", "Edit", slotFree ? "running" : "queued") };
     },
     async deleteProject(id) {
       await guard();
@@ -215,7 +233,7 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
       p.needs_attention = [];
       setStage(p, name, "running");
       touch(p);
-      return job();
+      return job(p.id, "retry", stage ? `Retry from ${stage}` : "Resume");
     },
     async cancel(id) {
       await guard();
@@ -224,7 +242,7 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
       if (s) setStage(p, s.name, "failed", "Cancelled by you. Press Retry to resume from this stage.");
       p.status = "failed";
       p.needs_attention = ["cancelled — resume"];
-      emit(id, { type: "done", data: { status: "failed" } });
+      emit(id, { type: "done", data: { status: "failed", job: "cancelled", kind: "run" } });
     },
     async timeline(id) {
       await guard();
@@ -235,12 +253,12 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
       await guard();
       const p = must(id);
       if (!request.trim()) throw new ApiError(400, "Type what you want changed.");
-      return laterJob(p, "revise", () => {
+      return laterJob(p, "revise", `Revision: ${request.trim().slice(0, 80)}`, () => {
         const reply = /hook/i.test(request)
           ? "Shortened the hook to 2.6 s by cutting the breath before “then I tried”; the hook title now ends with the line."
           : `Applied: ${request.trim()} — changed the finish plan only; the story order is unchanged.`;
-        const n = addVersion(p, `Revision: “${request.trim().slice(0, 48)}”`, reply, 0.088);
-        emit(id, { type: "revision", data: { reply, version: n } });
+        const n = addVersion(p, `Revision: “${request.trim().slice(0, 120)}”`, reply, 0.088);
+        emit(id, { type: "revision", data: { reply, request: request.trim(), version: n } });
       }, 2600);
     },
     async notesPreview(id, text) {
@@ -258,29 +276,32 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
         const caption = page ? `, caption on screen “${page.words.map((w) => w.text).join(" ")}”` : "";
         return `at ${n.t.toFixed(2)}s — item ${clip.src.item}${caption}: ${n.text}`;
       });
-      return { anchored, unreadable: parsed.unreadable };
+      return { anchored, notes: parsed.notes.map((n) => ({ t: n.t, text: n.text })), unreadable: [] };
     },
     async notesApply(id, text) {
       await guard();
       const p = must(id);
       const { notes } = parseNotes(text);
       if (!notes.length) throw new ApiError(400, "No readable notes to apply.");
-      return laterJob(p, "notes", () => {
+      return laterJob(p, "notes", "Client notes", () => {
         const reply = `Applied ${notes.length} client note${notes.length > 1 ? "s" : ""} in one revision.`;
         const n = addVersion(p, "Client notes", reply, 0.104);
-        emit(id, { type: "revision", data: { reply, version: n } });
+        emit(id, { type: "revision", data: { reply, request: text, version: n } });
       }, 2600);
     },
     async proof(id, words) {
       await guard();
       const p = must(id);
-      return laterJob(p, "proof", () => {
+      const known = new Map(p.proof.map((w) => [w.i, w.text]));
+      const bad = words.filter((w) => !known.has(w.i)).map((w) => w.i);
+      if (bad.length) throw new ApiError(400, "these words are not on the proof list", { error: "these words are not on the proof list", detail: bad });
+      return laterJob(p, "proof", `Proof: ${words.length} word(s)`, () => {
         const done = new Set(words.map((w) => w.i));
         p.proof = p.proof.filter((w) => !done.has(w.i));
         if (p.verdict_detail) {
-          const g = p.verdict_detail.gates.find((x) => x.name === "Caption words confirmed");
-          if (g && !p.proof.length) (g.status = "pass"), (g.detail = "all words confirmed");
-          p.verdict_detail.reasons = p.verdict_detail.reasons.filter((r) => !/Dioma|misspelt/.test(r) || p.proof.some((w) => w.text === "Dioma"));
+          const g = p.verdict_detail.gates.find((x) => x.name === "proof_words");
+          if (g && !p.proof.length) (g.status = "pass"), (g.detail = "all caption words confirmed");
+          p.verdict_detail.reasons = p.verdict_detail.reasons.filter((r) => !/Dioma|misspelt|proof_words/.test(r) || p.proof.some((w) => w.text === "Dioma"));
           if (!p.verdict_detail.reasons.length) {
             p.verdict_detail.verdict = "sendable";
             p.verdict = "sendable";
@@ -289,16 +310,19 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
         }
         if (p.review) p.review.issues = p.review.issues.filter((x) => x.category !== "captions" || p.proof.some((w) => w.text === "Dioma"));
         p.needs_attention = p.proof.length ? [`${p.proof.length} proof word${p.proof.length > 1 ? "s" : ""}`] : [];
-        addVersion(p, "Caption fix", `Fixed ${words.length} caption word${words.length > 1 ? "s" : ""}: ${words.map((w) => w.text).join(", ")}`, 0);
+        const said = words.map((w) => (!w.text.trim() || w.text.trim() === known.get(w.i) ? `“${known.get(w.i)}” confirmed` : `“${known.get(w.i)}” → “${w.text.trim()}”`));
+        addVersion(p, "Caption fix", `Caption words: ${said.join(", ")}`, 0);
       });
     },
     async adjust(id, kind: AdjustKind, value) {
       await guard();
       const p = must(id);
       const issues = validateAdjust(kind, value, { families: LIBRARIES.caption_families.map((f) => f.id), tracks: LIBRARIES.music.map((m) => m.id) });
-      if (issues.length) throw new ApiError(422, "The validator refused this change.", { issues });
-      return laterJob(p, "adjust", () => {
-        addVersion(p, "Manual", `${kind.replace(/_/g, " ")} → ${String(value)}`, 0);
+      if (issues.length) throw new ApiError(422, "the engine's validator refused this change", { error: "the engine's validator refused this change", issues });
+      const show = typeof value === "boolean" ? (value ? "off" : "on") : value && typeof value === "object" ? `${(value as { key: string }).key} ${(value as { value: string }).value}` : String(value);
+      const change = `${kind.replace(/_/g, " ")} → ${show}`;
+      return laterJob(p, "adjust", `Manual: ${change}`, () => {
+        addVersion(p, "Manual", change, 0);
       });
     },
     async versions(id) {
@@ -308,11 +332,12 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
     async restore(id, n) {
       await guard();
       const p = must(id);
-      return laterJob(p, "restore", () => addVersion(p, `Restored v${n}`, `Restored version ${n} as the current reel.`, 0));
+      if (n === p.versions.at(-1)?.n) throw new ApiError(400, `version ${n} is the current version`);
+      return laterJob(p, "restore", `Restore version ${n}`, () => addVersion(p, `Restored v${n}`, `Restored version ${n} as the current reel.`, 0));
     },
     async deliver(id) {
       await guard();
-      return laterJob(must(id), "deliver", () => undefined, 900);
+      return laterJob(must(id), "deliver", "Deliver", () => undefined, 900);
     },
     async packageListing(id) {
       await guard();
@@ -335,7 +360,7 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
     async indexLibrary(_kind, folder) {
       await guard();
       if (!folder.trim()) throw new ApiError(400, "Pick a folder to index.");
-      return job();
+      return job("_library", "library", `Index ${_kind}`);
     },
     async brands() {
       await guard();
@@ -355,8 +380,8 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
     },
     async labAction(action, body) {
       await guard();
-      if (action === "eval" && body?.release && LAB.release_locked) throw new ApiError(409, LAB.lock_reason ?? "Release check is locked.");
-      return job();
+      if (action === "eval" && body?.release && LAB.release_locked) throw new ApiError(409, LAB.lock_reason ?? "Release check is locked.", { error: LAB.lock_reason, detail: { release_locked: true } });
+      return job("_lab", action, action);
     },
     async costs() {
       await guard();
@@ -369,8 +394,11 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
     async saveSettings(s) {
       await guard();
       if (s.max_jobs < 1 || s.max_jobs > 3) throw new ApiError(400, "Edits at once must be between 1 and 3 (memory guard).");
-      settings = clone(s);
+      if (s.projects_dir !== settings.projects_dir) throw new ApiError(400, "the projects folder is set when the studio starts: `reel studio --projects <folder>`");
+      const { pexels_key, ...rest } = s;
+      settings = { ...clone(rest), pexels_key_set: settings.pexels_key_set || !!pexels_key?.trim() };
       startQueued();
+      return clone(settings);
     },
     mediaUrl: () => "",
     libraryMediaUrl: () => "",

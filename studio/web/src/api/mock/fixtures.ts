@@ -1,9 +1,10 @@
-// Realistic fixture data for mock mode (?mock=1). Shapes follow docs/product/studio-api.md.
+// Realistic fixture data for mock mode (?mock=1). Shapes follow docs/product/studio-api.md exactly (the real API's).
 import {
   STAGES,
   type BrandEntry,
   type Costs,
   type Decision,
+  type Gate,
   type Health,
   type Lab,
   type Libraries,
@@ -23,7 +24,7 @@ const sec = (minsAgo: number) => Math.round((NOW - minsAgo * 60_000) / 1000);
 
 const SKIPPED_BY_DEFAULT = new Set(["broll", "reference"]);
 
-/** Stages up to `current` done, `current` in `status`, the rest pending. */
+/** Stages up to `current` done, `current` in `status`, the rest pending. Like the engine, finished stages keep only `finished`. */
 export function makeStages(current: string | null, status: StageStatus, endedMinsAgo = 0, error?: string): Stage[] {
   const idx = current ? STAGES.indexOf(current as (typeof STAGES)[number]) : STAGES.length;
   let t = sec(endedMinsAgo) - STAGES.slice(0, idx + 1).reduce((a, s) => a + TYPICAL_STAGE_S[s], 0);
@@ -31,7 +32,7 @@ export function makeStages(current: string | null, status: StageStatus, endedMin
     const dur = TYPICAL_STAGE_S[name];
     if (i < idx) {
       const skipped = SKIPPED_BY_DEFAULT.has(name);
-      const st: Stage = { name, status: skipped ? "skipped" : "done", started: skipped ? null : t, finished: skipped ? null : t + dur, meta: {} };
+      const st: Stage = { name, status: skipped ? "skipped" : "done", started: null, finished: t + (skipped ? 0 : dur), meta: {} };
       if (!skipped) t += dur;
       return st;
     }
@@ -133,11 +134,16 @@ function base(id: string, name: string, client: string, minsAgo: number) {
     review: null,
     verdict_detail: null,
     proof: [],
-    media: { sheets: [], cut_strips: [] },
+    media: { sheets: [], cut_strips: [], variants: [] },
     versions: [],
     delivered_at: null,
+    calls: [],
+    platform_notes: [],
+    eta_s: null,
   };
 }
+
+const gate = (name: string, status: Gate["status"], detail: string): Gate => ({ name, status, detail, measured: {} });
 
 export function makeProjects(): Project[] {
   const hold: Project = {
@@ -153,32 +159,34 @@ export function makeProjects(): Project[] {
     decisions: [...STORY_DECISIONS(sec(30)), ...FINISH_DECISIONS(sec(28)), ...REVIEW_DECISIONS(sec(19), "hold")],
     verdict_detail: {
       verdict: "hold",
-      reasons: ["Caption word “Dioma” is unconfirmed (likely the brand name DearMa).", "Reviewer: the brand name may be misspelt in the captions."],
+      reasons: ["proof_words: 1 unconfirmed caption word(s): 0:12.40 “Dioma” (unconfirmed name)", "Reviewer: the brand name may be misspelt in the captions."],
+      warnings: ["reading_speed: max 21.4 chars/s (limit 20)"],
       gates: [
-        { name: "Loudness", status: "pass", detail: "−14.2 LUFS integrated (target −14 ± 1)" },
-        { name: "True peak", status: "pass", detail: "−1.4 dBTP (limit −1.0)" },
-        { name: "Captions in safe zone", status: "pass", detail: "100 % of pages inside the 4:5 + UI safe area" },
-        { name: "Caption words confirmed", status: "fail", detail: "1 word below confidence 0.6 and not in vocabulary" },
-        { name: "Black / frozen frames", status: "pass", detail: "none found" },
-        { name: "Length vs brief", status: "pass", detail: "34.2 s (brief 25–45 s)" },
-        { name: "Hook in first 3 s", status: "warn", detail: "first spoken word at 0.42 s; hook title ends at 3.4 s" },
+        gate("frame_count", "pass", "1026/1026 frames"),
+        gate("loudness", "pass", "-14.2 LUFS, -1.4 dBTP"),
+        gate("proof_words", "fail", "1 unconfirmed caption word(s): 0:12.40 “Dioma” (unconfirmed name)"),
+        gate("safe_zone", "pass", "0 page(s) outside the safe zone"),
+        gate("black", "pass", "0 black stretch(es)"),
+        gate("reading_speed", "warn", "max 21.4 chars/s (limit 20)"),
       ],
     },
     proof: [
-      { i: 42, text: "Dioma", suggestion: "DearMa", at: "00:00:12.40", frame: 372, why: "Not in the vocabulary; ASR confidence 0.41. The brief lists “DearMa”." },
-      { i: 77, text: "niacinamide", suggestion: null, at: "00:00:21.08", frame: 632, why: "Rare word; confidence 0.58 (matches the vocabulary)." },
+      { i: 42, text: "Dioma", suggestion: "DearMa", at: "0:12.40", frame: 372, why: "unconfirmed name" },
+      { i: 77, text: "niacinamide", suggestion: null, at: "0:21.08", frame: 632, why: "low confidence" },
     ],
     review: {
       summary: "Strong confession hook and a clean before/after arc. Hold only for the brand spelling.",
+      sendable: false,
+      strengths: ["The confession hook names the pain in the first 2 s.", "Clean before/after arc."],
       issues: [
-        { at: "00:00:12.4", category: "captions", severity: "blocker", text: "Brand name shows as “Dioma”.", fix: "Fix the caption word to “DearMa”." },
-        { at: "00:00:03.1", category: "pacing", severity: "minor", text: "Hook title overlaps the first caption page by 0.3 s.", fix: "Shorten the hook title or start captions 0.3 s later." },
+        { at: "0:12.4", category: "captions", severity: "major", text: "Brand name shows as “Dioma”.", fix: "Fix the caption word to “DearMa”." },
+        { at: "0:03.1, 0:03.4", category: "pacing", severity: "minor", text: "Hook title overlaps the first caption page by 0.3 s.", fix: "Shorten the hook title or start captions 0.3 s later." },
       ],
     },
-    media: { sheets: ["qa/sheets/contact.jpg"], cut_strips: [] },
+    media: { final: "render/final.mp4", cover: "cover.jpg", sheets: ["qa/sheets/final_01.png"], cut_strips: [], variants: [] },
     versions: [
-      { n: 1, created: iso(19), label: "First edit", reply: "Initial cut from the brief.", cost_usd: 0.52 },
-      { n: 2, created: iso(18), label: "Revision: “make the hook snappier”", reply: "Trimmed 0.8 s of the opening breath and moved the hook title up.", cost_usd: 0.09 },
+      { n: 1, created: iso(19), label: "Original edit", reply: "", cost_usd: null, final: "versions/1/final.mp4" },
+      { n: 2, created: iso(18), label: "Revision: “make the hook snappier”", reply: "Trimmed 0.8 s of the opening breath and moved the hook title up.", cost_usd: 0.09, final: "versions/2/final.mp4" },
     ],
   };
 
@@ -196,16 +204,18 @@ export function makeProjects(): Project[] {
     verdict_detail: {
       verdict: "sendable",
       reasons: [],
+      warnings: [],
       gates: [
-        { name: "Loudness", status: "pass", detail: "−14.0 LUFS integrated" },
-        { name: "True peak", status: "pass", detail: "−1.6 dBTP" },
-        { name: "Captions in safe zone", status: "pass", detail: "100 % inside" },
-        { name: "Caption words confirmed", status: "pass", detail: "all 128 words confirmed" },
-        { name: "Length vs brief", status: "pass", detail: "41.6 s (brief 30–60 s)" },
+        gate("frame_count", "pass", "1248/1248 frames"),
+        gate("loudness", "pass", "-14.0 LUFS, -1.6 dBTP"),
+        gate("proof_words", "pass", "all caption words confirmed"),
+        gate("safe_zone", "pass", "0 page(s) outside the safe zone"),
+        gate("brief", "pass", "must-keep, banned claims, CTA ok"),
       ],
     },
-    review: { summary: "Clear founder arc, warm look suits the café footage. Ready to send.", issues: [] },
-    versions: [{ n: 1, created: iso(97), label: "First edit", reply: "Initial cut from the brief.", cost_usd: 0.73 }],
+    review: { summary: "Clear founder arc, warm look suits the café footage. Ready to send.", sendable: true, strengths: ["Clear founder arc."], issues: [] },
+    media: { final: "render/final.mp4", cover: "cover.jpg", sheets: [], cut_strips: [], variants: [] },
+    versions: [{ n: 1, created: iso(97), label: "Original edit", reply: "", cost_usd: null, final: "render/final.mp4" }],
   };
 
   const delivered: Project = {
@@ -260,7 +270,7 @@ export function makeProjects(): Project[] {
     cost_usd: 0,
     verdict: null,
     needs_attention: [],
-    stages: STAGES.map((name) => ({ name, status: "queued", started: null, finished: null, meta: {} })),
+    stages: STAGES.map((name) => ({ name, status: "queued" as const, started: null, finished: null, meta: {} })),
     decisions: [],
   };
 
@@ -354,51 +364,67 @@ export function makeTimeline(): TimelineView {
       captions: "Editorial kinetic: premium, conversational; emphasis on the 7 words that carry the story.",
       a_voice: "Dialogue, levelled to −16 LUFS before the mix.",
     },
+    story: Object.fromEntries(items.map((it) => [it.id, { beat: it.beat, text: it.text }])),
+    adjust: {
+      caption_family: "editorial_kinetic",
+      caption_tokens: { emph_color: "#FF5FA2" },
+      look: "warm",
+      look_strength: 0.45,
+      grain: 0.18,
+      vignette: 0.2,
+      music_track: "acoustic_morning",
+      music_gain_db: -20,
+      max_pause_ms: null,
+      sfx: 2,
+      punch_ins: 2,
+    },
   };
 }
 
 export const HEALTH: Health = {
   engine: "ok",
   version: "0.11.0",
+  toolchain_ok: false,
   tools: [
-    { name: "ffmpeg", ok: true, detail: "ffmpeg 7.1 with libass, lut3d" },
-    { name: "whisper", ok: true, detail: "mlx-whisper large-v3-turbo" },
-    { name: "renderer", ok: false, detail: "Remotion packages missing — run: cd renderer && npm ci" },
-    { name: "claude", ok: true, detail: "Claude Code logged in" },
-    { name: "disk", ok: true, detail: "212 GB free" },
+    { name: "pinned ffmpeg", ok: true, detail: "ffmpeg 9.0.2", required: true },
+    { name: "filter zscale", ok: true, detail: "ok", required: true },
+    { name: "renderer node_modules", ok: false, detail: "Remotion packages missing — run: cd renderer && npm ci", required: true },
+    { name: "claude CLI", ok: true, detail: "Claude Code logged in", required: true },
+    { name: "pexels key", ok: false, detail: "not set (stock b-roll search off)", required: false },
   ],
   claude: true,
   disk_free_gb: 212,
   jobs: { running: 3, queued: 1, limit: 3 },
-  memory_gb: { used: 9.4, budget: 12 },
+  memory_gb: { used: 9.4, budget: 12, system: { total: 16, available: 5.2 } },
+  projects_root: "~/Reels/projects",
 };
 
 export const LIBRARIES: Libraries = {
   sfx: [
-    { id: "whoosh_soft_01", category: "whoosh", duration_ms: 820, source: "Sonniss GDC 2024", license: "Royalty-free commercial use" },
-    { id: "whoosh_fast_02", category: "whoosh", duration_ms: 540, source: "Sonniss GDC 2024", license: "Royalty-free commercial use" },
-    { id: "pop_bubble_01", category: "pop", duration_ms: 310, source: "Sonniss GDC 2024", license: "Royalty-free commercial use" },
-    { id: "riser_short_01", category: "riser", duration_ms: 2100, source: "Self-recorded", license: "Owned" },
-    { id: "click_ui_03", category: "ui", duration_ms: 120, source: "Kenney UI Audio", license: "CC0" },
-    { id: "impact_low_01", category: "impact", duration_ms: 1400, source: "Sonniss GDC 2024", license: "Royalty-free commercial use" },
+    { id: "whoosh_soft_01", category: "whoosh", duration_ms: 820, source: "Sonniss GDC 2024", license: "Royalty-free commercial use", file: null },
+    { id: "whoosh_fast_02", category: "whoosh", duration_ms: 540, source: "Sonniss GDC 2024", license: "Royalty-free commercial use", file: null },
+    { id: "pop_bubble_01", category: "pop", duration_ms: 310, source: "Sonniss GDC 2024", license: "Royalty-free commercial use", file: null },
+    { id: "riser_short_01", category: "riser", duration_ms: 2100, source: "Self-recorded", license: "Owned", file: null },
+    { id: "click_ui_03", category: "ui", duration_ms: 120, source: "Kenney UI Audio", license: "CC0", file: null },
+    { id: "impact_low_01", category: "impact", duration_ms: 1400, source: "Sonniss GDC 2024", license: "Royalty-free commercial use", file: null },
   ],
   music: [
     { id: "acoustic_morning", title: "Acoustic Morning", mood: "calm, warm", bpm: 92, duration_ms: 148000, source: "Uppbeat", license: "Uppbeat free (credit)", attribution: "Music: Acoustic Morning — Uppbeat" },
-    { id: "neon_drive", title: "Neon Drive", mood: "energetic", bpm: 124, duration_ms: 132000, source: "Self-produced", license: "Owned", attribution: "" },
+    { id: "neon_drive", title: "Neon Drive", mood: "energetic", bpm: 124, duration_ms: 132000, source: "Self-produced", license: "Owned", attribution: null },
     { id: "soft_piano_02", title: "Soft Piano II", mood: "emotional", bpm: 70, duration_ms: 176000, source: "Free Music Archive", license: "CC BY 4.0", attribution: "Soft Piano II by K. Ito (CC BY 4.0)" },
   ],
   broll: [
-    { id: "serum_bottle_closeup", description: "Hand turns a glass serum bottle on a marble counter, soft window light.", shot: "close-up", duration_ms: 6200, source: "Client upload", license: "Client-owned" },
-    { id: "cafe_pour_overhead", description: "Overhead pour-over coffee, steam rising.", shot: "overhead", duration_ms: 8400, source: "Pexels", license: "Pexels licence" },
+    { id: "serum_bottle_closeup", description: "Hand turns a glass serum bottle on a marble counter, soft window light.", shot: "close-up", duration_ms: 6200, source: "Client upload", license: "Client-owned", tags: [], file: null },
+    { id: "cafe_pour_overhead", description: "Overhead pour-over coffee, steam rising.", shot: "overhead", duration_ms: 8400, source: "Pexels", license: "Pexels licence", tags: [], file: null },
   ],
   caption_families: [
-    { id: "bold_pop", for: ["genre.talking_head", "genre.podcast_clip", "genre.tutorial"], mood: "high energy, hooks" },
-    { id: "clean_phrase", for: ["genre.tutorial", "genre.product"], mood: "clear, explanatory" },
-    { id: "editorial_kinetic", for: ["genre.testimonial", "genre.brand_story", "genre.interview"], mood: "premium, conversational" },
-    { id: "minimal_calm", for: ["genre.vlog", "genre.montage", "genre.brand_story"], mood: "aesthetic, emotional" },
-    { id: "speaker_coded", for: ["genre.podcast_clip", "genre.interview"], mood: "multi-speaker clarity" },
+    { id: "bold_pop", for: ["genre.talking_head", "genre.podcast_clip", "genre.tutorial"], mood: "high energy, hooks", max_words: 4, tokens: { emph_color: "#FFD400" } },
+    { id: "clean_phrase", for: ["genre.tutorial", "genre.product"], mood: "clear, explanatory", max_words: 4, tokens: { emph_color: "#FFD400" } },
+    { id: "editorial_kinetic", for: ["genre.testimonial", "genre.brand_story", "genre.interview"], mood: "premium, conversational", max_words: 4, tokens: { emph_color: "#FFD400" } },
+    { id: "minimal_calm", for: ["genre.vlog", "genre.montage", "genre.brand_story"], mood: "aesthetic, emotional", max_words: 4, tokens: { emph_color: "#FFD400" } },
+    { id: "speaker_coded", for: ["genre.podcast_clip", "genre.interview"], mood: "multi-speaker clarity", max_words: 4, tokens: { emph_color: "#FFD400" } },
   ],
-  unreadable: [{ kind: "sfx", file: "sonniss/impact_metal_07.wav", reason: "corrupt WAV header" }],
+  unreadable: [],
 };
 
 export const BRANDS: BrandEntry[] = [
@@ -439,37 +465,39 @@ export const LAB: Lab = {
     n_labels: 23,
     trusted: false,
     gates: [
-      { name: "Loudness", false_alarm_rate: 0.02, mode: "block" },
-      { name: "Captions in safe zone", false_alarm_rate: 0.05, mode: "block" },
-      { name: "Caption words confirmed", false_alarm_rate: 0.21, mode: "warn" },
-      { name: "Hook in first 3 s", false_alarm_rate: 0.34, mode: "warn" },
+      { name: "black", mode: "warn", false_alarm_rate: 0.333, catch_rate: 1, promote_to_block: false },
+      { name: "frozen", mode: "warn", false_alarm_rate: 0, catch_rate: 1, promote_to_block: true },
+      { name: "loudness", mode: "block", false_alarm_rate: null, catch_rate: 1, promote_to_block: false },
+      { name: "reading_speed", mode: "warn", false_alarm_rate: 0.21, catch_rate: null, promote_to_block: false },
     ],
+    rule: "block when false alarms ≤ 0 on the pro finals and catch rate ≥ 90%",
   },
   improve_history: [
-    { at: iso(60 * 24 * 2), change: "technique.punch_in_on_turn: prefer the turn word over the sentence start", outcome: "accepted", gain: 0.031 },
-    { at: iso(60 * 24 * 2), change: "caption.bold_pop: max_words 3 → 4 for Hinglish", outcome: "rejected", reason: "No gain on the tuning set (−0.004); captions overflow the safe zone on 2 reels." },
-    { at: iso(60 * 24 * 6), change: "goal.retention_first_3s: hook must be spoken, not only a title", outcome: "accepted", gain: 0.018 },
+    { at: null, round: 0, change: "edit technique.punch_in_on_turn", outcome: "accepted", gain: 0.031, reason: null },
+    { at: null, round: 1, change: "edit caption.bold_pop", outcome: "rejected", gain: -0.004, reason: "mean gain -0.40 < δ_min 1.00" },
+    { at: null, round: 2, change: "add technique.spoken_hook", outcome: "invalid", gain: null, reason: "unknown node goal.retention" },
   ],
   runs: [
-    { id: "run-0912", at: iso(60 * 24 * 40), split: "tuning", primary: 0.61, families: { story: 0.58, captions: 0.71, style: 0.55, gates: 0.83, reviewer: 0.49 } },
-    { id: "run-0926", at: iso(60 * 24 * 26), split: "tuning", primary: 0.64, families: { story: 0.62, captions: 0.72, style: 0.58, gates: 0.85, reviewer: 0.52 } },
-    { id: "run-1010", at: iso(60 * 24 * 12), split: "holdout", primary: 0.66, families: { story: 0.63, captions: 0.74, style: 0.6, gates: 0.88, reviewer: 0.55 } },
-    { id: "run-1104", at: iso(60 * 24 * 6), split: "tuning", primary: 0.69, families: { story: 0.68, captions: 0.76, style: 0.61, gates: 0.9, reviewer: 0.58 } },
-    { id: "run-1116", at: iso(60 * 24 * 2), split: "tuning", primary: 0.72, families: { story: 0.71, captions: 0.79, style: 0.63, gates: 0.91, reviewer: 0.62 } },
+    { id: "run-0912", at: iso(60 * 24 * 40), split: "tuning", primary: 0.61, families: { story: 0.58, captions: 0.71, style: 0.55, gates: 0.83, reviewer: 0.49 }, vetoed: 0, reels: [] },
+    { id: "run-0926", at: iso(60 * 24 * 26), split: "tuning", primary: 0.64, families: { story: 0.62, captions: 0.72, style: 0.58, gates: 0.85, reviewer: 0.52 }, vetoed: 0, reels: [] },
+    { id: "run-1010", at: iso(60 * 24 * 12), split: "holdout", primary: 0.66, families: { story: 0.63, captions: 0.74, style: 0.6, gates: 0.88, reviewer: 0.55 }, vetoed: 0, reels: [] },
+    { id: "run-1104", at: iso(60 * 24 * 6), split: "tuning", primary: 0.69, families: { story: 0.68, captions: 0.76, style: 0.61, gates: 0.9, reviewer: 0.58 }, vetoed: 0, reels: [] },
+    { id: "run-1116", at: iso(60 * 24 * 2), split: "tuning", primary: 0.72, families: { story: 0.71, captions: 0.79, style: 0.63, gates: 0.91, reviewer: 0.62 }, vetoed: 0, reels: [] },
   ],
   gold_pairs: [
-    { id: "gold-01-testimonial", split: "tuning", language: "en", source: "Freelance pro (paid)" },
-    { id: "gold-02-podcast-hinglish", split: "tuning", language: "hinglish", source: "Freelance pro (paid)" },
-    { id: "gold-03-tutorial", split: "tuning", language: "en", source: "Public CC-BY pair" },
-    { id: "gold-04-vlog-hi", split: "tuning", language: "hi", source: "Freelance pro (paid)" },
-    { id: "gold-13-holdout", split: "holdout", language: "hinglish", source: "Freelance pro (paid)" },
-    { id: "gold-14-holdout", split: "holdout", language: "en", source: "Freelance pro (paid)" },
-    { id: "gold-15-holdout", split: "holdout", language: "en", source: "Freelance pro (paid)" },
+    { id: "gold-01-testimonial", split: "tuning", language: "en", source: "@freelance_pro" },
+    { id: "gold-02-podcast-hinglish", split: "tuning", language: "hinglish", source: "@freelance_pro" },
+    { id: "gold-03-tutorial", split: "tuning", language: "en", source: "@cc_by_channel" },
+    { id: "gold-04-vlog-hi", split: "tuning", language: "hi", source: "@freelance_pro" },
+    { id: "gold-13-holdout", split: "holdout", language: "hinglish", source: "@freelance_pro" },
+    { id: "gold-14-holdout", split: "holdout", language: "en", source: "@freelance_pro" },
+    { id: "gold-15-holdout", split: "holdout", language: "en", source: "@freelance_pro" },
   ],
 };
 
 export const COSTS: Costs = {
   total_usd: 14.82,
+  calls: 41,
   by_project: [
     { id: "glow-serum-testimonial", usd: 0.61 },
     { id: "founder-story-cut-1", usd: 0.73 },
@@ -477,9 +505,10 @@ export const COSTS: Costs = {
     { id: "podcast-ep12-clip", usd: 0.38 },
     { id: "tutorial-lip-tint", usd: 0.44 },
   ],
-  by_day: Array.from({ length: 14 }, (_, i) => ({
-    date: new Date(NOW - (13 - i) * 86_400_000).toISOString().slice(0, 10),
-    usd: [0.4, 1.1, 0.0, 0.7, 1.9, 0.6, 0.2, 1.4, 2.1, 0.9, 0.0, 1.2, 1.6, 0.8][i],
+  // Like the API: every day of the 30-day window, oldest first, zeros included.
+  by_day: Array.from({ length: 30 }, (_, i) => ({
+    date: new Date(NOW - (29 - i) * 86_400_000).toISOString().slice(0, 10),
+    usd: i < 16 ? 0 : [0.4, 1.1, 0.0, 0.7, 1.9, 0.6, 0.2, 1.4, 2.1, 0.9, 0.0, 1.2, 1.6, 0.8][i - 16],
   })),
 };
 
@@ -493,16 +522,17 @@ export const SETTINGS: Settings = {
 
 export const PACKAGE: PackageListing = {
   files: [
-    { path: "render/final.mp4", label: "Final reel · 9:16 · 1080×1920", kind: "final", bytes: 48_200_000 },
-    { path: "export/feed_4x5.mp4", label: "Feed · 4:5 · 1080×1350", kind: "variant", bytes: 41_900_000 },
-    { path: "export/square.mp4", label: "Square · 1:1 · 1080×1080", kind: "variant", bytes: 37_400_000 },
-    { path: "render/review_copy.mp4", label: "Review copy · 540p, watermarked", kind: "review_copy", bytes: 6_100_000 },
-    { path: "package/timeline.fcpxml", label: "Final Cut Pro timeline", kind: "timeline", bytes: 182_000 },
-    { path: "package/timeline.otio", label: "OpenTimelineIO timeline", kind: "timeline", bytes: 96_000 },
-    { path: "package/captions.srt", label: "Captions · SRT", kind: "captions", bytes: 4_100 },
-    { path: "package/stems/", label: "Audio stems · dialogue, music, effects", kind: "stems", bytes: 31_000_000 },
-    { path: "package/overlay.mov", label: "Overlay with transparency · ProRes 4444", kind: "overlay", bytes: 212_000_000 },
-    { path: "package/edit_list.md", label: "Edit list with reasons", kind: "edit_list", bytes: 9_800 },
+    { path: "export/package/reel.mp4", label: "Final reel · 9:16 · 1080×1920", kind: "final", bytes: 48_200_000, thumb: "cover.jpg" },
+    { path: "export/variants/reel_feed_4x5.mp4", label: "Feed · 4:5 · 1080×1350", kind: "variant", bytes: 41_900_000, thumb: null },
+    { path: "export/variants/reel_square.mp4", label: "Square · 1:1 · 1080×1080", kind: "variant", bytes: 37_400_000, thumb: null },
+    { path: "export/review/review.mp4", label: "Review copy · small, watermarked", kind: "review_copy", bytes: 6_100_000, thumb: null },
+    { path: "export/package/README.md", label: "Read me", kind: "other", bytes: 1_300, thumb: null },
+    { path: "export/package/captions.srt", label: "Captions · SRT", kind: "captions", bytes: 4_100, thumb: null },
+    { path: "export/package/edit_list.md", label: "Edit list with reasons", kind: "edit_list", bytes: 9_800, thumb: null },
+    { path: "export/package/overlay.mov", label: "Overlay with transparency (captions, titles, graphics)", kind: "overlay", bytes: 212_000_000, thumb: null },
+    { path: "export/package/stems/", label: "Audio stems · dialogue, music, effects", kind: "stems", bytes: 31_000_000, thumb: null },
+    { path: "export/package/timeline.fcpxml", label: "Final Cut Pro timeline", kind: "timeline", bytes: 182_000, thumb: null },
+    { path: "export/package/timeline.otio", label: "OpenTimelineIO timeline", kind: "timeline", bytes: 96_000, thumb: null },
   ],
-  warnings: ["Music “Acoustic Morning” needs a credit line in the post caption: “Music: Acoustic Morning — Uppbeat”."],
+  warnings: ["Music “Acoustic Morning” needs a credit line in the post: “Music: Acoustic Morning — Uppbeat”."],
 };

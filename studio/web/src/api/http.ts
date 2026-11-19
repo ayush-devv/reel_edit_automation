@@ -43,7 +43,7 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
   const post = <T>(p: string, b: unknown = {}) => request<T>("POST", p, b);
   const withToken = (p: string) => `${base}${p}${p.includes("?") ? "&" : "?"}token=${enc(getToken())}`;
 
-  function createProject(input: NewProjectInput, onProgress?: UploadProgress): Promise<{ id: string }> {
+  function createProject(input: NewProjectInput, onProgress?: UploadProgress): ReturnType<Api["createProject"]> {
     // XHR, not fetch: fetch has no upload progress, and FR-2 shows a bar per file.
     const form = new FormData();
     for (const f of input.files) form.append("files[]", f, f.name);
@@ -64,7 +64,7 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
         } catch {
           /* empty */
         }
-        if (xhr.status >= 200 && xhr.status < 300) resolve(body as { id: string });
+        if (xhr.status >= 200 && xhr.status < 300) resolve(body as Awaited<ReturnType<Api["createProject"]>>);
         else {
           const msg = body && typeof body === "object" && "error" in body ? String((body as { error: unknown }).error) : `Upload failed (${xhr.status})`;
           reject(new ApiError(xhr.status, msg, body));
@@ -94,7 +94,7 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
     restore: (id, n) => post(`/api/projects/${enc(id)}/versions/${n}/restore`),
     deliver: (id, variants) => post(`/api/projects/${enc(id)}/deliver`, variants ? { variants } : {}),
     packageListing: (id) => get(`/api/projects/${enc(id)}/package`),
-    markDelivered: (id) => post(`/api/projects/${enc(id)}/delivered`),
+    markDelivered: (id) => post(`/api/projects/${enc(id)}/delivered`, { delivered: true }),
     label: (id, sendable, reason) => post(`/api/projects/${enc(id)}/label`, { sendable, reason }),
     libraries: () => get("/api/libraries"),
     indexLibrary: (kind, folder, source, license) => post("/api/libraries/index", { kind, folder, source, license }),

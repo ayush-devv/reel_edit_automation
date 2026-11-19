@@ -5,6 +5,7 @@ import type {
   Brief,
   Costs,
   Health,
+  Job,
   Jobs,
   Lab,
   Libraries,
@@ -18,8 +19,9 @@ import type {
   Version,
 } from "./types";
 
+/** Every POST that starts work answers `{ job }`; the SSE `job` events carry the same `job.id`. */
 export interface JobRef {
-  job: string;
+  job: Job;
 }
 
 export interface NewProjectInput {
@@ -40,7 +42,7 @@ export interface Api {
   jobs(): Promise<Jobs>;
   projects(): Promise<ProjectSummary[]>;
   project(id: string): Promise<Project>;
-  createProject(input: NewProjectInput, onProgress?: UploadProgress): Promise<{ id: string }>;
+  createProject(input: NewProjectInput, onProgress?: UploadProgress): Promise<{ id: string; job: Job }>;
   deleteProject(id: string): Promise<void>;
   retry(id: string, stage?: string): Promise<JobRef>;
   cancel(id: string): Promise<void>;
@@ -49,7 +51,7 @@ export interface Api {
   notesPreview(id: string, text: string): Promise<NotesPreview>;
   notesApply(id: string, text: string): Promise<JobRef>;
   proof(id: string, words: { i: number; text: string }[]): Promise<JobRef>;
-  adjust(id: string, kind: AdjustKind, value: unknown): Promise<JobRef>;
+  adjust(id: string, kind: AdjustKind, value: unknown): Promise<JobRef & { note?: string }>;
   versions(id: string): Promise<Version[]>;
   restore(id: string, n: number): Promise<JobRef>;
   deliver(id: string, variants?: string[]): Promise<JobRef>;
@@ -64,10 +66,10 @@ export interface Api {
   labAction(action: "eval" | "calibrate" | "improve", body?: Record<string, unknown>): Promise<JobRef>;
   costs(days?: number): Promise<Costs>;
   settings(): Promise<Settings>;
-  saveSettings(s: Settings): Promise<void>;
+  saveSettings(s: Settings): Promise<Settings>;
   /** `v` busts the browser cache when a re-render rewrites the same path (e.g. the version number). */
   mediaUrl(id: string, path: string, v?: string | number): string;
-  /** v1.1: preview a library file (sfx/music/broll). "" when unavailable. */
+  /** Preview a library file (sfx/music/broll). "" when unavailable. */
   libraryMediaUrl(kind: "sfx" | "music" | "broll", id: string): string;
   packageZipUrl(id: string): string;
   /** Live events for one project (SSE). Returns an unsubscribe function. */

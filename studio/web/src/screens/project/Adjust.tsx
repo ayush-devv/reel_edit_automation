@@ -127,22 +127,38 @@ function Num({ label, value, onChange, step = 0.05, min, max, suffix }: { label:
   );
 }
 
+const HEX = /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/;
+/** Numbers go to the API as numbers; an empty box stays "" so the local check can say "Enter a number". */
+const num = (s: string): number | "" => (s.trim() === "" ? "" : Number(s));
+
+/** Colour tokens of a caption family (its defaults, then the plan's overrides), e.g. emph_color, speaker_a. */
+function colourTokens(lib: Libraries, family: string, overrides: Record<string, string>): Record<string, string> {
+  const fam = lib.caption_families.find((f) => f.id === family);
+  const all = { ...(fam?.tokens ?? {}), ...overrides };
+  const out = Object.fromEntries(Object.entries(all).filter(([, v]) => typeof v === "string" && HEX.test(v)));
+  return Object.keys(out).length ? out : { emph_color: "#FFD400" };
+}
+
 function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
-  const g = tl.timeline.grade;
+  const a = tl.adjust;
+  const family = a.caption_family ?? tl.timeline.captions?.family ?? "";
+  const tokens = colourTokens(lib, family, a.caption_tokens);
+  const firstToken = "emph_color" in tokens ? "emph_color" : Object.keys(tokens)[0];
   const initial = {
-    family: tl.timeline.captions?.family ?? "",
-    tokenKey: "emph_color",
-    tokenValue: "#FFD400",
-    look: g.look,
-    strength: String(g.strength),
+    family,
+    tokenKey: firstToken,
+    tokenValue: tokens[firstToken],
+    look: a.look,
+    strength: String(a.look_strength),
     track: "",
-    gain: "-20",
-    sfxOff: false,
-    punchOff: false,
-    grain: String(g.grain),
-    vignette: String(g.vignette),
-    pause: "400",
+    gain: String(a.music_gain_db),
+    sfxOff: a.sfx === 0,
+    punchOff: a.punch_ins === 0,
+    grain: String(a.grain),
+    vignette: String(a.vignette),
+    pause: String(a.max_pause_ms ?? 400),
   };
+  const currentTrack = a.music_track === "none" ? "No music" : lib.music.find((m) => m.id === a.music_track)?.title ?? a.music_track;
   const [v, setV] = useState(initial);
   const [base, setBase] = useState(initial);
   const set = <K extends keyof typeof initial>(k: K, x: (typeof initial)[K]) => setV((s) => ({ ...s, [k]: x }));
@@ -189,9 +205,12 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
           >
             <div className="flex items-center gap-2">
               <div className="w-56 shrink-0">
-                <Select aria-label="Token" value={v.tokenKey} onChange={(e) => set("tokenKey", e.target.value)}>
-                  <option value="emph_color">Emphasis colour</option>
-                  <option value="base_color">Base colour</option>
+                <Select aria-label="Token" value={v.tokenKey} onChange={(e) => setV((s) => ({ ...s, tokenKey: e.target.value, tokenValue: tokens[e.target.value] ?? s.tokenValue }))}>
+                  {Object.keys(tokens).map((k) => (
+                    <option key={k} value={k}>
+                      {k === "emph_color" ? "Emphasis colour" : prettyId(k)}
+                    </option>
+                  ))}
                 </Select>
               </div>
               <input type="color" aria-label="Pick colour" value={/^#[0-9a-fA-F]{6}$/.test(v.tokenValue) ? v.tokenValue : "#000000"} onChange={(e) => set("tokenValue", e.target.value.toUpperCase())} className="h-10 w-12 cursor-pointer rounded-input border border-line-subtle bg-bg-overlay p-1" />
@@ -211,13 +230,13 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
               ))}
             </div>
           </Row>
-          <Row title="Look strength" hint="0.3–0.6 is typical." kind="look_strength" value={v.strength} dirty={v.strength !== base.strength} ctx={ctx} onApplied={done(["strength"])}>
+          <Row title="Look strength" hint="0.3–0.6 is typical." kind="look_strength" value={num(v.strength)} dirty={v.strength !== base.strength} ctx={ctx} onApplied={done(["strength"])}>
             <Num label="Look strength" value={v.strength} onChange={(x) => set("strength", x)} min={0} max={1} />
           </Row>
-          <Row title="Grain" hint="0.15–0.3 reads as texture." kind="grain" value={v.grain} dirty={v.grain !== base.grain} ctx={ctx} onApplied={done(["grain"])}>
+          <Row title="Grain" hint="0.15–0.3 reads as texture." kind="grain" value={num(v.grain)} dirty={v.grain !== base.grain} ctx={ctx} onApplied={done(["grain"])}>
             <Num label="Grain" value={v.grain} onChange={(x) => set("grain", x)} min={0} max={0.6} />
           </Row>
-          <Row title="Vignette" kind="vignette" value={v.vignette} dirty={v.vignette !== base.vignette} ctx={ctx} onApplied={done(["vignette"])}>
+          <Row title="Vignette" kind="vignette" value={num(v.vignette)} dirty={v.vignette !== base.vignette} ctx={ctx} onApplied={done(["vignette"])}>
             <Num label="Vignette" value={v.vignette} onChange={(x) => set("vignette", x)} min={0} max={0.7} />
           </Row>
         </Panel>
@@ -225,7 +244,7 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
 
       <div className="col-span-12 space-y-4 xl:col-span-5">
         <Panel title="Sound">
-          <Row title="Music track" kind="music_track" value={v.track} dirty={v.track !== base.track && v.track !== ""} ctx={ctx} onApplied={done(["track"])}>
+          <Row title="Music track" hint={`Now: ${currentTrack}`} kind="music_track" value={v.track} dirty={v.track !== base.track && v.track !== ""} ctx={ctx} onApplied={done(["track"])}>
             <Select aria-label="Music track" value={v.track} onChange={(e) => set("track", e.target.value)}>
               <option value="">Keep the Editor’s pick</option>
               <option value="none">No music</option>
@@ -236,18 +255,18 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
               ))}
             </Select>
           </Row>
-          <Row title="Music level" hint="Before ducking under speech." kind="music_gain_db" value={v.gain} dirty={v.gain !== base.gain} ctx={ctx} onApplied={done(["gain"])}>
+          <Row title="Music level" hint={a.music_track === "none" ? "No music in this edit — pick a track first." : "Before ducking under speech."} kind="music_gain_db" value={num(v.gain)} dirty={v.gain !== base.gain} ctx={ctx} onApplied={done(["gain"])}>
             <Num label="Music level" value={v.gain} onChange={(x) => set("gain", x)} min={-30} max={-6} step={1} suffix="dB" />
           </Row>
-          <Row title="Sound effects" kind="sfx_off" value={v.sfxOff} dirty={v.sfxOff !== base.sfxOff} ctx={ctx} onApplied={done(["sfxOff"])}>
-            <Toggle checked={v.sfxOff} onChange={(x) => set("sfxOff", x)} label="Turn all sound effects off" />
+          <Row title="Sound effects" hint={base.sfxOff ? "None in this edit. Ask the Editor (Revise) to add some." : `${a.sfx} in this edit.`} kind="sfx_off" value={true} dirty={v.sfxOff && !base.sfxOff} ctx={ctx} onApplied={done(["sfxOff"])}>
+            <Toggle checked={v.sfxOff} onChange={(x) => !base.sfxOff && set("sfxOff", x)} label="Turn all sound effects off" />
           </Row>
         </Panel>
         <Panel title="Pacing">
-          <Row title="Punch-ins" kind="punch_ins_off" value={v.punchOff} dirty={v.punchOff !== base.punchOff} ctx={ctx} onApplied={done(["punchOff"])}>
-            <Toggle checked={v.punchOff} onChange={(x) => set("punchOff", x)} label="Turn all punch-ins off" />
+          <Row title="Punch-ins" hint={base.punchOff ? "None in this edit. Ask the Editor (Revise) to add some." : `${a.punch_ins} in this edit.`} kind="punch_ins_off" value={true} dirty={v.punchOff && !base.punchOff} ctx={ctx} onApplied={done(["punchOff"])}>
+            <Toggle checked={v.punchOff} onChange={(x) => !base.punchOff && set("punchOff", x)} label="Turn all punch-ins off" />
           </Row>
-          <Row title="Longest pause kept" hint="Longer pauses are cut (jump cut). 0 keeps every pause." kind="max_pause_ms" value={Number(v.pause)} dirty={v.pause !== base.pause} ctx={ctx} onApplied={done(["pause"])}>
+          <Row title="Longest pause kept" hint="Longer pauses are cut (jump cut). 0 keeps every pause." kind="max_pause_ms" value={num(v.pause)} dirty={v.pause !== base.pause} ctx={ctx} onApplied={done(["pause"])}>
             <div className="relative w-36">
               <TextInput aria-label="Longest pause kept" value={v.pause} onChange={(e) => set("pause", e.target.value)} inputMode="numeric" className="h-8 pr-10 font-mono text-[13px]" />
               <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-label text-fg-muted">ms</span>

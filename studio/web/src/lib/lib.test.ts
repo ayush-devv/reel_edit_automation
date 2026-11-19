@@ -19,6 +19,8 @@ const P = (id: string, status: ProjectSummary["status"], extra: Partial<ProjectS
   verdict: null,
   needs_attention: [],
   thumb: null,
+  client: null,
+  delivered_at: null,
   ...extra,
 });
 
@@ -45,6 +47,14 @@ describe("sortByAttention (FR-1, AC-1)", () => {
   it("maps statuses to badges", () => {
     expect(badgeOf(P("x", "running"))).toBe("editing");
     expect(badgeOf(P("x", "sendable", { delivered_at: "2026-11-01T00:00:00Z" }))).toBe("delivered");
+    expect(badgeOf(P("x", "running", { delivered_at: "2026-11-01T00:00:00Z" }))).toBe("editing"); // re-editing a delivered reel
+  });
+
+  it("reads the first timecode of a Reviewer range", async () => {
+    const { tcToSeconds } = await import("./format");
+    expect(tcToSeconds("0:03.2, 0:38.2, 0:43.2–0:44.2 vs 0:08.2")).toBeCloseTo(3.2);
+    expect(tcToSeconds("00:00:12.40")).toBeCloseTo(12.4);
+    expect(tcToSeconds("")).toBe(0);
   });
 });
 

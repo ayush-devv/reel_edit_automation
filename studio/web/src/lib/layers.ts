@@ -22,7 +22,11 @@ export function buildLayers(view: TimelineView): { layers: Layer[]; duration: nu
   const fps = num / (den || 1);
   const s = (f: number) => f / fps;
   const duration = s(tl.duration_f);
-  const reasons = view.reasons;
+  const reasons = view.reasons ?? {};
+  // The API fills every default; `?? []` keeps an older or partial timeline drawable.
+  const video = tl.video ?? [];
+  const audioClips = tl.audio ?? [];
+  const grade = tl.grade ?? { look: "none", strength: 0, grain: 0, vignette: 0 };
   const short = (t: string, n = 28) => (t.length > n ? t.slice(0, n - 1) + "…" : t);
 
   const layers: Layer[] = [
@@ -31,7 +35,7 @@ export function buildLayers(view: TimelineView): { layers: Layer[]; duration: nu
       label: "Source video",
       color: color.layer.video,
       kind: "picture",
-      blocks: tl.video.map((c) => ({ id: c.src.item, start: s(c.at_f), end: s(c.at_f + c.dur_f), label: c.src.item })),
+      blocks: video.filter((c) => c.id.startsWith("v_")).map((c) => ({ id: c.src.item, start: s(c.at_f), end: s(c.at_f + c.dur_f), label: c.src.item })),
     },
     {
       id: "colour",
@@ -39,8 +43,8 @@ export function buildLayers(view: TimelineView): { layers: Layer[]; duration: nu
       color: color.layer.colour,
       kind: "picture",
       blocks: [
-        { id: "grade", start: 0, end: duration, label: `${tl.grade.look} ${tl.grade.strength.toFixed(2)}` },
-        ...tl.effects.map((e) => ({ id: e.id, start: s(e.start_f), end: s(e.end_f), label: e.type.replace(/_/g, " ") })),
+        { id: "grade", start: 0, end: duration, label: `${grade.look} ${Number(grade.strength ?? 0).toFixed(2)}` },
+        ...(tl.effects ?? []).map((e) => ({ id: e.id, start: s(e.start_f), end: s(e.end_f), label: e.type.replace(/_/g, " ") })),
       ],
     },
     {
@@ -48,14 +52,17 @@ export function buildLayers(view: TimelineView): { layers: Layer[]; duration: nu
       label: "Punch-ins",
       color: color.layer.punch,
       kind: "picture",
-      blocks: tl.video.filter((c) => c.scale.length > 0).map((c) => ({ id: c.id, start: s(c.at_f + (c.scale[0]?.f ?? 0)), end: s(c.at_f + c.dur_f), label: `${Math.max(...c.scale.map((k) => k.v)).toFixed(2)}×` })),
+      blocks: video.filter((c) => c.id.startsWith("v_") && (c.scale ?? []).length > 0).map((c) => ({ id: c.id, start: s(c.at_f + (c.scale[0]?.f ?? 0)), end: s(c.at_f + c.dur_f), label: `${Math.max(...c.scale.map((k) => k.v)).toFixed(2)}×` })),
     },
     {
       id: "broll",
       label: "B-roll",
       color: color.layer.broll,
       kind: "picture",
-      blocks: tl.pips.map((b) => ({ id: b.id, start: s(b.start_f), end: s(b.end_f), label: b.id })),
+      blocks: [
+        ...(tl.pips ?? []).map((b) => ({ id: b.id, start: s(b.start_f), end: s(b.end_f), label: b.id })),
+        ...video.filter((c) => c.id.startsWith("br_")).map((c) => ({ id: c.id, start: s(c.at_f), end: s(c.at_f + c.dur_f), label: c.id.slice(3) })),
+      ],
     },
     {
       id: "captions",
@@ -70,8 +77,8 @@ export function buildLayers(view: TimelineView): { layers: Layer[]; duration: nu
       color: color.layer.titles,
       kind: "picture",
       blocks: [
-        ...tl.titles.map((t) => ({ id: t.id, start: s(t.start_f), end: s(t.end_f), label: short(t.text) })),
-        ...tl.graphics.map((g) => ({ id: g.id, start: s(g.start_f), end: s(g.end_f), label: short(g.text || g.kind.replace(/_/g, " ")) })),
+        ...(tl.titles ?? []).map((t) => ({ id: t.id, start: s(t.start_f), end: s(t.end_f), label: short(t.text) })),
+        ...(tl.graphics ?? []).map((g) => ({ id: g.id, start: s(g.start_f), end: s(g.end_f), label: short(g.text || g.kind.replace(/_/g, " ")) })),
       ],
     },
   ];
@@ -80,21 +87,23 @@ export function buildLayers(view: TimelineView): { layers: Layer[]; duration: nu
     label,
     color: col,
     kind: "audio",
-    blocks: tl.audio.filter((a) => a.role === role).map((a) => ({ id: a.id, start: s(a.at_f), end: s(a.at_f + a.dur_f), label: `${a.gain_db} dB` })),
+    blocks: audioClips.filter((a) => a.role === role).map((a) => ({ id: a.id, start: s(a.at_f), end: s(a.at_f + a.dur_f), label: `${a.gain_db} dB` })),
   });
   layers.push(audio("voice", "Dialogue", color.text.secondary), audio("music", "Music", color.accent.glow), audio("sfx", "Sound effects", color.status.hold));
   return { layers, duration, fps };
 }
 
-/** Kept lines in order (story strip): one block per clip, with the caption words spoken in it. */
+/** Kept lines in order (story strip): one block per clip, with the line's spoken text (else the caption words in it). */
 export function storyBlocks(view: TimelineView): (LayerBlock & { text: string })[] {
   const { layers, fps } = buildLayers(view);
   const pages = view.timeline.captions?.pages ?? [];
   return layers[0].blocks.map((b) => ({
     ...b,
-    text: pages
-      .filter((p) => p.start_f / fps >= b.start - 0.01 && p.start_f / fps < b.end)
-      .flatMap((p) => p.words.map((w) => w.text))
-      .join(" "),
+    text:
+      view.story?.[b.id]?.text ||
+      pages
+        .filter((p) => p.start_f / fps >= b.start - 0.01 && p.start_f / fps < b.end)
+        .flatMap((p) => p.words.map((w) => w.text))
+        .join(" "),
   }));
 }

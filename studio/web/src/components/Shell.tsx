@@ -116,12 +116,12 @@ function JobsIndicator() {
             return (
               <Link
                 key={j.id}
-                to={`/p/${j.project}/live`}
+                to={j.project.startsWith("_") ? (j.project === "_lab" ? "/studio/quality" : "/studio/libraries") : `/p/${j.project}/live`}
                 onClick={() => setOpen(false)}
                 className="flex items-center justify-between gap-3 rounded-input px-3 py-2 hover:bg-bg-raised"
               >
                 <span className="min-w-0">
-                  <span className="block truncate text-fg-primary">{p?.name ?? j.project}</span>
+                  <span className="block truncate text-fg-primary">{p?.name ?? (j.label || j.project)}</span>
                   <span className="block text-label font-normal text-fg-muted">{p?.client ?? j.kind}</span>
                 </span>
                 <span className={cx("shrink-0 text-label", isQ ? "text-fg-secondary" : "text-ai-glow")}>{isQ ? "Queued" : STAGE_LABEL[p?.stage ?? ""] ?? j.kind}</span>

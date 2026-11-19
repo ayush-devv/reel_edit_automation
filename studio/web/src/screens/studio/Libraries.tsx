@@ -155,7 +155,7 @@ export default function Libraries() {
                     { key: "m", label: "Mood", render: (r) => <span className="text-fg-secondary">{r.mood}</span> },
                     { key: "b", label: "Tempo", align: "right", render: (r) => <Mono className="text-fg-secondary">{r.bpm} bpm</Mono> },
                     { key: "d", label: "Length", align: "right", render: (r) => <Mono className="text-fg-secondary">{ms(r.duration_ms)}</Mono> },
-                    { key: "l", label: "Licence", render: (r) => <span className="text-fg-secondary" title={r.attribution}>{r.license}</span> },
+                    { key: "l", label: "Licence", render: (r) => <span className="text-fg-secondary" title={r.attribution ?? undefined}>{r.license}</span> },
                   ]}
                 />
               )}

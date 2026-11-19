@@ -23,7 +23,7 @@ function chatFrom(p: Project, pending: string | null): Msg[] {
     if (v.n === 1) continue;
     const m = /^Revision: “(.*)”$/.exec(v.label);
     out.push({ who: "owner", text: m ? m[1] : v.label });
-    out.push({ who: "editor", text: v.reply ?? "Done.", version: v });
+    out.push({ who: "editor", text: v.reply || "Done.", version: v });
   }
   if (pending) out.push({ who: "owner", text: pending }, { who: "editor", text: "Working on it…", pending: true });
   return out;
@@ -103,7 +103,7 @@ function Chat({ p }: { p: Project }) {
     setText("");
     try {
       const r = await api.revise(p.id, req);
-      setJobId(r.job);
+      setJobId(r.job.id);
     } catch (e) {
       setPending(null);
       setText(req);

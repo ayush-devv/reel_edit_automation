@@ -150,7 +150,7 @@ export default function Deliver() {
           </ul>
           {root && (
             <p className="mt-3 text-label font-normal text-fg-muted">
-              Package folder: <Mono className="text-fg-secondary">{root}/package</Mono>
+              Package folder: <Mono className="text-fg-secondary">{root}/export/package</Mono>
             </p>
           )}
         </Panel>

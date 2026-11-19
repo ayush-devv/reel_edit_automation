@@ -76,6 +76,22 @@ export const EMPTY_FORM: BriefForm = {
   square: false,
 };
 
+/** The owner's defaults (Settings → default brief and deliverables, FR-12) applied to an empty form. */
+export function formWithDefaults(d: Partial<Brief>, deliverables: string[]): BriefForm {
+  const f: BriefForm = { ...EMPTY_FORM };
+  if (d.platform) f.platform = d.platform;
+  if (d.language === "en" || d.language === "hi" || d.language === "hinglish") f.language = d.language;
+  if (d.caption_script) f.script = d.caption_script;
+  if (d.goal) f.goal = d.goal;
+  if (d.genre_hint) f.genre = d.genre_hint;
+  if (d.target_length_s) [f.minLen, f.maxLen] = d.target_length_s.map(String);
+  if (d.tone) f.tone = d.tone;
+  if (d.cta) f.cta = d.cta;
+  f.feed45 = deliverables.includes("feed_4x5");
+  f.square = deliverables.includes("square");
+  return f;
+}
+
 const lines = (s: string) => s.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
 const csv = (s: string) => s.split(/[,\n]/).map((x) => x.trim()).filter(Boolean);
 const opt = (s: string) => (s.trim() ? s.trim() : null);

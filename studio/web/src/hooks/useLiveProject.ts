@@ -8,7 +8,7 @@ export interface LiveProject {
   error: unknown;
   logs: string[];
   jobs: Record<string, { kind: string; status: string }>;
-  lastRevision: { reply: string; version: number } | null;
+  lastRevision: { reply: string; request: string; version: number | null } | null;
   connected: boolean;
   reload: () => void;
 }
