@@ -287,11 +287,15 @@ def _decode(mezz: Path, a: int, b: int, width: int, src_w: int, src_h: int) -> n
     return np.frombuffer(proc.stdout[: n * w * h * 3], dtype=np.uint8).reshape(n, h, w, 3)
 
 
-def mouth_series(frames: np.ndarray, t0_us: int, region: tuple[int, int, int, int]) -> list[tuple[int, float, float]]:
-    """(t_us, jawOpen, mouthClose) for the face inside `region` of each frame (frames without a face skipped)."""
+def mouth_series(frames: np.ndarray, t0_us: int, region: tuple[int, int, int, int],
+                 face: dict | None = None) -> list[tuple[int, float, float]]:
+    """(t_us, jawOpen, mouthClose) for the face inside `region` of each frame (frames without a face skipped).
+    `face` (normalised box the track's faces stayed in): a landmarked face centred outside it is someone else's
+    (a padded crop around the back of a head can reach the other person's face) and is ignored."""
     import mediapipe as mp
 
     x, y, w, h = region
+    fh, fw = frames.shape[1:3] if len(frames) else (1, 1)
     opts = mp.tasks.vision.FaceLandmarkerOptions(
         base_options=mp.tasks.BaseOptions(model_asset_path=str(landmarker_model())),
         running_mode=mp.tasks.vision.RunningMode.VIDEO, num_faces=1, output_face_blendshapes=True,
@@ -303,6 +307,12 @@ def mouth_series(frames: np.ndarray, t0_us: int, region: tuple[int, int, int, in
             res = lm.detect_for_video(mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(fr[y:y + h, x:x + w])),
                                       int(t // 1000))
             if res.face_blendshapes:
+                if face is not None:
+                    lms = res.face_landmarks[0]
+                    cx = (x + w * float(np.mean([p.x for p in lms]))) / fw
+                    cy = (y + h * float(np.mean([p.y for p in lms]))) / fh
+                    if not (face["x"] <= cx <= face["x"] + face["w"] and face["y"] <= cy <= face["y"] + face["h"]):
+                        continue
                 bs = {c.category_name: c.score for c in res.face_blendshapes[0]}
                 out.append((t, round(float(bs.get("jawOpen", 0.0)), 4), round(float(bs.get("mouthClose", 0.0)), 4)))
     return out
@@ -334,7 +344,10 @@ def analyse_clip(mezz: Path, faces: dict, cuts_us: list[int], words: list[tuple[
         fh, fw = frames.shape[1:3] if len(frames) else (src_h, src_w)
         live = []
         for tr in tracks:
-            series = mouth_series(frames, a, crop_region([f for _, f in tr["boxes"]], fw, fh))
+            bxs = [f for _, f in tr["boxes"]]
+            x0, y0 = min(f["x"] for f in bxs), min(f["y"] for f in bxs)
+            union = {"x": x0, "y": y0, "w": max(f["x"] + f["w"] for f in bxs) - x0, "h": max(f["y"] + f["h"] for f in bxs) - y0}
+            series = mouth_series(frames, a, crop_region(bxs, fw, fh), union)
             if len(series) >= MIN_LANDMARK_SHARE * max(1, len(frames)):
                 live.append((next_id, tr, series))
                 result["tracks"].append({"id": next_id, "box": tr["box"], "start_us": a, "end_us": b})
