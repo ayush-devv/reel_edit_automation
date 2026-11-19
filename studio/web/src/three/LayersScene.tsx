@@ -65,9 +65,16 @@ function LayerPlane({ layer, index, total, explode, toX, selected, onSelect }: {
   useFrame(() => {
     if (!g.current) return;
     const e = explode.current;
-    const pictureIdx = audio ? 0 : index;
-    g.current.position.z = audio ? -0.3 * (index - total) * e - 0.2 : -pictureIdx * GAP * e;
-    g.current.position.y = audio ? -0.75 - (index - total) * 0.26 * (0.4 + 0.6 * e) : pictureIdx * 0.06 * e;
+    if (audio) {
+      // stems: thin ribbons in front of and below the picture stack
+      const k = index - total;
+      g.current.position.z = 0.5 + k * 0.35 * e;
+      g.current.position.y = -0.62 - k * 0.24 * (0.5 + 0.5 * e);
+    } else {
+      // picture layers: a staircase going back in depth, so every plane and label stays readable
+      g.current.position.z = -index * GAP * e;
+      g.current.position.y = index * 0.4 * e;
+    }
   });
   return (
     <group ref={g}>
@@ -109,15 +116,16 @@ function Stack({ layers, duration, time, exploded, selected, onSelect }: Omit<Pr
       explode.current = a.from + (a.to - a.from) * easeOut(a.t);
     }
     if (playhead.current) {
-      const depth = (pictures.length - 1) * GAP * explode.current;
-      playhead.current.position.x = toX(time);
-      playhead.current.position.z = -depth / 2;
-      playhead.current.scale.z = depth + 0.3;
+      const e = explode.current;
+      const depth = (pictures.length - 1) * GAP * e;
+      const rise = (pictures.length - 1) * 0.4 * e;
+      playhead.current.position.set(toX(time), rise / 2 - 0.35, -depth / 2 + 0.25);
+      playhead.current.scale.set(1, rise + 2.2, depth + 1.6);
     }
   });
 
   return (
-    <group position={[0.6, 0.4, 0]}>
+    <group position={[1.1, -0.2, 0]}>
       {pictures.map((l, i) => (
         <LayerPlane key={l.id} layer={l} index={i} total={pictures.length} explode={explode} toX={toX} selected={selected} onSelect={onSelect} />
       ))}
@@ -125,8 +133,8 @@ function Stack({ layers, duration, time, exploded, selected, onSelect }: Omit<Pr
         <LayerPlane key={l.id} layer={l} index={pictures.length + i} total={pictures.length} explode={explode} toX={toX} selected={selected} onSelect={onSelect} />
       ))}
       <mesh ref={playhead} position={[toX(time), -0.35, 0]}>
-        <boxGeometry args={[0.025, 2.4, 1]} />
-        <meshBasicMaterial color={color.accent.cyan} transparent opacity={0.85} toneMapped={false} />
+        <boxGeometry args={[0.02, 1, 1]} />
+        <meshBasicMaterial color={color.accent.cyan} transparent opacity={0.28} toneMapped={false} depthWrite={false} />
       </mesh>
     </group>
   );
@@ -134,12 +142,12 @@ function Stack({ layers, duration, time, exploded, selected, onSelect }: Omit<Pr
 
 export default function LayersScene({ busy, ...props }: Props) {
   return (
-    <Scene3D busy={busy} label="Exploded layers of the edit along time. Use the flat view for a list of every block." className="h-full w-full" camera={{ position: [7.5, 4.2, 8.5], fov: 40 }}>
+    <Scene3D busy={busy} label="Exploded layers of the edit along time. Use the flat view for a list of every block." className="h-full w-full" camera={{ position: [3.2, 2.4, 11.5], fov: 42 }}>
       <color attach="background" args={[color.bg.inset]} />
-      <fog attach="fog" args={[color.bg.inset, 14, 30]} />
+      <fog attach="fog" args={[color.bg.inset, 16, 32]} />
       <StudioLights intensity={0.8} shadowSize={9} />
       <Stack {...props} />
-      <OrbitControls makeDefault enablePan={false} minDistance={7} maxDistance={18} minPolarAngle={0.6} maxPolarAngle={1.45} minAzimuthAngle={-0.9} maxAzimuthAngle={1.1} enableDamping target={[0, -0.3, -2.2]} />
+      <OrbitControls makeDefault enablePan={false} minDistance={7} maxDistance={18} minPolarAngle={0.7} maxPolarAngle={1.55} minAzimuthAngle={-0.8} maxAzimuthAngle={0.9} enableDamping target={[0.4, 0.6, -2]} />
     </Scene3D>
   );
 }

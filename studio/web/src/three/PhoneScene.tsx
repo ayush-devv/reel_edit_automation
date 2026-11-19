@@ -8,9 +8,9 @@ import type { ReelPlayer } from "../lib/reelPlayer";
 import { color } from "../theme/tokens";
 import { Scene3D, StudioLights } from "./common";
 
-const BODY_W = 1.9;
-const BODY_H = 3.9;
-const SCREEN_W = 1.74;
+const BODY_W = 1.92;
+const BODY_H = 3.62;
+const SCREEN_W = 1.8;
 const SCREEN_H = SCREEN_W * (16 / 9);
 const MAX = (35 * Math.PI) / 180;
 const SWAY = (3 * Math.PI) / 180;
@@ -131,8 +131,8 @@ function Phone({ player, overlayUI, safeZones, uiCanvas, safeCanvas, resetSignal
         </mesh>
       )}
       {/* camera pill */}
-      <mesh position={[0, SCREEN_H / 2 - 0.12, 0.09]}>
-        <capsuleGeometry args={[0.045, 0.22, 4, 16]} />
+      <mesh position={[0, SCREEN_H / 2 - 0.11, 0.09]} rotation-z={Math.PI / 2}>
+        <capsuleGeometry args={[0.05, 0.26, 4, 16]} />
         <meshBasicMaterial color="#000" />
       </mesh>
       {/* side button */}
@@ -158,16 +158,16 @@ export default function PhoneScene(props: PhoneProps & { busy: boolean; resetSig
       busy={props.busy}
       label="The reel playing on a 3D phone. Drag to rotate, double-click to reset."
       className="h-full w-full touch-none"
-      camera={{ position: [0, 0.1, 6.4], fov: 38 }}
+      camera={{ position: [0, 0.05, 7.6], fov: 36 }}
       onDoubleClick={props.onReset}
     >
       <StudioLights intensity={1} shadowSize={4} />
       <spotLight position={[-4, 5, 4]} angle={0.5} penumbra={1} intensity={30} color={color.accent.glow} />
       <spotLight position={[4, 3, 3]} angle={0.5} penumbra={1} intensity={18} color={color.accent.cyan} />
-      <group position={[0, 0.15, 0]}>
+      <group position={[0, 0.2, 0]}>
         <Phone {...props} />
       </group>
-      <ContactShadows position={[0, -2.15, 0]} opacity={0.65} scale={8} blur={2.6} far={3} color="#000000" />
+      <ContactShadows position={[0, -1.95, 0]} opacity={0.65} scale={8} blur={2.6} far={3} color="#000000" />
     </Scene3D>
   );
 }

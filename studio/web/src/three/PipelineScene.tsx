@@ -15,7 +15,7 @@ function makeCurve(n: number) {
   const pts: THREE.Vector3[] = [];
   for (let i = 0; i < 9; i++) {
     const u = i / 8;
-    pts.push(new THREE.Vector3(-9 + u * 18, 0, -1.8 * Math.sin(u * Math.PI) + 0.4 * Math.sin(u * Math.PI * 3)));
+    pts.push(new THREE.Vector3(-8.6 + u * 17.2, 0, -1.6 * Math.sin(u * Math.PI) + 0.35 * Math.sin(u * Math.PI * 3)));
   }
   const curve = new THREE.CatmullRomCurve3(pts);
   const ts = Array.from({ length: n }, (_, i) => 0.03 + (i / (n - 1)) * 0.94);
@@ -96,7 +96,7 @@ function Node({ stage, pos, selected, onSelect }: { stage: Stage; pos: THREE.Vec
       )}
       {st === "failed" && <pointLight position={[0, 0.6, 0]} color={color.status.fail} intensity={2.5} distance={2.2} />}
       {st === "running" && <pointLight position={[0, 0.6, 0]} color={color.accent.glow} intensity={3} distance={2.6} />}
-      <Html position={[0, -0.05, 0.75]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
+      <Html position={[0, -0.02, 0.62]} center zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
         <div
           style={{
             font: "500 12px/16px Inter, sans-serif",
@@ -167,9 +167,9 @@ function CameraRig({ focusX }: { focusX: number }) {
   const target = useRef(new THREE.Vector3(focusX * 0.55, 0, 0));
   useFrame((_, dt) => {
     const k = 1 - Math.pow(0.001, dt * 0.25); // slow dolly
-    target.current.x += (focusX * 0.55 - target.current.x) * k;
-    camera.position.x += (focusX * 0.4 - camera.position.x) * k;
-    camera.lookAt(target.current.x, 0.2, -0.6);
+    target.current.x += (focusX * 0.45 - target.current.x) * k;
+    camera.position.x += (focusX * 0.35 - camera.position.x) * k;
+    camera.lookAt(target.current.x, 0.05, -0.9);
   });
   return null;
 }
@@ -185,12 +185,12 @@ export default function PipelineScene({ stages, selected, onSelect, busy }: { st
     const idx = g.stages.map((s) => stages.findIndex((x) => x.name === s)).filter((i) => i >= 0);
     const mid = positions[idx[Math.floor((idx.length - 1) / 2)]] ?? new THREE.Vector3();
     const midB = positions[idx[Math.ceil((idx.length - 1) / 2)]] ?? mid;
-    return { name: g.name, pos: new THREE.Vector3((mid.x + midB.x) / 2, 1.05, (mid.z + midB.z) / 2) };
+    return { name: g.name, pos: new THREE.Vector3((mid.x + midB.x) / 2, 0.95, (mid.z + midB.z) / 2 - 0.2) };
   });
   const summary = stages.map((s) => `${STAGE_LABEL[s.name] ?? s.name}: ${s.status}`).join(", ");
 
   return (
-    <Scene3D busy={busy} label={`Pipeline stage. ${summary}`} className="h-full w-full" camera={{ position: [0, 4.2, 8.2], fov: 42 }}>
+    <Scene3D busy={busy} label={`Pipeline stage. ${summary}`} className="h-full w-full" camera={{ position: [0, 2.6, 6.4], fov: 40 }}>
       <color attach="background" args={[color.bg.inset]} />
       <fog attach="fog" args={[color.bg.inset, 9, 22]} />
       <StudioLights intensity={0.9} shadowSize={10} />

@@ -26,7 +26,7 @@ const TABS: { to: string; label: string; icon: IconName }[] = [
 function RunningStrip({ current }: { current: string }) {
   const api = useApi();
   const { jobs } = useStatus();
-  const list = useQuery(() => api.projects(), [api, jobs?.running.length, jobs?.queued.length]);
+  const list = useQuery(() => api.projects(), [api, jobs?.running.length, jobs?.queued.length], { intervalMs: 3000 });
   const running = (list.data ?? []).filter((p) => p.status === "running" || p.status === "queued");
   if (running.length < 1) return null;
   return (

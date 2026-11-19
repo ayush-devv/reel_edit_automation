@@ -38,7 +38,7 @@ const STATUS_WORD: Record<string, string> = { done: "done", running: "running", 
 /** Flat pipeline: the reduced-motion equivalent of the 3D stage, and its keyboard-reachable list. */
 export function FlatPipeline({ stages, selected, onSelect, large }: { stages: Stage[]; selected: string | null; onSelect: (n: string) => void; large?: boolean }) {
   return (
-    <ol aria-label="Pipeline stages" className={cx("flex flex-wrap gap-x-5 gap-y-3", large && "py-2")}>
+    <ol aria-label="Pipeline stages" className={cx("flex flex-wrap gap-x-4 gap-y-3", large && "py-2")}>
       {STAGE_GROUPS.map((g) => (
         <li key={g.name} className="flex flex-col gap-1.5">
           <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-fg-muted">{g.name}</span>

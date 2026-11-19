@@ -116,7 +116,14 @@ export function Panel({ title, actions, children, className, bodyClass, as: As =
     <As className={cx("rounded-panel border border-line-subtle bg-bg-raised", className)}>
       {(title || actions) && (
         <header className="flex items-center justify-between gap-4 px-6 pt-5">
-          {title ? <h2 className="text-title text-fg-primary">{title}</h2> : <span />}
+          {/* Text titles are headings; a control passed as the title (e.g. a tab switch) is not. */}
+          {typeof title === "string" || (title && typeof title === "object" && "type" in title && title.type === "span") ? (
+            <h2 className="text-title text-fg-primary">{title}</h2>
+          ) : title ? (
+            <div>{title}</div>
+          ) : (
+            <span />
+          )}
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </header>
       )}
@@ -168,13 +175,7 @@ export function Select({ className, children, ...rest }: SelectHTMLAttributes<HT
 export function Toggle({ checked, onChange, label, description, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; description?: string; disabled?: boolean }) {
   const id = useId();
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div className="min-w-0">
-        <label htmlFor={id} className="text-body text-fg-primary">
-          {label}
-        </label>
-        {description && <p className="text-label font-normal text-fg-muted">{description}</p>}
-      </div>
+    <div className="flex items-start gap-3">
       <button
         id={id}
         type="button"
@@ -188,8 +189,14 @@ export function Toggle({ checked, onChange, label, description, disabled }: { ch
           disabled && "opacity-50",
         )}
       >
-        <span className={cx("absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white transition-transform duration-hover ease-std", checked ? "translate-x-[18px]" : "translate-x-0.5")} />
+        <span className={cx("absolute left-0 top-0.5 h-3.5 w-3.5 rounded-full bg-white transition-transform duration-hover ease-std", checked ? "translate-x-[18px]" : "translate-x-0.5")} />
       </button>
+      <div className="min-w-0">
+        <label htmlFor={id} className="cursor-pointer text-body text-fg-primary">
+          {label}
+        </label>
+        {description && <p className="text-label font-normal text-fg-muted">{description}</p>}
+      </div>
     </div>
   );
 }
@@ -257,7 +264,7 @@ export function Kbd({ children }: { children: ReactNode }) {
 
 export function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; label: string }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-input border border-line-subtle bg-bg-overlay p-0.5">
+    <div role="radiogroup" aria-label={label} className="inline-flex self-start rounded-input border border-line-subtle bg-bg-overlay p-0.5">
       {options.map((o) => (
         <button
           key={o.value}

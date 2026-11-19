@@ -83,8 +83,7 @@ describe("adjust validation display (FR-8, AC-12)", () => {
     render(<TestApp api={api} path={`/p/${HOLD}/adjust`} />);
     const input = await screen.findByRole("textbox", { name: "Longest pause kept" }, T);
     fireEvent.change(input, { target: { value: "0" } });
-    const row = input.closest("div.border-b") as HTMLElement;
-    fireEvent.click(within(row).getByRole("button", { name: "Apply" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply longest pause kept" }));
     expect(await screen.findByText("This removes a must-keep line")).toBeInTheDocument();
     expect(screen.getByText("Keep k04 in the story.")).toBeInTheDocument();
   });

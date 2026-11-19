@@ -94,18 +94,16 @@ function Row({
 
   return (
     <div className="border-b border-line-subtle py-5 first:pt-0 last:border-0 last:pb-0">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-[180px]">
+      <div className="mb-3 flex items-start justify-between gap-4">
+        <div className="min-w-0">
           <p className="font-medium text-fg-primary">{title}</p>
           {hint && <p className="text-label font-normal text-fg-muted">{hint}</p>}
         </div>
-        <div className="flex min-w-0 flex-1 items-start justify-end gap-3">
-          <div className="min-w-0 flex-1">{children}</div>
-          <Button variant={dirty && !local.length ? "primary" : "secondary"} disabled={!dirty || local.length > 0} busy={busy} onClick={apply}>
-            Apply
-          </Button>
-        </div>
+        <Button variant={dirty && !local.length ? "primary" : "secondary"} disabled={!dirty || local.length > 0} busy={busy} onClick={apply} aria-label={`Apply ${title.toLowerCase()}`}>
+          Apply
+        </Button>
       </div>
+      <div className="min-w-0">{children}</div>
       <IssueList issues={issues} />
       {err && (
         <div className="mt-2">
@@ -121,7 +119,7 @@ function Num({ label, value, onChange, step = 0.05, min, max, suffix }: { label:
   return (
     <div className="flex items-center gap-3">
       <input type="range" aria-label={`${label} slider`} min={min} max={max} step={step} value={Number(value) || 0} onChange={(e) => onChange(e.target.value)} className="h-1 flex-1 accent-[#9D85FF]" />
-      <div className="relative w-28">
+      <div className="relative w-28 shrink-0">
         <TextInput aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} inputMode="decimal" className="h-8 pr-9 font-mono text-[13px]" />
         {suffix && <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-label text-fg-muted">{suffix}</span>}
       </div>
@@ -156,7 +154,7 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
       <div className="col-span-12 space-y-4 xl:col-span-7">
         <Panel title="Captions">
           <Row title="Caption style" hint="The family sets font, case, animation and zone." kind="caption_family" value={v.family} dirty={v.family !== base.family} ctx={ctx} onApplied={done(["family"])}>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Caption style">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5" role="radiogroup" aria-label="Caption style">
               {lib.caption_families.map((f) => {
                 const s = FAMILY_SAMPLE[f.id] ?? { text: f.id, cls: "" };
                 return (
@@ -190,7 +188,7 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
             onApplied={done(["tokenKey", "tokenValue"])}
           >
             <div className="flex items-center gap-2">
-              <div className="w-44">
+              <div className="w-56 shrink-0">
                 <Select aria-label="Token" value={v.tokenKey} onChange={(e) => set("tokenKey", e.target.value)}>
                   <option value="emph_color">Emphasis colour</option>
                   <option value="base_color">Base colour</option>
@@ -250,7 +248,7 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
             <Toggle checked={v.punchOff} onChange={(x) => set("punchOff", x)} label="Turn all punch-ins off" />
           </Row>
           <Row title="Longest pause kept" hint="Longer pauses are cut (jump cut). 0 keeps every pause." kind="max_pause_ms" value={Number(v.pause)} dirty={v.pause !== base.pause} ctx={ctx} onApplied={done(["pause"])}>
-            <div className="relative w-36 ml-auto">
+            <div className="relative w-36">
               <TextInput aria-label="Longest pause kept" value={v.pause} onChange={(e) => set("pause", e.target.value)} inputMode="numeric" className="h-8 pr-10 font-mono text-[13px]" />
               <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-label text-fg-muted">ms</span>
             </div>

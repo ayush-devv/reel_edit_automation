@@ -30,10 +30,10 @@ function CaptionPreview({ b }: { b: Brand }) {
   return (
     <div className="mx-auto aspect-[9/16] w-full max-w-[260px] overflow-hidden rounded-[22px] border-4 border-[#1b1f2a] bg-[radial-gradient(90%_60%_at_70%_25%,rgba(255,200,160,0.3),transparent_60%),linear-gradient(160deg,#3a2a2f,#141018)] shadow-[0_0_0_1px_#343B4D]">
       <div className="relative h-full">
-        <div className="absolute left-1/2 top-[38%] h-[30%] w-[46%] -translate-x-1/2 rounded-[45%] bg-[#c99a86]/80" aria-hidden="true" />
+        <div className="absolute left-1/2 top-[22%] h-[30%] w-[46%] -translate-x-1/2 rounded-[45%] bg-[#c99a86]/80" aria-hidden="true" />
         <div className="absolute bottom-0 left-1/2 h-[28%] w-[86%] -translate-x-1/2 rounded-t-[50%] bg-[#6b4a52]" aria-hidden="true" />
         {b.logo && <div className="absolute right-3 top-3 rounded bg-white/85 px-1.5 py-0.5 text-[9px] font-bold text-black">LOGO</div>}
-        <p className="absolute inset-x-3 bottom-[24%] text-center text-[19px] font-bold leading-tight" style={{ fontFamily: font, color: text, textShadow: "0 2px 8px rgba(0,0,0,0.7)" }}>
+        <p className="absolute inset-x-3 bottom-[24%] text-center text-[19px] font-bold leading-tight" style={{ fontFamily: `"${font}", Inter, system-ui, sans-serif`, color: text, textShadow: "0 2px 8px rgba(0,0,0,0.7)" }}>
           Ten days <span style={{ color: accent }}>later</span> my skin felt <span style={{ color: accent }}>calm</span>
         </p>
         <div className="absolute inset-x-6 bottom-[8%] rounded-md py-1.5 text-center text-[11px] font-semibold" style={{ background: isHex(b.colors.primary) ? b.colors.primary! : "#000", color: text }}>

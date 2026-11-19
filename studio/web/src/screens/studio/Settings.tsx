@@ -23,7 +23,7 @@ function Health() {
               <Icon name={t.ok ? "check" : "x"} size={12} />
             </span>
             <div className="min-w-0">
-              <p className="font-medium capitalize text-fg-primary">{t.name}</p>
+              <p className="font-medium text-fg-primary">{t.name}</p>
               <p className={cx(t.ok ? "text-fg-secondary" : "text-st-fail")}>{t.detail}</p>
             </div>
           </li>

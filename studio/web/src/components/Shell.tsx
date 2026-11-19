@@ -150,7 +150,7 @@ function HealthChip() {
 
 function TopBar() {
   const api = useApi();
-  const { health } = useStatus();
+  const { health, engine } = useStatus();
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-line-subtle bg-bg-base/90 px-8 backdrop-blur">
       <div className="flex items-center gap-3">
@@ -163,7 +163,7 @@ function TopBar() {
         )}
       </div>
       <div className="flex items-center gap-2">
-        <JobsIndicator />
+        {engine === "ok" && <JobsIndicator />}
         <HealthChip />
       </div>
     </header>

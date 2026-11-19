@@ -141,7 +141,7 @@ export default function Home() {
         ) : (
           <StaticBackdrop />
         )}
-        <div className="absolute inset-0 bg-gradient-to-b from-bg-base/40 via-bg-base/70 to-bg-base" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-bg-base/40 to-bg-base/90" />
       </div>
 
       <div className="relative mx-auto w-full max-w-[1440px] px-8 py-8">
@@ -207,7 +207,7 @@ export default function Home() {
             {shown.length === 0 ? (
               <p className="py-10 text-center text-fg-secondary">No projects match these filters.</p>
             ) : (
-              <ul className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4" aria-label="Projects, needs-you first">
+              <ul className="grid grid-cols-[repeat(auto-fill,minmax(184px,1fr))] gap-4" aria-label="Projects, needs-you first">
                 {shown.map((p) => (
                   <ProjectCard key={p.id} p={p} />
                 ))}

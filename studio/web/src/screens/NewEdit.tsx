@@ -321,7 +321,7 @@ export default function NewEdit() {
           </Panel>
 
           <div className="sticky bottom-0 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-panel border border-line-subtle bg-bg-raised/95 px-6 py-4 backdrop-blur">
-            <div className="min-w-0 text-fg-secondary">
+            <div className="min-w-[260px] flex-1 text-fg-secondary">
               {willQueue ? (
                 <span className="flex items-center gap-2 text-st-hold">
                   <Icon name="clock" size={16} /> {running} of {limit} edits running — this one will be queued and starts when a slot frees up.
