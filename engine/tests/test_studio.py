@@ -1,0 +1,448 @@
+"""Reel Studio API (docs/product/studio-api.md): FastAPI TestClient against a fake workspace in tmp_path.
+
+Job execution is mocked: the launcher returns fake processes the test finishes by hand.
+"""
+
+from __future__ import annotations
+
+import json
+import threading
+import time
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from reel.studio import costs
+from reel.studio.app import create_app
+from reel.studio.jobs import JobManager
+from reel.studio.settings import Settings
+
+WORDS = ["How", "much", "sugar", "is", "in", "here"]
+
+
+class FakeProc:
+    pid = None
+
+    def __init__(self):
+        self.done = threading.Event()
+        self.rc = 0
+
+    def wait(self):
+        self.done.wait(30)
+        return self.rc
+
+    def finish(self, rc=0):
+        self.rc = rc
+        self.done.set()
+
+    def terminate(self):
+        self.finish(-15)
+
+    kill = terminate
+
+
+class Launcher:
+    def __init__(self):
+        self.procs: list[tuple] = []
+
+    def __call__(self, job, logf):
+        p = FakeProc()
+        self.procs.append((job, p))
+        return p
+
+    def finish(self, kind=None, rc=0):
+        job, p = next((j, p) for j, p in self.procs if not p.done.is_set() and (kind is None or j.kind == kind))
+        p.finish(rc)
+        for _ in range(200):  # the waiter thread flips the status
+            if job.status != "running":
+                return job
+            time.sleep(0.01)
+        raise AssertionError("job did not finish")
+
+
+def _w(path: Path, obj) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(obj if isinstance(obj, str) else json.dumps(obj))
+
+
+def make_project(root: Path, pid: str = "p1", *, verdict: str = "hold", runs: list[dict] | None = None) -> Path:
+    ws = root / pid
+    _w(ws / "studio.json", {"name": f"Project {pid}", "created": 1795000000.0, "client": "Acme", "footage_s": 60})
+    stages = {n: {"status": "done", "input_hash": "x", "outputs": ["o"], "meta": {}, "finished": 1795000100.0 + i}
+              for i, n in enumerate(["ingest", "mezzanine", "perception", "tables", "story", "finish", "compile", "render",
+                                     "overlay", "composite", "qa", "package", "variants"])}
+    for opt in ("broll", "reference"):
+        stages[opt] = {"status": "done", "input_hash": "none", "outputs": [], "meta": {}, "finished": 1795000100.0}
+    stages["composite"]["meta"] = {"video_s": 12.5}
+    _w(ws / "state.json", {"schema": 1, "stages": stages})
+    _w(ws / "run_options.json", {"input": str(ws / "source" / "raw"), "brief": None, "brand": None, "skip_review": True})
+    _w(ws / "source" / "manifest.json", {"clips": [{"id": "c01"}], "project_fps": "30/1"})
+    _w(ws / "perception" / "words.json", {"language": "en", "words": [
+        {"i": i, "clip": "c01", "text": t, "start_us": i * 400_000, "end_us": i * 400_000 + 300_000} for i, t in enumerate(WORDS)]})
+    _w(ws / "plan" / "story.json", {
+        "genre": "genre.podcast_clip", "summary": "sugar", "hook": "h1", "knowledge_used": ["tech.hook.question_or_claim"],
+        "hook_options": [{"id": "h1", "item": "k01", "rank": 1, "reason": "a question hook"}],
+        "items": [{"id": "k01", "clip": "c01", "word_start": 0, "word_end": 2, "first_word": "How", "last_word": "sugar", "beat": "hook", "reason": "opens on the question"},
+                  {"id": "k02", "clip": "c01", "word_start": 3, "word_end": 5, "first_word": "is", "last_word": "here", "beat": "point", "reason": "the answer"}]})
+    _w(ws / "plan" / "finish.json", {
+        "hook_title": {"text": "", "style": "card", "reason": "none needed"},
+        "grade": {"look": "clean", "strength": 0.4, "reason": "neutral"},
+        "punch_ins": [{"id": "p01", "item": "k02", "at_word": 4, "scale": 1.2, "ramp_frames": 0, "ease": "hold", "reason": "emphasis"}],
+        "speeds": [], "transitions": [], "sfx": [], "broll": [], "knowledge_used": [],
+        "captions": {"family": "bold_pop", "tokens": [{"key": "emph_color", "value": "#FFD400"}], "emphasis_words": [2], "script": "latin", "reason": "energy"},
+        "music": {"track": "none", "gain_db": -18, "duck_db": 12, "reason": "speech only"}})
+    _w(ws / "timeline" / "timeline.json", {"fps": "30/1", "duration_f": 375, "video": []})
+    _w(ws / "qa" / "verdict.json", {"status": verdict, "reasons": ["proof_words: 1 unconfirmed"] if verdict == "hold" else [], "warnings": [],
+                                    "fix_request": "", "proof_open": [{"i": 2, "text": "sugar", "suggestion": None, "at": "0:00.80", "frame": 24, "why": "low confidence"}]
+                                    if verdict == "hold" else []})
+    _w(ws / "qa" / "gates.json", [{"gate": "loudness", "ok": True, "mode": "block", "detail": "-14 LUFS", "measured": {}},
+                                   {"gate": "reading_speed", "ok": False, "mode": "warn", "detail": "fast", "measured": {}}])
+    _w(ws / "qa" / "review.json", {"summary": "fine", "sendable": True, "strengths": [], "issues": [
+        {"id": "R1", "at": "0:01", "category": "captions", "severity": "minor", "problem": "small", "fix": "bigger", "fix_target": "finish"}]})
+    (ws / "render").mkdir(parents=True, exist_ok=True)
+    (ws / "render" / "final.mp4").write_bytes(bytes(range(256)) * 40)
+    _w(ws / "export" / "package" / "README.md", "# pkg")
+    _w(ws / "log" / "runs.jsonl", "\n".join(json.dumps(r) for r in (runs or [])) + "\n")
+    return ws
+
+
+@pytest.fixture
+def env(tmp_path):
+    root = tmp_path / "projects"
+    root.mkdir()
+    launcher = Launcher()
+    s = Settings(projects_root=root, brands_root=tmp_path / "brands", token_file=tmp_path / "cfg" / "studio_token",
+                 web_dist=tmp_path / "dist", eval_manifest=tmp_path / "eval" / "manifest.yaml", scoreboard=tmp_path / "eval" / "sb.jsonl",
+                 improve_log=tmp_path / "eval" / "improve.jsonl", python="python", doctor=lambda: {"ok": True, "items": []},
+                 start_scheduler=False, poll_s=0.05, sse_max_s=1.5)
+    app = create_app(s, launcher=launcher)
+    client = TestClient(app)
+    client.headers["X-Reel-Token"] = app.state.token
+    return {"root": root, "s": s, "app": app, "c": client, "launcher": launcher, "token": app.state.token}
+
+
+# ------------------------------------------------------------------ auth
+
+
+def test_token_required_and_file_is_private(env):
+    make_project(env["root"])
+    bare = TestClient(env["app"])
+    assert bare.get("/api/projects").status_code == 401
+    assert bare.get("/api/projects", headers={"X-Reel-Token": "0" * 64}).status_code == 401
+    assert bare.get(f"/api/projects?token={env['token']}").status_code == 401  # query token only for SSE / media / zip
+    assert bare.get(f"/api/projects/p1/media/render/final.mp4?token={env['token']}").status_code == 200
+    assert bare.get("/api/projects", headers={"X-Reel-Token": env["token"]}).status_code == 200
+    assert (env["s"].token_file.stat().st_mode & 0o777) == 0o600
+    assert bare.get("/").status_code == 200  # the web app itself is public; its API calls carry the token
+
+
+# ------------------------------------------------------------------ read side
+
+
+def test_project_list_and_detail(env):
+    make_project(env["root"], "p1", verdict="hold")
+    make_project(env["root"], "p2", verdict="sendable")
+    (env["root"] / ".trash").mkdir()
+    (env["root"] / "loose.log").write_text("x")
+    (env["root"] / "not_a_project").mkdir()
+    lst = env["c"].get("/api/projects").json()
+    assert [p["id"] for p in lst] == ["p1", "p2"]  # hold before sendable (attention first)
+    p1 = lst[0]
+    assert p1["status"] == "hold" and p1["verdict"] == "hold" and p1["name"] == "Project p1"
+    assert p1["duration_s"] == 12.5 and p1["progress"] == 1.0 and "1 proof word" in p1["needs_attention"]
+
+    d = env["c"].get("/api/projects/p1").json()
+    st = {x["name"]: x["status"] for x in d["stages"]}
+    assert st["broll"] == "skipped" and st["reference"] == "skipped" and st["render"] == "done"
+    kinds = {x["kind"] for x in d["decisions"]}
+    assert {"story", "finish", "review", "qa"} <= kinds
+    hook = next(x for x in d["decisions"] if x["title"].startswith("Hook"))
+    assert "How much sugar" in hook["title"] and hook["detail"] == "a question hook"
+    gates = {g["name"]: g["status"] for g in d["verdict_detail"]["gates"]}
+    assert gates == {"loudness": "pass", "reading_speed": "warn"}
+    assert d["proof"][0]["i"] == 2 and d["review"]["issues"][0]["text"] == "small"
+    assert d["media"]["final"] == "render/final.mp4"
+
+    tl = env["c"].get("/api/projects/p1/timeline").json()
+    assert tl["story"]["k01"]["text"] == "How much sugar" and tl["finish"]["p01"]["reason"] == "emphasis"
+    assert env["c"].get("/api/projects/nope").status_code == 404
+    assert env["c"].get("/api/projects/.trash").status_code == 404
+
+
+def test_interrupted_stage_is_not_running(env):
+    ws = make_project(env["root"])
+    state = json.loads((ws / "state.json").read_text())
+    state["stages"]["render"] = {"status": "running", "input_hash": "x", "started": 1.0}
+    _w(ws / "state.json", state)
+    _w(ws / "run.lock", {"pid": 999_999_9, "host": "x"})
+    d = env["c"].get("/api/projects/p1").json()
+    assert d["status"] == "failed" and d["stage"] == "render"
+    assert next(s for s in d["stages"] if s["name"] == "render")["error"].startswith("Interrupted")
+
+
+# ------------------------------------------------------------------ media
+
+
+def test_media_whitelist_traversal_and_range(env):
+    ws = make_project(env["root"])
+    (env["root"] / "secret.txt").write_text("nope")
+    c = env["c"]
+    assert c.get("/api/projects/p1/media/render/final.mp4").status_code == 200
+    r = c.get("/api/projects/p1/media/render/final.mp4", headers={"Range": "bytes=10-19"})
+    assert r.status_code == 206 and r.headers["content-range"] == "bytes 10-19/10240" and r.content == bytes(range(10, 20))
+    for bad in ("state.json", "plan/story.json", "render/../state.json", "render/%2e%2e/state.json", "%2e%2e/secret.txt",
+                "render/..%2f..%2fsecret.txt", "render//final.mp4", "render/missing.mp4", "/etc/passwd"):
+        assert c.get(f"/api/projects/p1/media/{bad}").status_code == 404, bad
+    (ws / "render" / "escape.mp4").symlink_to(env["root"] / "secret.txt")
+    assert c.get("/api/projects/p1/media/render/escape.mp4").status_code == 404
+
+
+def test_package_zip(env):
+    make_project(env["root"])
+    r = env["c"].get(f"/api/projects/p1/package.zip?token={env['token']}")
+    assert r.status_code == 200 and r.content[:2] == b"PK"
+
+
+# ------------------------------------------------------------------ adjust (validated by the engine's validator)
+
+
+def test_adjust_validation_422_then_applies(env):
+    ws = make_project(env["root"])
+    c = env["c"]
+    r = c.post("/api/projects/p1/adjust", json={"kind": "look_strength", "value": 1.5})
+    assert r.status_code == 422 and r.json()["issues"][0]["code"] == "out_of_range"
+    r = c.post("/api/projects/p1/adjust", json={"kind": "caption_family", "value": "no_such_family"})
+    assert r.status_code == 422 and r.json()["issues"][0]["code"] == "unknown_family"
+    r = c.post("/api/projects/p1/adjust", json={"kind": "max_pause_ms", "value": 50})
+    assert r.status_code == 422 and r.json()["issues"][0]["path"] == "max_pause_ms"
+    assert c.post("/api/projects/p1/adjust", json={"kind": "look_strength", "value": "loud"}).status_code == 400
+    assert c.post("/api/projects/p1/adjust", json={"kind": "colour", "value": 1}).status_code == 400
+    assert json.loads((ws / "plan" / "finish.json").read_text())["grade"]["strength"] == 0.4  # nothing written on refusal
+
+    # switching family drops the old family's tokens instead of failing on them
+    r = c.post("/api/projects/p1/adjust", json={"kind": "caption_family", "value": "clean_phrase"})
+    assert r.status_code == 200, r.text
+    assert r.json()["job"]["kind"] == "adjust"
+    fin = json.loads((ws / "plan" / "finish.json").read_text())
+    assert fin["captions"]["family"] == "clean_phrase" and fin["captions"]["tokens"] == [{"key": "emph_color", "value": "#FFD400"}]
+    job, _ = env["launcher"].procs[-1]
+    assert job.argv[3:] == ["rerun", "--project", str(ws), "--from", "compile"]
+    assert c.post("/api/projects/p1/adjust", json={"kind": "look", "value": "warm"}).status_code == 409  # one job per project
+    env["launcher"].finish()
+    vs = c.get("/api/projects/p1/versions").json()
+    assert [v["label"] for v in vs] == ["Original edit", "Manual: caption family"] and vs[1]["final"] == "versions/2/final.mp4"
+    assert (ws / "versions" / "1" / "plan" / "finish.json").exists()
+    assert c.post("/api/projects/p1/adjust", json={"kind": "punch_ins_off", "value": True}).status_code == 200
+    assert json.loads((ws / "plan" / "finish.json").read_text())["punch_ins"] == []
+
+
+def test_proof_maps_ok_and_fix(env):
+    ws = make_project(env["root"])
+    c = env["c"]
+    assert c.post("/api/projects/p1/proof", json={"words": [{"i": 99, "text": "x"}]}).status_code == 400
+    assert c.post("/api/projects/p1/proof", json={"words": [{"i": 2, "text": "Shugar"}]}).status_code == 200
+    assert json.loads((ws / "qa" / "proof_confirmed.json").read_text()) == {"2": {"ok": True, "text": "Shugar"}}
+
+
+# ------------------------------------------------------------------ jobs: limit, FIFO, 409, memory guard
+
+
+def test_queue_limit_fifo_and_conflict(env):
+    for i in range(4):
+        make_project(env["root"], f"q{i}")
+    c = env["c"]
+    jobs = [c.post(f"/api/projects/q{i}/retry", json={}).json()["job"] for i in range(4)]
+    assert [j["status"] for j in jobs] == ["running", "running", "running", "queued"]
+    r = c.post("/api/projects/q0/retry", json={"stage": "render"})
+    assert r.status_code == 409 and r.json()["detail"]["project"] == "q0"
+    listed = c.get("/api/jobs").json()
+    assert len(listed["running"]) == 3 and [j["project"] for j in listed["queued"]] == ["q3"]
+    assert json.loads(env["s"].queue_file.read_text())["jobs"][-1]["project"] == "q3"  # persisted
+    assert c.get("/api/projects/q3").json()["status"] == "queued"
+    env["launcher"].finish()
+    assert c.get("/api/jobs").json()["queued"] == [] and c.get("/api/projects/q3").json()["status"] == "running"
+    job, _ = env["launcher"].procs[0]
+    assert job.argv[3:6] == ["run", str(env["root"] / "q0" / "source" / "raw"), "--project"] and "--skip-review" in job.argv
+    assert c.post("/api/projects/q3/cancel").status_code == 204
+    assert c.post("/api/projects/q1/retry", json={"stage": "bogus"}).status_code == 400
+
+
+def test_memory_guard_and_restart(tmp_path):
+    s = Settings(projects_root=tmp_path, memory_budget_gb=5.0, start_scheduler=False)
+    launcher = Launcher()
+    m = JobManager(s, launcher=launcher)
+    a = m.submit("a", "run", ["x"], cwd=tmp_path, log=tmp_path / "a.log", est_gb=4.0)
+    b = m.submit("b", "run", ["x"], cwd=tmp_path, log=tmp_path / "b.log", est_gb=3.0)
+    c = m.submit("c", "run", ["x"], cwd=tmp_path, log=tmp_path / "c.log", est_gb=0.5)
+    assert (a.status, b.status, c.status) == ("running", "queued", "queued")  # FIFO: c waits behind b
+    big = JobManager(Settings(projects_root=tmp_path / "solo", memory_budget_gb=1.0, start_scheduler=False), launcher=Launcher())
+    assert big.submit("x", "run", ["x"], cwd=tmp_path, log=tmp_path / "x.log", est_gb=8.0).status == "running"  # alone: never deadlocks
+    launcher.finish()
+    assert (b.status, c.status) == ("running", "running")
+    # queued jobs survive a restart
+    m2 = JobManager(Settings(projects_root=tmp_path / "r", start_scheduler=False, max_jobs=0), launcher=Launcher())
+    m2.submit("z", "run", ["x"], cwd=tmp_path, log=tmp_path / "z.log", est_gb=1.0)
+    m3 = JobManager(Settings(projects_root=tmp_path / "r", start_scheduler=False), launcher=Launcher())
+    assert [j.project for j in m3.queued()] == ["z"]
+
+
+def test_toolchain_missing_is_503(env):
+    make_project(env["root"])
+    app = create_app(Settings(**{**env["s"].__dict__, "doctor": lambda: {"ok": False, "items": [{"name": "pinned ffmpeg", "ok": False, "detail": "x"}]}}),
+                     launcher=Launcher())
+    c = TestClient(app, headers={"X-Reel-Token": app.state.token})
+    r = c.post("/api/projects/p1/retry", json={})
+    assert r.status_code == 503 and r.json()["detail"] == ["pinned ffmpeg"]
+    before = (env["root"] / "p1" / "plan" / "finish.json").read_text()
+    assert c.post("/api/projects/p1/adjust", json={"kind": "look", "value": "warm"}).status_code == 503
+    assert (env["root"] / "p1" / "plan" / "finish.json").read_text() == before  # refused before anything is written
+    h = c.get("/api/health").json()
+    assert h["engine"] == "ok" and h["toolchain_ok"] is False and h["jobs"]["limit"] == 3
+
+
+def test_terminal_run_lock_is_409(env):
+    import os
+
+    ws = make_project(env["root"])
+    _w(ws / "run.lock", {"pid": os.getpid(), "host": "here"})
+    before = (ws / "plan" / "finish.json").read_text()
+    r = env["c"].post("/api/projects/p1/adjust", json={"kind": "look", "value": "warm"})
+    assert r.status_code == 409 and r.json()["detail"]["kind"] == "external"
+    assert (ws / "plan" / "finish.json").read_text() == before
+
+
+def test_web_app_spa_fallback(env):
+    dist = env["s"].web_dist
+    _w(dist / "index.html", "<!doctype html><div id=root></div>")
+    _w(dist / "assets" / "a.js", "console.log(1)")
+    (dist.parent / "outside.txt").write_text("secret")
+    bare = TestClient(env["app"])
+    assert "id=root" in bare.get("/").text and "id=root" in bare.get("/projects/p1/review").text
+    assert bare.get("/assets/a.js").text == "console.log(1)"
+    for bad in ("/..%2foutside.txt", "/assets/..%2f..%2foutside.txt"):
+        assert "secret" not in bare.get(bad).text
+    assert bare.get("/api/nope", headers={"X-Reel-Token": env["token"]}).status_code == 404
+
+
+# ------------------------------------------------------------------ SSE
+
+
+def test_sse_snapshot_then_stage_event(env):
+    ws = make_project(env["root"])
+
+    def later():
+        time.sleep(0.4)
+        state = json.loads((ws / "state.json").read_text())
+        state["stages"]["qa"] = {"status": "failed", "input_hash": "x", "error": "RuntimeError: boom", "finished": time.time()}
+        _w(ws / "state.json", state)
+
+    threading.Thread(target=later).start()
+    r = env["c"].get(f"/api/projects/p1/events?token={env['token']}", headers={"X-Reel-Token": ""})
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+    events = [(b.split("event: ")[1].split("\n")[0], json.loads(b.split("data: ", 1)[1])) for b in r.text.split("\n\n") if "event: " in b]
+    assert events[0][0] == "snapshot" and events[0][1]["id"] == "p1"
+    stage = next(d for e, d in events if e == "stage")
+    assert stage["name"] == "qa" and stage["status"] == "failed" and "boom" in stage["error"]
+
+
+# ------------------------------------------------------------------ costs
+
+
+def test_cost_deltas_over_resumed_sessions(tmp_path):
+    rows = [  # legacy rows: cost_usd is the running session total; newer rows: cost_cum_usd + delta cost_usd
+        {"time": 1, "label": "story", "session_id": "s1", "resume": None, "cost_usd": 0.18},
+        {"time": 2, "label": "story:fix1", "session_id": "s1", "resume": "s1", "cost_usd": 0.22},
+        {"time": 3, "label": "finish", "session_id": "s2", "resume": None, "cost_usd": 0.16},
+        {"time": 4, "label": "revision", "session_id": "s2", "resume": "s2", "cost_usd": 0.33},
+        {"time": 5, "label": "story", "session_id": "s3", "resume": None, "cost_usd": 0.55, "cost_cum_usd": 0.55},
+        {"time": 6, "label": "story_readback", "session_id": "s3", "resume": "s3", "cost_usd": 0.21, "cost_cum_usd": 0.76},
+        {"time": 7, "label": "review", "session_id": "s4", "resume": None, "cost_usd": None},
+    ]
+    make_project(tmp_path, "a", runs=rows)
+    got = [c["cost_usd"] for c in costs.calls(tmp_path / "a" / "log" / "runs.jsonl")]
+    assert got == pytest.approx([0.18, 0.04, 0.16, 0.17, 0.55, 0.21, 0.0])
+    assert costs.project_total(tmp_path / "a" / "log" / "runs.jsonl") == pytest.approx(1.31)
+    summ = costs.summary(tmp_path, days=30, now=86400 * 10)
+    assert summ["total_usd"] == pytest.approx(1.31) and summ["by_project"] == [{"id": "a", "usd": pytest.approx(1.31)}]
+    assert costs.summary(tmp_path, days=1, now=86400 * 10)["total_usd"] == 0
+
+
+# ------------------------------------------------------------------ lab, brands, label, CLI pieces
+
+
+def test_release_lock_refuses_holdout(env):
+    reels = [{"id": f"r{i}", "split": "holdout" if i < 2 else "tuning", "language": "en"} for i in range(5)]
+    _w(env["s"].eval_manifest, json.dumps({"reels": reels}))
+    c = env["c"]
+    lab = c.get("/api/lab").json()
+    assert lab["release_locked"] is True and lab["gold"] == {**lab["gold"], "pairs": 5, "holdout": 2, "tuning": 3}
+    r = c.post("/api/lab/eval", json={"release": True})
+    assert r.status_code == 409 and "locked" in r.json()["error"]
+    r = c.post("/api/lab/eval", json={})
+    assert r.status_code == 200 and env["launcher"].procs[-1][0].argv[3:] == ["eval", "--set", "tuning"]
+    assert c.post("/api/lab/calibrate").status_code == 409  # one lab job at a time
+    assert c.post("/api/lab/nope").status_code == 400
+
+
+def test_brands_crud_and_label(env):
+    c = env["c"]
+    assert c.post("/api/brands", json={"client": "Dear Ma", "colors": {"accent": "#FF3399"}}).json()["id"] == "dear-ma"
+    assert c.post("/api/brands", json={"client": "Dear Ma"}).status_code == 409
+    assert c.post("/api/brands", json={"client": "X", "bogus": 1}).status_code == 400
+    assert c.put("/api/brands/dear-ma", json={"client": "Dear Ma", "look": "warm"}).json()["look"] == "warm"
+    assert c.get("/api/brands/dear-ma").json()["look"] == "warm" and len(c.get("/api/brands").json()) == 1
+    assert c.get("/api/brands/..%2fx").status_code == 404
+    ws = make_project(env["root"])
+    assert c.post("/api/projects/p1/label", json={"sendable": False, "reason": "captions"}).status_code == 204
+    assert json.loads((ws / "qa" / "owner_label.json").read_text()) == {"sendable": False, "note": "captions"}
+
+
+def test_upload_rejects_non_video_and_queues_run(env):
+    c = env["c"]
+    r = c.post("/api/projects", data={"name": "Client A"}, files=[("files[]", ("a.mp4", b"\0" * 10, "video/mp4")),
+                                                                   ("files[]", ("brief.pdf", b"%PDF", "application/pdf"))])
+    assert r.status_code == 400 and "brief.pdf" in r.json()["error"]
+    r = c.post("/api/projects", data={"name": "Client A", "brief": json.dumps({"language": "hinglish", "client": "Acme"})},
+               files=[("files[]", ("a.mp4", b"\0" * 10, "video/mp4"))])
+    assert r.status_code == 201, r.text
+    pid = r.json()["id"]
+    ws = env["root"] / pid
+    assert (ws / "source" / "raw" / "a.mp4").exists() and json.loads((ws / "brief.json").read_text())["language"] == "hinglish"
+    assert r.json()["job"]["kind"] == "run" and c.get(f"/api/projects/{pid}").json()["name"] == "Client A"
+    assert c.post("/api/projects", data={"name": "B", "brief": "{not json"}, files=[("files[]", ("a.mp4", b"\0", "video/mp4"))]).status_code == 400
+
+
+def test_delete_moves_to_trash(env):
+    make_project(env["root"])
+    assert env["c"].delete("/api/projects/p1").status_code == 204
+    assert not (env["root"] / "p1").exists() and len(list((env["root"] / ".trash").iterdir())) == 1
+
+
+def test_cli_rerun_and_revise_args(tmp_path, monkeypatch):
+    from reel import cli, runner
+    from reel.stages import edit
+
+    seen = {}
+
+    def fake_run_pipeline(ws, stages, *, options=None, force=None):
+        seen.update(names=[s.name for s in stages], force=force, options=options)
+        return {"stages": {}}
+
+    monkeypatch.setattr(runner, "run_pipeline", fake_run_pipeline)
+    ws = make_project(tmp_path, "p")
+    _w(ws / "run_options.json", {"input": "x", "deliverables": ["square"]})
+    state = json.loads((ws / "state.json").read_text())
+    state["stages"]["finish"]["input_hash"] = "stale"  # e.g. story.json changed by a manual adjustment
+    _w(ws / "state.json", state)
+    assert cli.main(["rerun", "--project", str(ws), "--from", "package"]) == 0
+    assert seen["names"] == ["package", "variants"] and seen["force"] == {"package"}
+    fresh = edit.FINISH.input_hash(runner.StageContext(ws=runner.Workspace(ws), options=seen["options"]))
+    assert json.loads((ws / "state.json").read_text())["stages"]["finish"]["input_hash"] == fresh  # a later `reel run` keeps the plans
+    assert not (ws / "run.lock").exists()
+    ctx = runner.StageContext(ws=None, options={"deliverables": ["square", "nope"]})
+    assert edit._deliverables(ctx) == ["square"]
+    got = []
+    monkeypatch.setattr(cli, "_cmd_revise", lambda args: got.append(args.request) or 0)
+    cli.main(["revise", "--project", "p", "--", "-make the hook faster"])
+    assert got == ["-make the hook faster"]
