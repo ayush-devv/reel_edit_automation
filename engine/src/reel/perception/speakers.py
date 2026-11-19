@@ -440,7 +440,8 @@ def analyse_clip(mezz: Path, faces: dict, cuts_us: list[int], words: list[tuple[
             x0, y0 = min(f["x"] for f in bxs), min(f["y"] for f in bxs)
             union = {"x": x0, "y": y0, "w": max(f["x"] + f["w"] for f in bxs) - x0, "h": max(f["y"] + f["h"] for f in bxs) - y0}
             regions.append((crop_region(bxs, fw, fh), union))
-        all_series, n = landmark_piece(_frames(mezz, a, b, fw, fh), a, regions, (fw, fh))
+        with contextlib.closing(_frames(mezz, a, b, fw, fh)) as frames:  # a landmarker error stops ffmpeg at once
+            all_series, n = landmark_piece(frames, a, regions, (fw, fh))
         frames_n += n
         live = []
         for tr, series in zip(tracks, all_series):
