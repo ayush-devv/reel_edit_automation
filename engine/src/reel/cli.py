@@ -147,7 +147,7 @@ def _rerun_after_plan_change(ws, options) -> None:
     from reel.runner import run_pipeline
     from reel.stages import edit
 
-    state = run_pipeline(ws, [edit.COMPILE, edit.RENDER, edit.OVERLAY, edit.COMPOSITE, edit.QA, edit.PACKAGE, edit.VARIANTS], options=options)
+    state = run_pipeline(ws, [edit.COMPILE, edit.RENDER, edit.OVERLAY, edit.COMPOSITE, edit.QA, edit.COVER, edit.PACKAGE, edit.VARIANTS], options=options)
     _print_state(state, ws)
     _print_verdict(ws)
 

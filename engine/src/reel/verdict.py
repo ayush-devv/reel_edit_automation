@@ -12,7 +12,7 @@ import json
 from fractions import Fraction
 from pathlib import Path
 
-from reel import claude_call, config, decide, project, qa, sheets
+from reel import claude_call, config, cuts, decide, project, qa, sheets
 from reel import brief as brief_mod
 from reel import timebase as tb
 from reel.schemas.plan import StoryPlan
@@ -23,7 +23,7 @@ from reel.workspace import Workspace, atomic_write_bytes, atomic_write_json
 REVIEWER_PERSONA = Path(__file__).parent / "personas" / "reviewer.md"
 REVIEW_EFFORT = "medium"
 SHEET_EVERY_S = 1.0
-REVIEW_PROMPT = ("Review this finished reel. Read qa/review_input.md first, then look at every contact sheet it lists. "
+REVIEW_PROMPT = ("Review this finished reel. Read qa/review_input.md first, then look at every contact sheet and cut strip it lists. "
                  "Return your review.")
 
 
@@ -51,7 +51,14 @@ def run_gates(ws: Workspace, tl: Timeline, story: StoryPlan, brief: brief_mod.Br
     return qa.apply_modes(results)
 
 
-def review_input(ws: Workspace, tl: Timeline, story: StoryPlan, brief, gates: list[qa.GateResult], sheet_paths: list[Path]) -> str:
+def cut_checks(ws: Workspace, tl: Timeline) -> tuple[list[qa.GateResult], list[str]]:
+    """Cut-point self-check (reel.cuts): gates + the strips the Reviewer looks at."""
+    gates, report = cuts.check(ws, tl, project.word_table(ws), project.edges(ws))
+    return qa.apply_modes(gates), report["review_strips"]
+
+
+def review_input(ws: Workspace, tl: Timeline, story: StoryPlan, brief, gates: list[qa.GateResult], sheet_paths: list[Path],
+                 cut_strips: list[str] | None = None) -> str:
     fps = tb.parse_rate(tl.fps)
     hook = next((h for h in story.hook_options if h.id == story.hook), None)
     lines = ["# Review input", "", "## Brief", "", json.dumps(brief.model_dump(exclude_none=True), ensure_ascii=False, indent=1) if brief else "No brief.", "",
@@ -67,6 +74,10 @@ def review_input(ws: Workspace, tl: Timeline, story: StoryPlan, brief, gates: li
     lines += [f"| {g.gate} | {'pass' if g.ok else 'FAIL'} | {g.mode} | {g.detail} {(' at ' + ', '.join(g.at[:6])) if g.at else ''} |" for g in gates]
     lines += ["", "## Contact sheets of the final render (one frame per second, labelled with the timecode)", ""]
     lines += [f"- {p.relative_to(ws.root)}" for p in sheet_paths]
+    if cut_strips:
+        lines += ["", "## Cut strips (timeline view: 10 frames from 1.5 s before to 1.5 s after the cut over the audio waveform; "
+                  "red line = the cut; the header names any automatic finding). First and last 2 s, then the most suspicious cuts", ""]
+        lines += [f"- {s}" for s in cut_strips]
     return "\n".join(lines) + "\n"
 
 
@@ -125,8 +136,10 @@ def run(ws: Workspace, options: dict, caller=claude_call.call) -> dict:
     story = project.load_json_model(StoryPlan, ws.path("plan", "story.json"))
     brief = brief_mod.load_brief(options.get("brief"))
     gates = run_gates(ws, tl, story, brief)
+    cut_gates, strips = cut_checks(ws, tl)
+    gates += cut_gates
     sheet_paths = final_sheets(ws, tl)
-    atomic_write_bytes(ws.path("qa", "review_input.md"), review_input(ws, tl, story, brief, gates, sheet_paths).encode())
+    atomic_write_bytes(ws.path("qa", "review_input.md"), review_input(ws, tl, story, brief, gates, sheet_paths, strips).encode())
     review = None
     if not options.get("skip_review"):
         d = decide.decide(caller, ws, label="review", prompt=REVIEW_PROMPT, model=Review, persona=REVIEWER_PERSONA,
