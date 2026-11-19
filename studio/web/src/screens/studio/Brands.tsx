@@ -23,6 +23,71 @@ const blank = (): Brand => ({ client: "", fonts: { heading: "Inter" }, colors: {
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const isHex = (s: string | null | undefined) => !!s && /^#[0-9a-fA-F]{6}$/.test(s);
 
+/** A comma-separated list edited as text and parsed when the field loses focus (typing a comma never jumps). */
+function ListInput({ id, value, onChange, placeholder, strip = "" }: { id: string; value: string[] | undefined; onChange: (v: string[]) => void; placeholder?: string; strip?: string }) {
+  const [text, setText] = useState((value ?? []).join(", "));
+  useEffect(() => setText((value ?? []).join(", ")), [value]);
+  return (
+    <TextInput
+      id={id}
+      value={text}
+      placeholder={placeholder}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => onChange(text.split(",").map((s) => s.trim().replace(new RegExp(`^[${strip}]+`), "")).filter(Boolean))}
+    />
+  );
+}
+
+function VoiceFields({ b, setB }: { b: Brand; setB: (b: Brand) => void }) {
+  const v = b.voice ?? {};
+  const set = (patch: Partial<NonNullable<Brand["voice"]>>) => setB({ ...b, voice: { ...v, ...patch } });
+  return (
+    <>
+      <div className="col-span-2 border-t border-line-subtle pt-4">
+        <p className="text-section text-fg-primary">Post voice</p>
+        <p className="text-meta text-fg-muted">Used for the caption, hashtags and YouTube text written with every reel. Instagram allows 5 hashtags per post.</p>
+      </div>
+      <div className="col-span-2">
+        <Field label="Tone" htmlFor="b-tone" hint="A few words, e.g. warm, direct, no jargon.">
+          <TextInput id="b-tone" value={v.tone ?? ""} onChange={(e) => set({ tone: e.target.value || null })} />
+        </Field>
+      </div>
+      <Field label="Caption language" htmlFor="b-lang">
+        <Select id="b-lang" value={v.caption_language ?? ""} onChange={(e) => set({ caption_language: (e.target.value || null) as NonNullable<Brand["voice"]>["caption_language"] })}>
+          <option value="">Same as the reel</option>
+          <option value="en">English</option>
+          <option value="hinglish_latin">Hinglish (English letters)</option>
+          <option value="hi_deva">Hindi (Devanagari)</option>
+        </Select>
+      </Field>
+      <Field label="Emoji" htmlFor="b-emoji">
+        <Select id="b-emoji" value={v.emoji ?? "light"} onChange={(e) => set({ emoji: e.target.value as "none" | "light" | "heavy" })}>
+          <option value="none">None</option>
+          <option value="light">A few</option>
+          <option value="heavy">Lots</option>
+        </Select>
+      </Field>
+      <Field label="Hashtags on every post" htmlFor="b-tags-always" hint="Comma-separated, without #.">
+        <ListInput id="b-tags-always" value={v.hashtags_always} onChange={(x) => set({ hashtags_always: x })} strip="#" placeholder="acmefoods" />
+      </Field>
+      <Field label="Preferred hashtags" htmlFor="b-tags-pool">
+        <ListInput id="b-tags-pool" value={v.hashtags_pool} onChange={(x) => set({ hashtags_pool: x })} strip="#" placeholder="nutrition, healthyindia" />
+      </Field>
+      <Field label="Handles to tag" htmlFor="b-handles">
+        <ListInput id="b-handles" value={v.handles} onChange={(x) => set({ handles: x })} placeholder="@acmefoods" />
+      </Field>
+      <Field label="Never use these words" htmlFor="b-banned">
+        <ListInput id="b-banned" value={v.banned_words} onChange={(x) => set({ banned_words: x })} placeholder="cheap, guaranteed" />
+      </Field>
+      <div className="col-span-2">
+        <Field label="Calls to action" htmlFor="b-cta" hint="Comma-separated; the copywriter picks one.">
+          <ListInput id="b-cta" value={v.cta_lines} onChange={(x) => set({ cta_lines: x })} placeholder="Shop the link in bio, Follow for daily tips" />
+        </Field>
+      </div>
+    </>
+  );
+}
+
 function CaptionPreview({ b }: { b: Brand }) {
   const text = isHex(b.colors.text) ? b.colors.text! : "#FFFFFF";
   const accent = isHex(b.colors.accent) ? b.colors.accent! : isHex(b.colors.primary) ? b.colors.primary! : "#FFD400";
@@ -124,6 +189,7 @@ function Editor({ entry, isNew, onSaved }: { entry: BrandEntry; isNew: boolean; 
               ))}
             </Select>
           </Field>
+          <VoiceFields b={b} setB={setB} />
           <div className="col-span-2 flex items-center gap-3">
             <Button type="submit" variant="primary" busy={busy} disabled={!b.client.trim() || COLOR_KEYS.some(([k]) => b.colors[k] && !isHex(b.colors[k]))}>
               Save brand kit

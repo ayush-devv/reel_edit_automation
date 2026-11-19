@@ -2,7 +2,7 @@
 // mark delivered (AC-13).
 import { useState } from "react";
 import { useApi } from "../../api/context";
-import { friendlyError } from "../../api/errors";
+import { ApiError, friendlyError } from "../../api/errors";
 import type { PackageFile } from "../../api/types";
 import { Icon, type IconName } from "../../components/icons";
 import { Button, cx, IconButton, Loading, Mono, Notice, Panel, Select } from "../../components/ui";
@@ -35,6 +35,59 @@ const left = (expires: number) => {
   const h = (expires - Date.now() / 1000) / 3600;
   return h >= 48 ? `${Math.round(h / 24)} days` : h >= 1 ? `${Math.round(h)} h` : `${Math.max(1, Math.round(h * 60))} min`;
 };
+
+/** G1.1 post copy: caption, hashtags, first comment and YouTube text, with licence credits added by the engine. */
+function PostCopyPanel({ projectId }: { projectId: string }) {
+  const api = useApi();
+  const q = useQuery(() => api.postCopy(projectId), [api, projectId]);
+  const [copied, setCopied] = useState<string | null>(null);
+  const missing = q.error instanceof ApiError && q.error.status === 404;
+
+  const copy = (key: string, text: string) =>
+    navigator.clipboard?.writeText(text).then(
+      () => {
+        setCopied(key);
+        window.setTimeout(() => setCopied((k) => (k === key ? null : k)), 1500);
+      },
+      () => undefined,
+    );
+
+  const rows: { key: string; label: string; text: string }[] = q.data
+    ? [
+        { key: "ig", label: "Instagram caption", text: q.data.ig_caption },
+        { key: "fc", label: "First comment", text: q.data.first_comment },
+        { key: "yt_t", label: "YouTube Shorts title", text: q.data.yt_title },
+        { key: "yt_d", label: "YouTube Shorts description", text: q.data.yt_description },
+      ]
+    : [];
+
+  return (
+    <Panel title="Post copy" actions={<span className="text-meta text-fg-muted">Instagram · YouTube Shorts</span>}>
+      {q.loading && !q.data && <Loading />}
+      {missing && <p className="text-fg-secondary">Written with the package at the end of the edit.</p>}
+      {q.error && !missing ? <Notice tone="error">{friendlyError(q.error)}</Notice> : null}
+      {q.data && (
+        <div className="flex flex-col gap-4">
+          {q.data.status === "needs_review" && (
+            <Notice tone="warn">
+              Check before posting: {q.data.problems.join("; ")}
+            </Notice>
+          )}
+          {rows.map((r) => (
+            <div key={r.key}>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-label text-fg-secondary">{r.label}</span>
+                <IconButton icon={copied === r.key ? "check" : "copy"} label={copied === r.key ? "Copied" : `Copy ${r.label.toLowerCase()}`} onClick={() => copy(r.key, r.text)} />
+              </div>
+              <p className="whitespace-pre-wrap rounded-input border border-line-subtle bg-bg-inset px-3 py-2 text-body text-fg-primary">{r.text}</p>
+            </div>
+          ))}
+          {q.data.credits.length > 0 && <p className="text-meta text-fg-muted">The music licence’s credit is already in the caption and description. Keep it when you edit.</p>}
+        </div>
+      )}
+    </Panel>
+  );
+}
 
 /** FR-9 review link: a private client page with the review copy and a notes box, expiring after a set time. */
 function ReviewLinkPanel({ projectId }: { projectId: string }) {
@@ -300,6 +353,7 @@ export default function Deliver() {
             </>
           )}
         </Panel>
+        <PostCopyPanel projectId={p.id} />
         <ReviewLinkPanel projectId={p.id} />
 
         {msg && <Notice tone={msg.tone === "ok" ? "ok" : "error"}>{msg.text}</Notice>}

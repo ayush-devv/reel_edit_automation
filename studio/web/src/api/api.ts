@@ -11,6 +11,7 @@ import type {
   Libraries,
   NotesPreview,
   PackageListing,
+  PostCopy,
   Project,
   ProjectSummary,
   ReviewLink,
@@ -62,6 +63,8 @@ export interface Api {
   packageListing(id: string): Promise<PackageListing>;
   markDelivered(id: string): Promise<void>;
   reviewLinks(id: string): Promise<ReviewLinks>;
+  /** The credited post copy (404 until the package has been written). */
+  postCopy(id: string): Promise<PostCopy>;
   createReviewLink(id: string, hours: number): Promise<ReviewLink>;
   revokeReviewLink(id: string, linkId: string): Promise<void>;
   label(id: string, sendable: boolean, reason: string): Promise<void>;

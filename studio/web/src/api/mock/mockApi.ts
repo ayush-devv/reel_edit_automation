@@ -362,6 +362,21 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
       const list = (links.get(id) ?? []).map((l) => ({ ...l, state: l.state === "revoked" ? l.state : l.expires <= t ? ("expired" as const) : ("active" as const) }));
       return { links: clone(list), notes: clone(clientNotes.get(id) ?? []), ready: !!p.media.final };
     },
+    async postCopy(id) {
+      await guard();
+      const p = must(id);
+      if (!p.media.final) throw new ApiError(404, "no post copy yet");
+      return {
+        ig_caption: `Most people get this wrong about ${p.name.toLowerCase()}.\n\nSave this for later and tell me your take below.\n\n#shortform #creatortips`,
+        first_comment: "What would you add?",
+        hashtags: ["shortform", "creatortips"],
+        yt_title: `${p.name}: the part nobody explains`,
+        yt_description: "The one idea from this reel, in under a minute.\n\nFollow for more.",
+        credits: [],
+        status: "ok",
+        problems: [],
+      };
+    },
     async createReviewLink(id, hours) {
       await guard();
       const p = must(id);

@@ -97,6 +97,7 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
     packageListing: (id) => get(`/api/projects/${enc(id)}/package`),
     markDelivered: (id) => post(`/api/projects/${enc(id)}/delivered`, { delivered: true }),
     reviewLinks: (id) => get(`/api/projects/${enc(id)}/review-links`),
+    postCopy: (id) => get(`/api/projects/${enc(id)}/copy`),
     createReviewLink: (id, hours) => post(`/api/projects/${enc(id)}/review-links`, { hours }),
     revokeReviewLink: (id, linkId) => request("DELETE", `/api/projects/${enc(id)}/review-links/${enc(linkId)}`),
     label: (id, sendable, reason) => post(`/api/projects/${enc(id)}/label`, { sendable, reason }),

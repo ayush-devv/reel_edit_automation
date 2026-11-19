@@ -473,6 +473,16 @@ def test_cli_rerun_and_revise_args(tmp_path, monkeypatch):
 # ------------------------------------------------------------------ unified contract: package, delivered, settings, lab, libraries
 
 
+def test_post_copy_route_serves_only_the_credited_version(env):
+    ws = make_project(env["root"])
+    c = env["c"]
+    _w(ws / "plan" / "copy.json", json.dumps({"status": "failed", "reason": "claude unavailable"}))
+    r = c.get("/api/projects/p1/copy")
+    assert r.status_code == 404 and "claude unavailable" in r.text
+    _w(ws / "export" / "package" / "copy.json", json.dumps({"ig_caption": "Hook\n\n#a\n\nCredit", "status": "ok"}))
+    assert c.get("/api/projects/p1/copy").json()["ig_caption"].endswith("Credit")
+
+
 def test_package_listing_and_delivered(env):
     ws = make_project(env["root"])
     _w(ws / "export" / "package" / "reel.mp4", "x" * 10)

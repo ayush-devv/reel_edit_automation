@@ -194,12 +194,38 @@ export interface Brand {
   look?: string | null;
   end_card?: string | null;
   cta_style?: string | null;
+  /** How the client's posts read (copy pack). Optional: older kits have none. */
+  voice?: BrandVoice;
+}
+
+/** engine/src/reel/brief.py BrandVoice. Hashtags are words without `#`. */
+export interface BrandVoice {
+  tone?: string | null;
+  caption_language?: "en" | "hinglish_latin" | "hi_deva" | null;
+  hashtags_always?: string[];
+  hashtags_pool?: string[];
+  banned_words?: string[];
+  emoji?: "none" | "light" | "heavy";
+  handles?: string[];
+  cta_lines?: string[];
 }
 
 /** GET /api/brands returns the id beside the Brand body. */
 export interface BrandEntry {
   id: string;
   brand: Brand;
+}
+
+/** Post copy pack (reel.postcopy): hashtags and licence credits already added by the engine. */
+export interface PostCopy {
+  ig_caption: string;
+  first_comment: string;
+  hashtags: string[];
+  yt_title: string;
+  yt_description: string;
+  credits: string[];
+  status: "ok" | "needs_review";
+  problems: string[];
 }
 
 /** Licence gate fields (reel.licences): the registry row, and why every reel refuses it (null = usable). */

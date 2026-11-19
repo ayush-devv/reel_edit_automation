@@ -285,6 +285,23 @@ def _cover(ws, pkg: Path) -> dict | None:
     return json.loads((src / "cover.json").read_text())
 
 
+def _copy_pack(ws, pkg: Path, credits: list[str]) -> None:
+    """COPY.md + copy.json: the copy stage's draft with hashtags and licence credits added by code (reel.postcopy).
+    Only this credited version is ever served or pasted; no draft → no stale copy left behind."""
+    from reel import postcopy
+    from reel.workspace import atomic_write_json
+
+    draft = ws.path("plan", "copy.json")
+    data = json.loads(draft.read_text()) if draft.exists() else {}
+    if data.get("status") not in ("ok", "needs_review"):
+        (pkg / "COPY.md").unlink(missing_ok=True)
+        (pkg / "copy.json").unlink(missing_ok=True)
+        return
+    final = postcopy.credited(data, credits)
+    atomic_write_json(pkg / "copy.json", final)
+    atomic_write_bytes(pkg / "COPY.md", postcopy.markdown(final).encode())
+
+
 def build(ws, tl: Timeline, story: StoryPlan, finish: FinishPlan, words, idx, *, lufs_in: float | None = None, verdict: str | None = None,
           gate=None) -> dict:
     import opentimelineio as otio
@@ -325,6 +342,7 @@ def build(ws, tl: Timeline, story: StoryPlan, finish: FinishPlan, words, idx, *,
         atomic_write_bytes(pkg / "CREDITS.txt", credits_text(credits).encode())
     elif (pkg / "CREDITS.txt").exists():
         (pkg / "CREDITS.txt").unlink()  # a revision dropped the credited track (licences are known: checked above)
+    _copy_pack(ws, pkg, credits)
     atomic_write_bytes(pkg / "README.md", readme(tl, idx, offset, verdict, credits, cover).encode())
     licences.write_manifest(pkg, gate, ws.root, reel=ws.path("render", "final.mp4"), credits=credits)
     licences.record_use(gate.items, gate.use)

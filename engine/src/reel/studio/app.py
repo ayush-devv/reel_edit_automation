@@ -595,6 +595,19 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         mgr.tick()  # a higher limit starts queued jobs now
         return settings_view()
 
+    # -------------------------------------------------------------- post copy (roadmap G1.1)
+
+    @app.get("/api/projects/{pid}/copy")
+    def post_copy(pid: str):
+        """The credited copy the package wrote (hashtags + licence credits added by code) — never Claude's draft."""
+        ws = ws_of(pid)
+        f = ws / "export" / "package" / "copy.json"
+        if not f.exists():
+            draft = ws / "plan" / "copy.json"
+            why = json.loads(draft.read_text()).get("reason", "") if draft.exists() else ""
+            raise ApiError(404, "no post copy yet", hint=why or "it is written with the package at the end of the edit")
+        return json.loads(f.read_text())
+
     # -------------------------------------------------------------- review links (owner side, token required)
 
     @app.get("/api/projects/{pid}/review-links")

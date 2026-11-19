@@ -77,8 +77,49 @@ class BrandColors(_Strict):
         return v.upper()
 
 
+class BrandVoice(_Strict):
+    """How the client's posts read (copy pack, reel.copy). Every field optional: old brand kits stay valid."""
+
+    tone: str | None = None  # e.g. "warm, direct, no jargon"
+    caption_language: str | None = None  # en | hinglish_latin | hi_deva (None = follow the brief / the talk)
+    hashtags_always: list[str] = Field(default_factory=list)  # on every post (counts toward Instagram's cap)
+    hashtags_pool: list[str] = Field(default_factory=list)  # pick from these first
+    banned_words: list[str] = Field(default_factory=list)
+    emoji: str = "light"  # none | light | heavy
+    handles: list[str] = Field(default_factory=list)  # @mentions the client wants tagged
+    cta_lines: list[str] = Field(default_factory=list)  # the client's own calls to action
+
+    @field_validator("caption_language")
+    @classmethod
+    def _lang(cls, v: str | None) -> str | None:
+        if v is not None and v not in ("en", "hinglish_latin", "hi_deva"):
+            raise ValueError("caption_language must be en, hinglish_latin or hi_deva")
+        return v
+
+    @field_validator("emoji")
+    @classmethod
+    def _emoji(cls, v: str) -> str:
+        if v not in ("none", "light", "heavy"):
+            raise ValueError("emoji must be none, light or heavy")
+        return v
+
+    @field_validator("hashtags_always", "hashtags_pool")
+    @classmethod
+    def _tags(cls, v: list[str]) -> list[str]:
+        import re
+
+        out = []
+        for t in v:
+            t = t.strip().lstrip("#")
+            if not re.fullmatch(r"\w+", t):
+                raise ValueError(f"hashtag {t!r} must be letters, digits or _ only")
+            out.append(t)
+        return out
+
+
 class Brand(_Strict):
     client: str
+    voice: BrandVoice = Field(default_factory=BrandVoice)
     fonts: dict[str, str] = Field(default_factory=dict)  # heading/body → font family or file
     colors: BrandColors = Field(default_factory=BrandColors)
     logo: str | None = None

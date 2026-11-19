@@ -513,6 +513,42 @@ def _cover(ctx: StageContext) -> dict:
 COVER = Stage(name="cover", input_hash=_cover_hash, run=_cover,
               outputs=lambda ctx: [ctx.ws.path("render", "cover", f) for f in ("cover.jpg", "cover_clean.jpg", "cover.json")])
 
+# ------------------------------------------------------------------ post copy pack (roadmap G1.1)
+
+
+def _kept_text(ctx: StageContext) -> str:
+    story = project.load_json_model(StoryPlan, ctx.ws.path("plan", "story.json"))
+    by = project.word_table(ctx.ws).by_index()
+    return "\n".join(" ".join(by[i].text for i in range(it.word_start, it.word_end + 1) if i in by) for it in story.items)
+
+
+def _copy_hash(ctx: StageContext) -> str:
+    from reel import postcopy
+
+    return hash_inputs({"story": _fp(ctx, "plan/story.json"), "summary": _fp(ctx, "tables/summary.md"), "words": _fp(ctx, "perception/words.json"),
+                        "timeline": _fp(ctx, "timeline/timeline.json"),  # the credits it must leave room for
+                        "brief": _opt_file(project.brief_path(ctx.ws, ctx.options)), "brand": _opt_file(ctx.options.get("brand")),
+                        "persona": file_fingerprint(postcopy.PERSONA), "schema": postcopy.schema(), "code": _code_fp("postcopy"),
+                        **_model_key(ctx)})
+
+
+def _copy(ctx: StageContext) -> dict:
+    from reel import library, postcopy
+
+    summary = ctx.ws.path("tables", "summary.md")
+    credits = library.credit_lines(_timeline(ctx), project.indexes(ctx.ws))
+    out = postcopy.write(ctx.ws.root, _caller(ctx), kept_text=_kept_text(ctx), summary=summary.read_text() if summary.exists() else "",
+                         brief=brief_mod.load_brief(project.brief_path(ctx.ws, ctx.options)), brand=brief_mod.load_brand(ctx.options.get("brand")),
+                         credits=credits, log_file=ctx.ws.path("log", "runs.jsonl"))
+    atomic_write_json(ctx.ws.path("plan", "copy.json"), out)
+    if out["status"] != "ok":
+        log.warning("post copy %s: %s", out["status"], out.get("reason") or "; ".join(out.get("problems", [])))
+    return {"status": out["status"], "problems": len(out.get("problems", []))}
+
+
+COPY = Stage(name="copy", input_hash=_copy_hash, outputs=lambda ctx: [ctx.ws.path("plan", "copy.json")], run=_copy)
+
+
 # ------------------------------------------------------------------ NLE package (every run, ADR-0018)
 
 
@@ -520,7 +556,7 @@ def _package_hash(ctx: StageContext) -> str:
     from reel import package
 
     files = ["render/final.mp4", "render/overlay.mov", "timeline/timeline.json", "plan/story.json", "plan/finish.json", "qa/verdict.json",
-             "render/cover/cover.json", "render/cover/cover.jpg", *(f"render/stems/{b}.wav" for b in package.STEMS)]
+             "render/cover/cover.json", "render/cover/cover.jpg", "plan/copy.json", *(f"render/stems/{b}.wav" for b in package.STEMS)]
     from reel import licences
 
     # the brief, licence registry and subscriptions decide the licence gate: a change re-checks and re-writes the manifest
@@ -595,4 +631,4 @@ VARIANTS = Stage(name="variants", input_hash=_variants_hash,
                                       *(ctx.ws.path("export", "variants", f"reel_{n}.mp4") for n in _deliverables(ctx))],
                  run=_variants)
 
-STAGES = [STOCK, BROLL, REFERENCE, STORY, FINISH, COMPILE, RENDER, OVERLAY, COMPOSITE, QA, COVER, PACKAGE, VARIANTS]
+STAGES = [STOCK, BROLL, REFERENCE, STORY, FINISH, COMPILE, RENDER, OVERLAY, COMPOSITE, QA, COVER, COPY, PACKAGE, VARIANTS]

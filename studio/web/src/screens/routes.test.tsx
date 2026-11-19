@@ -72,6 +72,13 @@ describe("screens", () => {
     expect((await api.reviewLinks(HOLD)).links[0].state).toBe("revoked");
   });
 
+  it("deliver shows the post copy with a copy button per field", async () => {
+    render(<TestApp api={createMockApi()} path={`/p/${HOLD}/deliver`} />);
+    expect(await screen.findByText("Instagram caption", undefined, T)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy youtube shorts title" })).toBeInTheDocument();
+    expect(screen.getByText(/What would you add\?/)).toBeInTheDocument();
+  });
+
   it("revise shows notes sent through a review link and puts them in the box", async () => {
     render(<TestApp api={createMockApi()} path={`/p/${HOLD}/revise`} />);
     const inbox = await screen.findByRole("region", { name: "From the review link" }, T);
