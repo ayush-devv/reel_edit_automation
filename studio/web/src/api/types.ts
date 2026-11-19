@@ -21,7 +21,15 @@ export const STAGES = [
 export type StageName = (typeof STAGES)[number];
 
 export type StageStatus = "pending" | "queued" | "running" | "done" | "failed" | "skipped";
-export type ProjectStatus = "draft" | "queued" | "running" | "sendable" | "hold" | "failed";
+export type ProjectStatus = "draft" | "queued" | "running" | "sendable" | "hold" | "failed" | "awaiting_choice";
+
+/** Hook preview in two looks (engine reel.preview): export/preview/preview.json. */
+export interface HookPreview {
+  frames: number;
+  seconds?: number;
+  chosen: "A" | "B" | null;
+  options: Record<string, { caption_family: string | null; look: string; file: string }>;
+}
 export type Verdict = "sendable" | "hold";
 
 export interface ProjectSummary {
@@ -69,6 +77,16 @@ export interface Gate {
   measured: Record<string, unknown>;
 }
 
+/** One quality check that didn't pass, in plain words (engine reel.verdict_plain). `at` = timecodes "m:ss.ss". */
+export interface PlainCheck {
+  gate: string;
+  status: "fail" | "warn";
+  title: string;
+  sentence: string;
+  at: string[];
+  detail: string;
+}
+
 export interface ProofWord {
   i: number;
   text: string;
@@ -110,7 +128,7 @@ export interface Project extends ProjectSummary {
   brand: string | null;
   stages: Stage[];
   decisions: Decision[];
-  verdict_detail: { verdict: string; reasons: string[]; warnings: string[]; gates: Gate[] } | null;
+  verdict_detail: { verdict: string; reasons: string[]; warnings: string[]; gates: Gate[]; plain?: PlainCheck[] } | null;
   proof: ProofWord[];
   review: { summary: string; sendable: boolean | null; strengths: string[]; issues: ReviewIssue[] } | null;
   media: { final?: string; review_copy?: string; cover?: string; sheets: string[]; cut_strips: string[]; variants: string[] };
@@ -119,6 +137,7 @@ export interface Project extends ProjectSummary {
   platform_notes: string[];
   /** Seconds left in the run; null = unknown (the web app estimates from typical stage times). */
   eta_s: number | null;
+  preview?: HookPreview | null;
 }
 
 export interface HealthTool {
@@ -181,7 +200,14 @@ export interface Brief {
   vocabulary?: string[];
   notes?: string | null;
   deliverables?: ("feed_4x5" | "square")[];
+  /** Licence gate (reel.licences): what the reel is for decides which library assets it may use. */
+  use_categories?: UseCategory[];
+  purpose?: "editorial" | "organic" | "promo" | "paid_ad";
+  accept_credits?: boolean;
 }
+
+export const USE_CATEGORIES = ["political", "dating", "drugs", "alcohol", "gambling", "religious", "adult"] as const;
+export type UseCategory = (typeof USE_CATEGORIES)[number];
 
 /** Engine brand kit (engine/src/reel/brief.py Brand, extra="forbid"). */
 export interface Brand {

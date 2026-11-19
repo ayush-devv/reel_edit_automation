@@ -11,6 +11,8 @@ export function badgeOf(p: Pick<ProjectSummary, "status" | "delivered_at">): Bad
       return "editing";
     case "failed":
       return "failed";
+    case "awaiting_choice":
+      return "hold"; // needs you: the client picks the hook look before the full render
     default:
       return p.status;
   }

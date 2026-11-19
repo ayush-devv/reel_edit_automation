@@ -66,7 +66,7 @@ def load_inputs(ws: Workspace, brief_path: str | None = None, brand_path: str | 
     brief = brief_mod.load_brief(brief_path)
     idx = project.indexes(ws)
     use_brief = brief or brief_mod.load_brief(project.brief_path(ws))  # revise runs may not pass the brief; the project keeps it
-    idx.refused = licences.refused(idx, licences.UseContext.from_brief(use_brief, ws.root.name))  # gate before ranking
+    idx.refused = licences.refused(idx, licences.UseContext.from_brief(use_brief, ws.root.name, project.studio_client(ws)))  # gate before ranking
     return Inputs(ws=ws, words=project.word_table(ws), clips=project.clip_infos(ws), fps=project.project_fps(ws),
                   idx=idx, kids=knowledge.node_ids(), edges=project.edges(ws),
                   brief=brief, brand=brief_mod.load_brand(brand_path),
@@ -187,7 +187,11 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
                       "is started so its drop lands exactly as the hook ends — a lift into the body of the reel)",
                       _allowed(inp.idx, inp.idx.music), ("title", "mood", "energy", "bpm", "feel", "duration_ms", "drop_ms"))
     lines += ["## Lottie library (graphic kind `lottie`; our pack is recoloured to the brand accent)", ""]
-    lottie = _allowed(inp.idx, inp.idx.lottie)
+    from reel import lottie as lottie_mod
+
+    summary = inp.ws.path("tables", "summary.md")
+    talk = (summary.read_text() if summary.exists() else "") + " " + " ".join(w.text for w in inp.words.words)
+    lottie = lottie_mod.menu(_allowed(inp.idx, inp.idx.lottie), talk)  # our pack + the icons that match this talk
     if not lottie:
         lines += ["Empty — no lottie graphics.", ""]
     for lid, a in sorted(lottie.items(), key=lambda kv: kv[1].get("name", "")):

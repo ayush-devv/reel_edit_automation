@@ -180,6 +180,38 @@ def test_sfx_peak_and_music_ducking(tmp_path):
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(not READY, reason="needs pinned ffmpeg + librosa/soundfile")
+def test_audio_only_rerender_matches_a_full_render_and_keeps_the_picture(tmp_path):
+    """Partial re-render (roadmap G1.5): a music-gain revision rebuilds only the sound; the result is the same as a full
+    render of the revised timeline, and the picture packets are the old ones byte for byte."""
+    voice = np.zeros(SR * 6)
+    voice[int(1.0 * SR):int(2.0 * SR)] = _tone(1000, 1.0)
+    mezz = _clip(tmp_path, voice)
+    bed = _wav(tmp_path / "music" / "bed.wav", _tone(220, 10.0, 0.2))
+    video, audio, total = _two_cuts(75, 75, 75)
+
+    def tl_with(gain: float) -> Timeline:
+        return Timeline(fps="25/1", width=1080, height=1920, duration_f=total,
+                        assets={"c01": Asset(id="c01", kind=AssetKind.video, uri="mezz/c01.mov"), "bed": Asset(id="bed", kind=AssetKind.music, uri=str(bed))},
+                        video=video, audio=[*audio, AudioClip(id="music", asset="bed", at_f=0, dur_f=total, role="music", gain_db=gain)],
+                        ducking=[Ducking(depth_db=12, attack_ms=100, release_ms=200, regions_f=[[25, 50]])])
+
+    old, full = tmp_path / "old.mov", tmp_path / "full.mov"
+    render.render_base(tl_with(-6), tmp_path, old, stems_dir=tmp_path / "stems_old")
+    render.render_base(tl_with(-14), tmp_path, full, stems_dir=tmp_path / "stems_full")
+    video_before = tools.run([str(config.ffmpeg_path()), "-v", "error", "-i", str(old), "-map", "0:v", "-c", "copy", "-f", "md5", "-"]).stdout
+    meta = render.render_base_audio(tl_with(-14), tmp_path, old, stems_dir=tmp_path / "stems_part")
+    assert meta["audio_only"] is True
+    video_after = tools.run([str(config.ffmpeg_path()), "-v", "error", "-i", str(old), "-map", "0:v", "-c", "copy", "-f", "md5", "-"]).stdout
+    assert video_after == video_before  # the picture is untouched
+    a_part, a_full = _decode(old), _decode(full)
+    assert a_part.size == a_full.size and np.max(np.abs(a_part - a_full)) < 1e-4  # the sound equals a full render's
+    for bus in ("dialogue", "music", "sfx"):
+        p, f = (tmp_path / d / f"{bus}.wav" for d in ("stems_part", "stems_full"))
+        assert p.read_bytes() == f.read_bytes(), bus
+
+
+@pytest.mark.integration
 @pytest.mark.skipif(not READY, reason="needs librosa/soundfile")
 def test_music_index_finds_tempo_and_beats(tmp_path):
     y = np.zeros(SR * 12)

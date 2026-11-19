@@ -81,6 +81,19 @@ class ReviewLinkBody(BaseModel):
     hours: float = Field(72, ge=1, le=24 * 30)
 
 
+class ProjectPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    client: str | None = Field(default=None, max_length=120)
+
+
+class PreviewChoice(BaseModel):
+    option: Literal["A", "B"]
+
+
+class TemplatesBody(BaseModel):
+    templates: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
 class LabelBody(BaseModel):
     sendable: bool
     reason: str = Field(default="", max_length=4000)
@@ -243,6 +256,10 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         brand_file = catalog.brand_path(s.brands_root, brand_id) if brand_id else None
         if brand_id and (brand_file is None or not brand_file.exists()):
             raise ApiError(400, f"no brand kit {brand_id!r}")
+        broll_raw = str(form.get("broll_folder") or "").strip().removeprefix("file://")
+        broll_folder = str(Path(broll_raw).expanduser().resolve()) if broll_raw else None
+        if broll_raw and (re.match(r"^[a-z]+://", broll_raw) or not Path(broll_folder).is_dir()):
+            raise ApiError(400, "the b-roll folder must be a folder on this Mac")
         reference = str(form.get("reference_url") or "").strip().removeprefix("file://") or None
         if reference and (re.match(r"^[a-z]+://", reference) or not Path(reference).expanduser().is_file()):
             raise ApiError(400, "reference_url must be a local video file (links are not supported)")
@@ -273,13 +290,56 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
                                     footage_s=round(footage, 2) or None)
         opts = {"input": str(raw_dir), "brief": str(ws / "brief.json") if brief else None, "brand": str(brand_file) if brand_file else None,
                 "reference": str(Path(reference).expanduser().resolve()) if reference else None, "language": None,
-                "stock": str(form.get("stock") or "").strip().lower() in ("1", "true", "on")}
+                "stock": str(form.get("stock") or "").strip().lower() in ("1", "true", "on"),
+                "preview_first": str(form.get("preview_first") or "").strip().lower() in ("1", "true", "on"),
+                "broll": broll_folder}
         job = submit(pid, "run", cli(*_run_args(ws, opts)), ws=ws, est_gb=estimate_run_gb(footage or None), label="Edit")
         return {"id": pid, "job": job}
 
     @app.get("/api/projects/{pid}")
     def get_project(pid: str):
         return build_project(pid, ws_of(pid))
+
+    @app.patch("/api/projects/{pid}", status_code=204)
+    def patch_project(pid: str, body: ProjectPatch):
+        """Rename / set the client (UI plan A2): the Studio's label only. The brief the Editor read is never edited, so
+        nothing is re-planned; the licence gate falls back to this client when the brief names none."""
+        ws = ws_of(pid)
+        fields = body.model_dump(exclude_unset=True)
+        if "name" in fields:
+            fields["name"] = fields["name"].strip()
+            if not fields["name"]:
+                raise ApiError(400, "a project name (1–120 characters) is required")
+        if "client" in fields:
+            fields["client"] = (fields["client"] or "").strip() or None
+        if fields:
+            projects.update_studio_meta(ws, **fields)
+        return Response(status_code=204)
+
+    # brief templates (UI plan D1): server-side so they survive a cleared browser and follow the owner across browsers
+    def templates_file() -> Path:
+        return s.prefs_file.parent / "templates.json"
+
+    @app.get("/api/templates")
+    def get_templates():
+        f = templates_file()
+        return json.loads(f.read_text()) if f.exists() else {}
+
+    @app.put("/api/templates")
+    def put_templates(body: TemplatesBody):
+        if len(body.templates) > 200 or any(len(k) > 120 or not k.strip() for k in body.templates):
+            raise ApiError(400, "template names must be 1–120 characters (at most 200 templates)")
+        f = templates_file()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(f, body.templates)
+        f.chmod(0o600)
+        return body.templates
+
+    @app.post("/api/library/starter-packs")
+    def starter_packs():
+        """The built-in procedural + Kenney CC0 SFX and Incompetech CC BY music (UI plan C2), as a library job."""
+        return {"job": submit("_library", "assets_fetch", cli("assets", "fetch"), est_gb=ESTIMATE_GB["library"], label="Get the starter packs",
+                              log=s.projects_root / ".studio_logs" / "library.log")}
 
     @app.delete("/api/projects/{pid}", status_code=204)
     def delete_project(pid: str):
@@ -308,6 +368,24 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         footage = projects.studio_meta(ws).get("footage_s")
         return {"job": submit(pid, "retry", cli(*_run_args(ws, opts, force=stage)), ws=ws, est_gb=estimate_run_gb(footage),
                               label=f"Retry from {stage}" if stage else "Resume")}
+
+    @app.post("/api/projects/{pid}/preview/choose")
+    def preview_choose(pid: str, body: PreviewChoice):
+        """The A/B hook pick (roadmap G1.6): apply it to the plan, then render the full reel."""
+        from reel import preview
+
+        ws = ws_of(pid)
+        opts = projects.read_json(ws / "run_options.json")
+        if not opts or not opts.get("input"):
+            raise ApiError(400, "this project has never been started (no run_options.json)")
+        busy(pid, ws)
+        try:
+            preview.choose(Workspace(ws), body.option)
+        except ValueError as exc:
+            raise ApiError(400, str(exc)) from exc
+        footage = projects.studio_meta(ws).get("footage_s")
+        opts = {k: v for k, v in opts.items() if k != "preview_first"}
+        return {"job": submit(pid, "run", cli(*_run_args(ws, opts)), ws=ws, est_gb=estimate_run_gb(footage), label=f"Edit with look {body.option}")}
 
     @app.post("/api/projects/{pid}/cancel", status_code=204)
     def cancel(pid: str):
@@ -743,6 +821,8 @@ def _run_args(ws: Path, opts: dict, force: str | None = None) -> list[str]:
         args.append("--skip-visual")
     if opts.get("stock"):
         args.append("--stock")
+    if opts.get("preview_first"):
+        args.append("--preview-first")
     if opts.get("skip_review"):
         args.append("--skip-review")
     if force:
@@ -802,7 +882,7 @@ def _apply_adjust(ws: Path, kind: str, value):
     from reel import licences
     from reel.brief import load_brief
 
-    idx.refused = licences.refused(idx, licences.UseContext.from_brief(load_brief(project.brief_path(w)), ws.name))
+    idx.refused = licences.refused(idx, licences.UseContext.from_brief(load_brief(project.brief_path(w)), ws.name, project.studio_client(w)))
     note = None
 
     def ids_off(items: list, what: str) -> list:

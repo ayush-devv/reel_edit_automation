@@ -4,8 +4,8 @@ import { useApi } from "../../api/context";
 import { Icon, type IconName } from "../../components/icons";
 import { StoryStrip } from "../../components/StoryStrip";
 import { useImageTint } from "../../lib/tint";
-import type { CSSProperties } from "react";
-import { cx, Empty, Loading, Mono, Notice, StatusBadge } from "../../components/ui";
+import { useState, type CSSProperties } from "react";
+import { Button, cx, Empty, IconButton, Loading, Mono, Notice, StatusBadge, TextInput } from "../../components/ui";
 import { useLiveProject, type LiveProject } from "../../hooks/useLiveProject";
 import { useStatus } from "../../hooks/status";
 import { useQuery } from "../../hooks/useQuery";
@@ -74,7 +74,90 @@ function RunningStrip({ current }: { current: string }) {
   );
 }
 
+/** A2: rename a project and set its client (projects made from the command line show their id and "No client"). */
+function RenameForm({ p, onDone }: { p: Project; onDone: (saved: boolean) => void }) {
+  const api = useApi();
+  const [name, setName] = useState(p.name);
+  const [client, setClient] = useState(p.client ?? "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <form
+      aria-label="Rename project"
+      className="flex flex-wrap items-center gap-2"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setErr(null);
+        try {
+          await api.updateProject(p.id, { name: name.trim(), client: client.trim() || null });
+          onDone(true);
+        } catch (x) {
+          setErr(friendlyError(x));
+          setBusy(false);
+        }
+      }}
+    >
+      <TextInput aria-label="Project name" value={name} onChange={(e) => setName(e.target.value)} className="w-64" required maxLength={120} />
+      <TextInput aria-label="Client" value={client} onChange={(e) => setClient(e.target.value)} placeholder="Client" className="w-48" />
+      <Button type="submit" variant="primary" busy={busy} disabled={!name.trim()}>
+        Save
+      </Button>
+      <Button type="button" variant="ghost" onClick={() => onDone(false)}>
+        Cancel
+      </Button>
+      {err && <span className="text-label text-st-fail">{err}</span>}
+    </form>
+  );
+}
+
+/** G1.6: the hook in two looks; picking one renders the full reel in that look. */
+function HookChooser({ p, onPicked }: { p: Project; onPicked: () => void }) {
+  const api = useApi();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const opts = Object.entries(p.preview?.options ?? {});
+  return (
+    <section aria-label="Pick the hook look" className="border-b border-line-subtle px-8 py-5">
+      <p className="text-section text-fg-primary">Pick the look for this reel</p>
+      <p className="mb-4 text-meta text-fg-muted">The opening seconds in {opts.length === 1 ? "the Editor's look (the brand kit fixes the style)" : "two looks"}. The full reel renders in the one you pick.</p>
+      <div className="flex flex-wrap gap-6">
+        {opts.map(([k, o]) => (
+          <figure key={k} className="w-[220px]">
+            <video src={api.mediaUrl(p.id, o.file, p.updated)} controls loop muted playsInline className="aspect-[9/16] w-full rounded-surface bg-black" aria-label={`Look ${k}`} />
+            <figcaption className="mt-2 flex items-center justify-between gap-2">
+              <span className="text-meta text-fg-secondary">
+                <span className="font-medium text-fg-primary">{k}</span> · {o.caption_family?.replace(/_/g, " ")} · {o.look}
+              </span>
+              <Button
+                variant={k === "A" ? "primary" : "secondary"}
+                busy={busy === k}
+                disabled={!!busy}
+                onClick={async () => {
+                  setBusy(k);
+                  setErr(null);
+                  try {
+                    await api.choosePreview(p.id, k as "A" | "B");
+                    onPicked();
+                  } catch (e) {
+                    setErr(friendlyError(e));
+                    setBusy(null);
+                  }
+                }}
+              >
+                Use {k}
+              </Button>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+      {err && <p className="mt-3 text-label text-st-fail">{err}</p>}
+    </section>
+  );
+}
+
 export default function ProjectLayout() {
+  const [renaming, setRenaming] = useState(false);
   const { id = "" } = useParams();
   const live = useLiveProject(id);
   const p = live.project;
@@ -105,9 +188,22 @@ export default function ProjectLayout() {
                 Projects
               </Link>
               <Icon name="chevron" size={16} className="shrink-0 text-fg-muted" />
-              <h1 className="truncate text-title" aria-current="page">
-                {p.name}
-              </h1>
+              {renaming ? (
+                <RenameForm
+                  p={p}
+                  onDone={(saved) => {
+                    setRenaming(false);
+                    if (saved) live.reload();
+                  }}
+                />
+              ) : (
+                <>
+                  <h1 className="truncate text-title" aria-current="page">
+                    {p.name}
+                  </h1>
+                  <IconButton icon="edit" label="Rename project or set the client" onClick={() => setRenaming(true)} />
+                </>
+              )}
             </nav>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
               <span className="text-meta text-fg-muted">
@@ -117,6 +213,7 @@ export default function ProjectLayout() {
               <StatusBadge badge={badgeOf(p)} stage={p.stage} count={p.needs_attention.length || undefined} size="lg" />
             </div>
           </header>
+          {p.status === "awaiting_choice" && p.preview && <HookChooser p={p} onPicked={live.reload} />}
           <nav aria-label="Project" className="flex h-11 shrink-0 gap-2 border-b border-line-subtle px-6">
             {TABS.map((t) => (
               <NavLink

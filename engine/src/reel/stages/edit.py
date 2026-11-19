@@ -255,6 +255,16 @@ def _compile(ctx: StageContext) -> dict:
     inp = _inputs(ctx)
     story = project.load_json_model(StoryPlan, ctx.ws.path("plan", "story.json"))
     fin = project.load_json_model(FinishPlan, ctx.ws.path("plan", "finish.json"))
+    tl, adapted = compile_for(ctx, inp, story, fin)
+    atomic_write_json(ctx.ws.path("timeline", "timeline.json"), tl.model_dump(mode="json"))
+    proof = proof_list(tl, story, inp.words)
+    atomic_write_json(ctx.ws.path("qa", "proof_list.json"), proof)
+    return {"adapted_tokens": adapted, "proof_words": len(proof), "caption_timing": tl.captions.timing if tl.captions else None, "frames": tl.duration_f, "fps": tl.fps, "clips": len(tl.video), "caption_pages": len(tl.captions.pages if tl.captions else [])}
+
+
+def compile_for(ctx: StageContext, inp, story: StoryPlan, fin: FinishPlan) -> tuple[Timeline, list]:
+    """A finish plan → the timeline the renderers read (brand overrides, proof fixes, caption adaptation). The compile
+    stage and the hook preview's alternative look both use it, so a preview is exactly what the full render would be."""
     family, tokens = brief_mod.brand_caption_overrides(inp.brand)
     fixes = {int(k): v["text"] for k, v in (_read_json(ctx, "qa", "proof_confirmed.json") or {}).items() if v.get("text")}
     logo = _brand_logo(ctx, inp.brand)
@@ -271,10 +281,7 @@ def _compile(ctx: StageContext) -> dict:
         emph = tl.captions.tokens.get("emph_color")
         if emph:
             tl = tl.model_copy(update={"graphics": [g.model_copy(update={"accent": emph}) for g in tl.graphics]})
-    atomic_write_json(ctx.ws.path("timeline", "timeline.json"), tl.model_dump(mode="json"))
-    proof = proof_list(tl, story, inp.words)
-    atomic_write_json(ctx.ws.path("qa", "proof_list.json"), proof)
-    return {"adapted_tokens": adapted, "proof_words": len(proof), "caption_timing": tl.captions.timing if tl.captions else None, "frames": tl.duration_f, "fps": tl.fps, "clips": len(tl.video), "caption_pages": len(tl.captions.pages if tl.captions else [])}
+    return tl, adapted
 
 
 COMPILE = Stage(name="compile", input_hash=_compile_hash,
@@ -372,11 +379,24 @@ def licence_gate(ctx: StageContext, tl: Timeline | None = None):
     """The licence gate on the compiled timeline (reel.licences): raises LicenceRefused with every reason."""
     from reel import licences
 
-    use = licences.UseContext.from_brief(brief_mod.load_brief(project.brief_path(ctx.ws, ctx.options)), ctx.ws.root.name)
+    use = licences.UseContext.from_brief(brief_mod.load_brief(project.brief_path(ctx.ws, ctx.options)), ctx.ws.root.name,
+                                         project.studio_client(ctx.ws))
     res = licences.gate(tl or _timeline(ctx), project.indexes(ctx.ws), use)
     if not res.ok:
         raise licences.LicenceRefused(res)
     return res
+
+
+def _video_fp(ctx: StageContext, tl: Timeline) -> str:
+    """Everything the base PICTURE depends on (partial re-render, roadmap G1.5): when only this is unchanged, a
+    re-render needs the audio only. Audio fields, music/SFX assets, room tone and voice enhancement are left out."""
+    d = part(tl, FFMPEG_FIELDS)
+    d.pop("audio", None)
+    d.pop("ducking", None)
+    d["assets"] = {k: v for k, v in d["assets"].items() if v.get("kind") in ("video", "image", "matte")}
+    return hash_inputs({"timeline": d, "faces": _fp(ctx, "perception/faces.json"), "scenes": _fp(ctx, "perception/scenes.json"),
+                        "speakers": _fp(ctx, "perception/speakers.json"), "broll": _fp(ctx, "broll/index.json"), "mezz": _mezz_fps(ctx),
+                        "code": _render_code_fp(), "v": VERSION, "crf": render.CRF})
 
 
 def _render(ctx: StageContext) -> dict:
@@ -385,10 +405,25 @@ def _render(ctx: StageContext) -> dict:
     # an enhanced clip's floor is its enhanced floor (room tone is lowered to it; the voice chain denoises against it)
     rt = {k: (s, e, round(db + ev[k][1], 1) if k in ev else db) for k, (s, e, db) in room_tones(ctx).items()}
     tl = _timeline(ctx)
-    luts, measured = clip_luts(ctx, tl)
-    meta = render.render_base(tl, ctx.ws.root, ctx.ws.path("render", "base.mov"), faces=_faces(ctx), room_tone=rt, luts=luts,
-                              stems_dir=ctx.ws.path("render", "stems"), scenes=_read_json(ctx, "perception", "scenes.json"),
-                              enhanced_voice=ev, speakers=_speakers(ctx))
+    base, meta_file = ctx.ws.path("render", "base.mov"), ctx.ws.path("render", "base.meta.json")
+    video_fp = _video_fp(ctx, tl)
+    prev = (_read_json(ctx, "render", "base.meta.json") or {}).get("video_fp")
+    meta_file.unlink(missing_ok=True)  # written again only after a successful render: never describes a half-written base
+    common = dict(room_tone=rt, stems_dir=ctx.ws.path("render", "stems"), enhanced_voice=ev, faces=_faces(ctx),
+                  scenes=_read_json(ctx, "perception", "scenes.json"), speakers=_speakers(ctx))
+    meta = None
+    if prev == video_fp and base.exists():  # only the sound changed (music, SFX, gains, ducking): keep the picture
+        try:
+            meta = render.render_base_audio(tl, ctx.ws.root, base, **common)
+            measured = (_read_json(ctx, "render", "base.grade.json") or {})
+        except Exception as exc:  # noqa: BLE001 — the audio-only path is an optimisation; the full render is the truth
+            log.warning("audio-only re-render failed (%s); rendering in full", exc)
+            meta = None
+    if meta is None:
+        luts, measured = clip_luts(ctx, tl)
+        meta = render.render_base(tl, ctx.ws.root, base, luts=luts, **common) | {"audio_only": False}
+        atomic_write_json(ctx.ws.path("render", "base.grade.json"), measured)
+    atomic_write_json(meta_file, {"video_fp": video_fp})
     return meta | {"voice_enhanced": sorted(ev), "grade": {"look": tl.grade.look, "strength": tl.grade.strength, "clips": measured}, "room_tone": {k: {"s": round(v[0] / 1e6, 2), "e": round(v[1] / 1e6, 2), "dbfs": v[2]} for k, v in rt.items()}}
 
 
@@ -420,11 +455,61 @@ def _overlay(ctx: StageContext) -> dict:
         overlay.render_overlay(props, ctx.ws.path("render", "behind.mov"), public_dir=ctx.ws.root, frames=(t.start_f, t.end_f - 1))
         behind_meta = matte.make_matte(ctx.ws.path("render", "base.mov"), t.start_f, t.end_f, ctx.ws.path("render", "matte.mkv"),
                                        (tl.width, tl.height), tl.fps)
-    meta = overlay.render_overlay(overlay.build_props(tl, ctx.ws.root, _faces(ctx), _read_json(ctx, "perception", "ocr.json"), _read_json(ctx, "perception", "scenes.json"),
-                                                      _speakers(ctx)),
-                                  ctx.ws.path("render", "overlay.mov"), public_dir=ctx.ws.root)
+    props = overlay.build_props(tl, ctx.ws.root, _faces(ctx), _read_json(ctx, "perception", "ocr.json"), _read_json(ctx, "perception", "scenes.json"),
+                                _speakers(ctx))
+    meta = render_overlay_partial(ctx, tl, props)
     return meta | {"caption_family": tl.captions.family if tl.captions else None, "titles": len(tl.titles), "flashes": len(tl.flashes),
                    "behind": behind_meta}
+
+
+def _public_fps(ctx: StageContext, props: dict) -> dict:
+    """Files the overlay reads from the workspace (pip clips, logo): a replaced file must re-render, same props or not."""
+    uris = {e.get("uri") for e in props.get("pips", []) + props.get("graphics", []) if e.get("uri") and "/" in str(e.get("uri"))}
+    return {u: _fp(ctx, u) for u in sorted(uris)}
+
+
+def render_overlay_partial(ctx: StageContext, tl: Timeline, props: dict) -> dict:
+    """Re-render only the overlay frames the timeline changed and splice them in (roadmap G1.5); otherwise in full.
+
+    Baseline = render/overlay.rendered.props.json, written only after a successful render or splice. Any failure in
+    the partial path falls back to a full render, so this optimisation can never fail an edit."""
+    import time
+
+    from reel import rediff, splice
+
+    out = ctx.ws.path("render", "overlay.mov")
+    base = ctx.ws.path("render", "overlay.rendered.props.json")
+    stamp = {"renderer": overlay.renderer_fingerprint(), "public": _public_fps(ctx, props)}
+    saved = json.loads(base.read_text()) if base.exists() and out.exists() else {}
+    old = saved.get("props") if all(saved.get(k) == v for k, v in stamp.items()) else None
+    ranges = rediff.changed_ranges(old, props)
+    base.unlink(missing_ok=True)
+    meta = None
+    t0 = time.time()
+    if ranges == []:  # nothing the overlay draws changed: the current overlay.mov is already right
+        meta = {"overlay_s": 0.0, "partial": {"ranges": [], "frames": 0}}
+    elif ranges:
+        chunks = []
+        try:
+            for k, (a, b) in enumerate(ranges):
+                c = ctx.ws.path("render", f".overlay_chunk{k}.mov")
+                overlay.render_overlay(props, c, public_dir=ctx.ws.root, frames=(a, b))
+                chunks.append((a, b, c))
+            splice.splice(out, chunks, out, total_f=int(props["duration_f"]), fps=tb.parse_rate(tl.fps))
+            meta = {"overlay_s": round(time.time() - t0, 1),
+                    "partial": {"ranges": [list(r) for r in ranges], "frames": sum(b - a + 1 for a, b in ranges)}}
+        except Exception as exc:  # noqa: BLE001 — fall back to the full render
+            log.warning("partial overlay render failed (%s); rendering in full", exc)
+        finally:
+            for _a, _b, c in chunks:
+                c.unlink(missing_ok=True)
+                c.with_suffix(".props.json").unlink(missing_ok=True)
+    if meta is None:
+        meta = overlay.render_overlay(props, out, public_dir=ctx.ws.root) | {"partial": None}
+    else:
+        atomic_write_json(out.with_suffix(".props.json"), props)  # variants re-render from the current props
+    atomic_write_json(base, {**stamp, "props": props})
+    return meta
 
 
 OVERLAY = Stage(name="overlay", input_hash=_overlay_hash, outputs=lambda ctx: [ctx.ws.path("render", "overlay.mov")], run=_overlay)
@@ -512,6 +597,62 @@ def _cover(ctx: StageContext) -> dict:
 
 COVER = Stage(name="cover", input_hash=_cover_hash, run=_cover,
               outputs=lambda ctx: [ctx.ws.path("render", "cover", f) for f in ("cover.jpg", "cover_clean.jpg", "cover.json")])
+
+# ------------------------------------------------------------------ hook preview in two looks (roadmap G1.6)
+
+
+def _preview_hash(ctx: StageContext) -> str:
+    return hash_inputs({"timeline": _fp(ctx, "timeline/timeline.json"), "finish": _fp(ctx, "plan/finish.json"), "brand": _opt_file(ctx.options.get("brand")),
+                        "code": _code_fp("preview", "render", "overlay"), "renderer": overlay.renderer_fingerprint(), "v": VERSION})
+
+
+def _preview(ctx: StageContext) -> dict:
+    """export/preview/hook_A.mp4 (the Editor's look) and hook_B.mp4 (another caption style + a contrasting colour look,
+    where the brand kit doesn't lock them), the opening seconds only, plus preview.json for the A/B choice."""
+    from reel import preview
+    from reel.validate import errors, validate_finish
+
+    inp = _inputs(ctx)
+    story = project.load_json_model(StoryPlan, ctx.ws.path("plan", "story.json"))
+    fin = project.load_json_model(FinishPlan, ctx.ws.path("plan", "finish.json"))
+    options = {"A": fin}
+    fam_b, look_b = preview.alternative(fin, story, inp.idx.caption_families, inp.brand)
+    if fam_b or look_b:
+        fin_b = preview.variant(fin, fam_b, look_b)
+        if not errors(validate_finish(fin_b, story, inp.words, inp.idx, inp.kids)):
+            options["B"] = fin_b
+    out = ctx.ws.path("export", "preview")
+    out.mkdir(parents=True, exist_ok=True)
+    fps = tb.parse_rate(_timeline(ctx).fps)
+    n = None
+    looks = {}
+    for name, f in options.items():
+        tl, _adapted = compile_for(ctx, inp, story, f)
+        n = n or min(tl.duration_f, preview.hook_end_f(tl, story) + round(preview.TAIL_S * fps))
+        short = preview.trim(tl, n)
+        base, ov = out / f".base_{name}.mov", out / f".overlay_{name}.mov"
+        luts, _m = clip_luts(ctx, short)
+        render.render_base(short, ctx.ws.root, base, faces=_faces(ctx), luts=luts, scenes=_read_json(ctx, "perception", "scenes.json"),
+                           speakers=_speakers(ctx))
+        props = overlay.build_props(short, ctx.ws.root, _faces(ctx), _read_json(ctx, "perception", "ocr.json"),
+                                    _read_json(ctx, "perception", "scenes.json"), _speakers(ctx))
+        overlay.render_overlay(props, ov, public_dir=ctx.ws.root)
+        preview.quick_composite(base, ov, out / f"hook_{name}.mp4")
+        for tmp in (base, ov, ov.with_suffix(".props.json")):
+            tmp.unlink(missing_ok=True)
+        looks[name] = {"caption_family": tl.captions.family if tl.captions else None, "look": tl.grade.look, "file": f"export/preview/hook_{name}.mp4",
+                       "plan": {"caption_family": fam_b, "look": look_b} if name == "B" else {}}
+    atomic_write_json(out / "preview.json", {"frames": n, "seconds": round(float(n / fps), 2), "options": looks, "chosen": None})
+    return {"options": sorted(looks), "frames": n}
+
+
+PREVIEW = Stage(name="preview", input_hash=_preview_hash, outputs=lambda ctx: [ctx.ws.path("export", "preview", "preview.json")], run=_preview)
+
+
+def preview_pipeline() -> list[Stage]:
+    """`run --preview-first`: everything up to the compiled timeline, then the two hook previews; the run ends there."""
+    return [*STAGES[:STAGES.index(COMPILE) + 1], PREVIEW]
+
 
 # ------------------------------------------------------------------ post copy pack (roadmap G1.1)
 

@@ -72,6 +72,15 @@ def brief_path(ws: Workspace, options: dict | None = None) -> str | None:
     return str(saved) if saved.exists() else None
 
 
+def studio_client(ws: Workspace) -> str | None:
+    """The client the owner set in Reel Studio (studio.json), if any."""
+    f = ws.path("studio.json")
+    try:
+        return (json.loads(f.read_text()).get("client") or None) if f.exists() else None
+    except ValueError:
+        return None
+
+
 def indexes(ws: Workspace):
     """Global asset libraries + this project's client b-roll pool (broll/index.json)."""
     from reel import assets

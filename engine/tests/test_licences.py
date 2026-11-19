@@ -117,6 +117,10 @@ def test_brief_fields_default_to_permissive_and_validate():
         Brief(project="x", purpose="ads")
     use = licences.UseContext.from_brief(Brief(project="x", client="Acme", use_categories=["political"], accept_credits=False), "p9")
     assert use.categories == {"political"} and not use.accept_credits and use.client == "Acme" and use.project == "p9"
+    # the Studio's client label fills in when the brief names none (CLI-made projects), never overrides it
+    assert licences.UseContext.from_brief(None, "p", "Globex").client == "Globex"
+    assert licences.UseContext.from_brief(Brief(project="x"), "p", "Globex").client == "Globex"
+    assert licences.UseContext.from_brief(Brief(project="x", client="Acme"), "p", "Globex").client == "Acme"
 
 
 def _idx() -> assets.Indexes:

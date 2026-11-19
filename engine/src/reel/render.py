@@ -397,11 +397,15 @@ def duck_expr(regions_f: list[list[int]], fps: Fraction, depth_db: float, attack
 def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = None, crf: int = CRF,
                   room_tone: dict[str, tuple[int, int, float]] | None = None, finish_audio: bool = True,
                   luts: dict[str, Path] | None = None, stems_dir: Path | None = None, scenes: dict | None = None,
-                  enhanced_voice: dict[str, tuple[Path, float]] | None = None, speakers: dict | None = None) -> list[str]:
+                  enhanced_voice: dict[str, tuple[Path, float]] | None = None, speakers: dict | None = None,
+                  audio_only: Path | None = None) -> list[str]:
     """`room_tone`: per mezzanine asset, the (start_us, end_us, dBFS) stretch to loop under its segments.
     `enhanced_voice`: per mezzanine asset, (sample-aligned 48 kHz voice file, room-tone gain dB) — the
     voice role reads that file; room tone still loops the mezzanine's own audio, at that gain.
-    `finish_audio=False` renders the raw cut voice only (used by sync tests)."""
+    `finish_audio=False` renders the raw cut voice only (used by sync tests).
+    `audio_only` (partial re-render, roadmap G1.5): write only the finished audio (PCM wav at this path) and the stems.
+    Each clip's picture becomes a 16×16 black placeholder of the same length, so the audio graph — the same voice trims,
+    room tone, music, SFX and ducking — is byte-for-byte the one a full render builds; the costly picture work is skipped."""
     problems = unsupported(tl)
     if problems:
         raise RenderError("timeline uses features the base renderer does not support yet: " + "; ".join(problems))
@@ -499,9 +503,12 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
                       f"fps={fps.numerator}/{fps.denominator},trim=end_frame={content_f},setpts=PTS-STARTPTS")
         if c.hold_f:  # freeze the last frame
             timing += f",tpad=stop_mode=clone:stop={c.hold_f}"
-        graph.append(f"[{k}:v]{timing},"
-                     f"{_geometry(cz, w, h, tl.width, tl.height, fps, clip_shots(c, fps, faces, scenes, (w, h), (tl.width, tl.height), speakers), (luts or {}).get(c.asset), tag=str(k))},setsar=1[g{k}]")
-        graph += transition_graph(k, f"g{k}", f"v{k}", c, head, tail, tl.width, tl.height, fps)
+        if audio_only:
+            graph.append(f"color=c=black:s=16x16:r={fps.numerator}/{fps.denominator},trim=end_frame={c.dur_f},setpts=PTS-STARTPTS[v{k}]")
+        else:
+            graph.append(f"[{k}:v]{timing},"
+                         f"{_geometry(cz, w, h, tl.width, tl.height, fps, clip_shots(c, fps, faces, scenes, (w, h), (tl.width, tl.height), speakers), (luts or {}).get(c.asset), tag=str(k))},setsar=1[g{k}]")
+            graph += transition_graph(k, f"g{k}", f"v{k}", c, head, tail, tl.width, tl.height, fps)
         a = voice.get(c.id[2:])
         if a is None:
             raise RenderError(f"no voice audio for {c.id}")
@@ -531,14 +538,17 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
     graph.append("".join(concat_in) + f"concat=n={len(base)}:v=1:a=1[vcat][vraw]")
     # full-frame b-roll: time-shifted to its slot and laid over the cut (the voice underneath is untouched)
     cur = "vcat"
-    for j, c in enumerate(brolls):
+    for j, c in enumerate([] if audio_only else brolls):
         w, h = sizes[c.asset]
         nxt = f"vb{j}"
         graph.append(f"[{broll_input[c.id]}:v]trim=end_frame={c.dur_f},setpts=PTS-STARTPTS+{c.at_f}*{fps.denominator}/{fps.numerator}/TB,"
                      f"{_geometry(c, w, h, tl.width, tl.height, fps, (0.5, 0.5), (luts or {}).get(c.asset))},setsar=1[brv{j}]")
         graph.append(f"[{cur}][brv{j}]overlay=0:0:eof_action=pass:repeatlast=0[{nxt}]")
         cur = nxt
-    graph += effects_graph(tl, cur, "vout", fps)
+    if audio_only:
+        graph.append(f"[{cur}]null[vout]")
+    else:
+        graph += effects_graph(tl, cur, "vout", fps)
 
     if not finish_audio:
         graph.append("[vraw]anull[aout]")
@@ -587,13 +597,35 @@ def build_command(tl: Timeline, root: Path, out: Path, *, faces: dict | None = N
         else:
             graph.append(f"{mix_in[0]}anull[aout]")
 
-    args += ["-filter_complex", ";".join(graph), "-map", "[vout]", "-map", "[aout]",
-             "-r", f"{fps.numerator}/{fps.denominator}", "-fps_mode", "cfr", *encode_args(out, crf=crf)]
+    if audio_only:
+        args += ["-filter_complex", ";".join(graph), "-map", "[aout]", "-c:a", "pcm_s16le", "-ar", str(AUDIO_RATE), "-ac", "2", str(audio_only),
+                 "-map", "[vout]", "-f", "null", "-"]
+    else:
+        args += ["-filter_complex", ";".join(graph), "-map", "[vout]", "-map", "[aout]",
+                 "-r", f"{fps.numerator}/{fps.denominator}", "-fps_mode", "cfr", *encode_args(out, crf=crf)]
     if stems_dir and finish_audio:
         stems_dir.mkdir(parents=True, exist_ok=True)
         for bus in ("dialogue", "music", "sfx"):
             args += ["-map", f"[{bus}_stem]", "-c:a", "pcm_s24le", "-ar", str(AUDIO_RATE), str(stems_dir / f"{bus}.wav")]
     return args
+
+
+def render_base_audio(tl: Timeline, root: Path, out: Path, *, room_tone: dict[str, tuple[int, int, float]] | None = None,
+                      stems_dir: Path | None = None, enhanced_voice: dict[str, tuple[Path, float]] | None = None, **kw) -> dict:
+    """A music / SFX / ducking-only change: rebuild the finished audio and the stems, then swap it into the existing
+    base.mov by stream copy (its picture is untouched, byte for byte)."""
+    t0 = time.time()
+    wav = tmp_path_for(out).with_suffix(".wav")
+    tools.run(build_command(tl, root, out, room_tone=room_tone, stems_dir=stems_dir, enhanced_voice=enhanced_voice, audio_only=wav, **kw))
+    tmp = tmp_path_for(out)
+    try:
+        tools.ffmpeg(["-y", "-i", str(out), "-i", str(wav), "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "pcm_s16le",
+                      "-ar", str(AUDIO_RATE), "-ac", "2", str(tmp)])
+        tmp.replace(out)
+    finally:
+        wav.unlink(missing_ok=True)
+        tmp.unlink(missing_ok=True)
+    return verify(tl, out) | {"render_s": round(time.time() - t0, 1), "audio_only": True}
 
 
 def render_base(tl: Timeline, root: Path, out: Path, *, faces: dict | None = None,

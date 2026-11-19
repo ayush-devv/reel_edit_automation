@@ -21,6 +21,21 @@ Done so far: the licence gate (asset-library phase A). It's on branch `engine/li
 
 ## Group 1: before the first paying client
 
+### Status (2026-11-20): all eight items built and tested
+
+The work is on branch `engine/licence-gate`, committed per item, not pushed.
+
+**Still open, and needing the owner:**
+- **G1.4 listening check.** The 33 tracks were re-measured with Beat This!; BPM now matches the publisher's listed tempo far more often. Nobody has listened to a drop landing after a hook yet.
+- **G1.5 real-project timing.** The partial re-render is proven frame-exact in tests:
+  - a spliced overlay is identical to a full render;
+  - an audio-only re-render gives identical sound and leaves the picture byte-identical.
+
+  The before/after revise-loop times on `_real_doac_v2` still need a real run, which re-buys a finish pass.
+- **G1.6 client review link.** The A/B choice is made in the Studio (project header) or with `reel preview-choose`. The client's review-link page doesn't show A/B yet.
+- **G1.8 trademark logos.** 21 brand-logo icons (Instagram, YouTube…) are indexed but marked `trademark` and never offered.
+- **Web type-check.** The web type-check is `npm run typecheck` (`tsc -b`). `tsc --noEmit -p .` checks nothing in this repo, because `tsconfig.json` only has references.
+
 **Build order and why:**
 - G1.1 → G1.2 → G1.3 → G1.4 first: each is small and independent, and each improves every reel.
 - G1.5 (partial re-render) comes next. It changes the render path and wants the earlier items' tests in place.

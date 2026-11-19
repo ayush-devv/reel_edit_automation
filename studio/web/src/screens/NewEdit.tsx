@@ -8,7 +8,8 @@ import { PageHeader } from "../components/Shell";
 import { Button, cx, Field, Notice, Panel, ProgressBar, Segmented, Select, TextArea, TextInput, Toggle } from "../components/ui";
 import { useStatus } from "../hooks/status";
 import { useQuery } from "../hooks/useQuery";
-import { EMPTY_FORM, formErrors, formWithDefaults, GENRES, GOALS, loadTemplates, PLATFORMS, saveTemplate, toBrief, type BriefForm } from "../lib/brief";
+import { USE_CATEGORIES } from "../api/types";
+import { clearLegacyTemplates, EMPTY_FORM, formErrors, formWithDefaults, GENRES, GOALS, legacyTemplates, PLATFORMS, templateToForm, toBrief, type BriefForm } from "../lib/brief";
 import { bytes, prettyId } from "../lib/format";
 import { screenFiles, takePendingFiles } from "../lib/pendingFiles";
 
@@ -63,8 +64,31 @@ export default function NewEdit() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
-  const [templates, setTemplates] = useState(loadTemplates);
+  const [templates, setTemplates] = useState<Record<string, Record<string, unknown>>>({});
+  const [brollFolder, setBrollFolder] = useState("");
+  const [previewFirst, setPreviewFirst] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+
+  // Brief templates live in the engine (~/.config/reel/templates.json); a browser's old copy is moved there once.
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        let all = await api.templates();
+        const old = legacyTemplates();
+        if (Object.keys(old).length) {
+          all = await api.saveTemplates({ ...old, ...all });
+          clearLegacyTemplates();
+        }
+        if (live) setTemplates(all);
+      } catch {
+        /* templates are optional */
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [api]);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const addFiles = (list: File[]) => {
@@ -116,7 +140,8 @@ export default function NewEdit() {
     }
     setBusy(true);
     try {
-      const { id } = await api.createProject({ files, name: form.name.trim(), brief: toBrief(form), brand: brand || null, reference_url: refUrl.trim() || null, stock }, (loaded, total) =>
+      const input = { files, name: form.name.trim(), brief: toBrief(form), brand: brand || null, reference_url: refUrl.trim() || null, stock, broll_folder: brollFolder.trim() || null, preview_first: previewFirst };
+      const { id } = await api.createProject(input, (loaded, total) =>
         setSent({ loaded, total }),
       );
       nav(`/p/${id}/live`);
@@ -145,7 +170,7 @@ export default function NewEdit() {
                 value=""
                 onChange={(e) => {
                   const t = templates[e.target.value];
-                  if (t) setForm((f) => ({ ...t, name: f.name }));
+                  if (t) setForm((f) => ({ ...templateToForm(t), name: f.name }));
                 }}
               >
                 <option value="">Use a brief template…</option>
@@ -247,6 +272,19 @@ export default function NewEdit() {
                     ? "The Editor writes searches from what is said and picks cutaways from Pixabay / Pexels (free for commercial use). Clips stay in this project."
                     : "Needs a free Pixabay API key (pixabay.com/api/docs). Add it in Settings."
                 }
+              />
+              <Toggle
+                checked={previewFirst}
+                onChange={setPreviewFirst}
+                label="Show two looks of the hook first"
+                description="Renders the opening seconds in the Editor's look and an alternative (caption style + colour). The full reel waits for your pick."
+              />
+              <TF
+                label="Client b-roll folder (optional)"
+                value={brollFolder}
+                onChange={setBrollFolder}
+                placeholder="/Users/you/Clients/acme/broll"
+                hint="A folder on this Mac with the client’s own cutaway clips. The Editor describes them and may cut to them."
               />
               <TF label="Reference reel (optional)" value={refUrl} onChange={setRefUrl} placeholder="/Users/you/Downloads/reference.mp4" hint="A video file on this Mac (links aren’t supported). The Editor studies its pacing and caption style." />
             </div>
@@ -352,6 +390,39 @@ export default function NewEdit() {
               </div>
             </div>
           </Panel>
+          <Panel title="Usage rights">
+            <p className="mb-4 text-meta text-fg-muted">Decides which music, sound effects and stock footage this reel may use. Most clients need nothing here.</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+              <SF label="What the reel is for" value={form.purpose} onChange={(v) => set("purpose", v as BriefForm["purpose"])}>
+                <option value="promo">A brand’s promotion (default)</option>
+                <option value="paid_ad">A paid ad</option>
+                <option value="organic">The creator’s own post</option>
+                <option value="editorial">News / editorial</option>
+              </SF>
+              <Toggle
+                checked={form.acceptCredits}
+                onChange={(v) => set("acceptCredits", v)}
+                label="The client accepts music credits in the caption"
+                description="Off: only music and sounds that need no credit are used (today’s free music library needs one)."
+              />
+              <fieldset className="col-span-2">
+                <legend className="mb-2 text-meta text-fg-secondary">The client is in one of these areas (some stock licences forbid them)</legend>
+                <div className="flex flex-wrap gap-x-6 gap-y-2">
+                  {USE_CATEGORIES.map((c) => (
+                    <label key={c} className="flex cursor-pointer items-center gap-2 text-body capitalize">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-[#F2A93B]"
+                        checked={form.useCategories.includes(c)}
+                        onChange={(e) => set("useCategories", e.target.checked ? [...form.useCategories, c] : form.useCategories.filter((x) => x !== c))}
+                      />
+                      {c}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
+          </Panel>
 
           {/* Docked action bar: a hairline above, the app background behind. No blur, no card. */}
           <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-line-subtle bg-bg-base py-4">
@@ -377,8 +448,7 @@ export default function NewEdit() {
                 onClick={() => {
                   const n = window.prompt("Save this brief as a template named:", form.client || "My template");
                   if (n) {
-                    saveTemplate(n, form);
-                    setTemplates(loadTemplates());
+                    api.saveTemplates({ ...templates, [n]: { ...form, name: "" } }).then(setTemplates, (e) => setError(friendlyError(e)));
                   }
                 }}
               >

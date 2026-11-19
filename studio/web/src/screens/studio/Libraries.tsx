@@ -97,6 +97,38 @@ function IndexForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+/** C2: the built-in packs (procedural + Kenney CC0 sound effects, Incompetech CC BY music), fetched as a job. */
+function StarterPacks({ onStarted }: { onStarted: () => void }) {
+  const api = useApi();
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-control bg-bg-raised px-4 py-3">
+      <p className="text-fg-secondary">The free starter packs give the Editor ~250 sound effects and ~30 music tracks, each with its licence.</p>
+      <Button
+        icon="download"
+        busy={busy}
+        onClick={async () => {
+          setBusy(true);
+          setMsg(null);
+          try {
+            await api.fetchStarterPacks();
+            setMsg("Downloading — it shows in the jobs list; the library fills in when it finishes.");
+            onStarted();
+          } catch (e) {
+            setMsg(friendlyError(e));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        Get the starter packs
+      </Button>
+      {msg && <span className="text-meta text-fg-secondary">{msg}</span>}
+    </div>
+  );
+}
+
 export default function Libraries() {
   const api = useApi();
   const lib = useQuery(() => api.libraries(), [api]);
@@ -146,6 +178,7 @@ export default function Libraries() {
                 ) : null
               }
             >
+              {(tab === "sfx" || tab === "music") && d[tab].length === 0 && <StarterPacks onStarted={lib.reload} />}
               {tab === "sfx" && (
                 <Table<SfxItem>
                   caption="Sound effects"

@@ -14,8 +14,9 @@ import { isJobTerminal } from "../../lib/status";
 import { useReelPlayer, type ReelPlayer } from "../../lib/reelPlayer";
 import { NotYet, useProject } from "./ProjectLayout";
 
-function VerdictCard({ p }: { p: Project }) {
+function VerdictCard({ p, onSeek }: { p: Project; onSeek: (t: number) => void }) {
   const v = p.verdict_detail;
+  const plain = v?.plain ?? [];
   const sendable = (v?.verdict ?? p.verdict) === "sendable";
   const fixable = p.proof.length > 0;
   return (
@@ -32,22 +33,51 @@ function VerdictCard({ p }: { p: Project }) {
           </Link>
         )}
       </div>
-      {v && v.warnings.length > 0 && (
-        <ul className="mt-3 space-y-1 text-meta text-fg-secondary" aria-label="Warnings">
-          {v.warnings.map((w) => (
-            <li key={w}>Warning · {w}</li>
-          ))}
-        </ul>
-      )}
-      {v && v.reasons.length > 0 && (
-        <ul className="mt-4 space-y-2">
-          {v.reasons.map((r) => (
-            <li key={r} className="flex gap-3 text-fg-primary">
-              <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-st-hold" aria-hidden="true" />
-              {r}
+      {plain.length > 0 && (
+        <ul className="mt-4 space-y-3" aria-label="What the checks found">
+          {plain.map((c) => (
+            <li key={c.gate} className="flex gap-3">
+              <span className={cx("mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full", c.status === "fail" ? "bg-st-hold" : "bg-fg-muted")} aria-hidden="true" />
+              <div className="min-w-0">
+                <p className="text-fg-primary">
+                  <span className="font-medium">{c.title}.</span> {c.sentence}
+                  {c.status === "warn" && <span className="ml-2 text-meta text-fg-muted">(warning)</span>}
+                </p>
+                {c.at.length > 0 && (
+                  <p className="mt-1 flex flex-wrap gap-x-3 font-mono text-mono">
+                    {c.at.map((t) => (
+                      <button key={t} type="button" className="text-info hover:underline" onClick={() => onSeek(tcToSeconds(t))} aria-label={`Jump to ${t}`}>
+                        {t}
+                      </button>
+                    ))}
+                  </p>
+                )}
+              </div>
             </li>
           ))}
         </ul>
+      )}
+      {v && v.reasons.some((r) => r.startsWith("reviewer")) && (
+        <ul className="mt-4 space-y-2" aria-label="Reviewer">
+          {v.reasons
+            .filter((r) => r.startsWith("reviewer"))
+            .map((r) => (
+              <li key={r} className="flex gap-3 text-fg-primary">
+                <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-st-hold" aria-hidden="true" />
+                {r.replace(/^reviewer[^:]*:\s*/, "The Reviewer: ")}
+              </li>
+            ))}
+        </ul>
+      )}
+      {v && (v.reasons.length > 0 || v.warnings.length > 0) && (
+        <details className="mt-4 text-meta text-fg-muted">
+          <summary className="cursor-pointer select-none">Details (the engine’s wording)</summary>
+          <ul className="mt-2 space-y-1">
+            {[...v.reasons, ...v.warnings.map((w) => `Warning · ${w}`)].map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+        </details>
       )}
     </section>
   );
@@ -253,7 +283,7 @@ export default function Review() {
     <div className="grid grid-cols-12 gap-x-10 gap-y-6">
       <div className="col-span-12 lg:col-span-5">{player ? <PhonePreview player={player} client={p.client ?? "client"} /> : <Loading label="Loading the reel…" />}</div>
       <div className="col-span-12 lg:col-span-7">
-        <VerdictCard p={p} />
+        <VerdictCard p={p} onSeek={seek} />
         {(p.proof.length > 0 || proofBusy) && (
           <Panel title="Proof words" actions={<span className="text-meta text-fg-muted">Click a word to jump to it</span>}>
             {proofBusy && (

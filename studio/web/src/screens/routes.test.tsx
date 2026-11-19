@@ -72,6 +72,25 @@ describe("screens", () => {
     expect((await api.reviewLinks(HOLD)).links[0].state).toBe("revoked");
   });
 
+  it("review explains each failed check in plain words with jump links", async () => {
+    render(<TestApp api={createMockApi()} path={`/p/${HOLD}/review`} />);
+    const list = await screen.findByRole("list", { name: "What the checks found" }, T);
+    expect(within(list).getByText(/speech recogniser was unsure/)).toBeInTheDocument();
+    expect(within(list).getByRole("button", { name: "Jump to 0:12.40" })).toBeInTheDocument();
+    expect(screen.getByText("Details (the engine’s wording)")).toBeInTheDocument();
+  });
+
+  it("renames a project and sets its client from the header", async () => {
+    const api = createMockApi();
+    render(<TestApp api={api} path={`/p/${HOLD}/review`} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Rename project or set the client" }, T));
+    fireEvent.change(screen.getByRole("textbox", { name: "Project name" }), { target: { value: "Juice myth" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Client" }), { target: { value: "Globex" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByRole("heading", { name: "Juice myth" }, T)).toBeInTheDocument();
+    expect((await api.project(HOLD)).client).toBe("Globex");
+  });
+
   it("deliver shows the post copy with a copy button per field", async () => {
     render(<TestApp api={createMockApi()} path={`/p/${HOLD}/deliver`} />);
     expect(await screen.findByText("Instagram caption", undefined, T)).toBeInTheDocument();

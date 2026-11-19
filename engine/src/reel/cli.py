@@ -61,6 +61,16 @@ def _cmd_run(args: argparse.Namespace) -> int:
         state = run_pipeline(ws, PIPELINE, options=options, force=set(args.force or []))
         _print_state(state, ws)
         return 0
+    if getattr(args, "preview_first", False):  # stop after the two hook previews; `reel preview-choose` continues
+        from reel.stages import edit
+
+        state = run_pipeline(ws, [*PIPELINE, *edit.preview_pipeline()], options=options, force=set(args.force or []))
+        _print_state(state, ws)
+        pv = ws.path("export", "preview", "preview.json")
+        if pv.exists():
+            print(f"\nhook previews: {', '.join(json.loads(pv.read_text())['options'])} in {pv.parent} — pick with "
+                  f"`reel preview-choose --project {ws.root} --option A|B`")
+        return 0
     from reel import autofix
 
     res = autofix.run(ws, EDIT_PIPELINE, options, force=set(args.force or []))
@@ -101,6 +111,33 @@ def _cmd_licences(args: argparse.Namespace) -> int:
         for aid, rs in sorted(refused.items()):
             print(f"  {aid}: {licences.reason(rs)}")
     return 1 if c["unresolved"] else 0
+
+
+def _cmd_preview_choose(args: argparse.Namespace) -> int:
+    from reel import preview
+    from reel.workspace import Workspace
+
+    try:
+        data = preview.choose(Workspace(Path(args.project).resolve()), args.option)
+    except ValueError as exc:
+        print(f"not applied: {exc}")
+        return 1
+    o = data["options"][args.option]
+    print(f"chose {args.option}: caption style {o['caption_family']}, look {o['look']} — now `reel run` renders the full reel")
+    return 0
+
+
+def _cmd_add_asset(args: argparse.Namespace) -> int:
+    from reel import library
+
+    try:
+        e = library.add_file(Path(args.file).expanduser(), kind=args.kind, licence_id=args.licence, source=args.source,
+                             source_url=args.source_url, attribution=args.attribution, credit=args.credit, category=args.category, mood=args.mood)
+    except ValueError as exc:
+        print(f"not added: {exc}")
+        return 1
+    print(f"added {e['id']} ({args.kind}, {e.get('licence_id')}) → {e['file']}")
+    return 0
 
 
 def _cmd_remeasure_music(args: argparse.Namespace) -> int:
@@ -489,6 +526,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--skip-visual", action="store_true", help="skip OCR, scenes, faces, palette, motion (faster)")
     p.add_argument("--no-voice-enhance", action="store_true", help="keep the original voice (no DeepFilterNet; the ffmpeg chain still applies)")
     p.add_argument("--analyse-only", action="store_true", help="stop after the footage tables (no Claude calls)")
+    p.add_argument("--preview-first", action="store_true", help="stop after rendering the hook in two looks (A/B) for the client to pick")
     p.add_argument("--skip-review", action="store_true", help="QA gates only, no Reviewer call")
     p.add_argument("--reference", help="a finished reel the client likes: its pacing, captions and colour become the style to match")
     p.add_argument("--broll", help="folder of client b-roll clips (conformed, described by Claude, offered to the Editor)")
@@ -543,6 +581,23 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--license", required=True, help="licence summary stored with every file")
     p.add_argument("--replace", action="store_true", help="drop previously indexed files from the same source first")
     p.set_defaults(func=_cmd_library)
+
+    p = sub.add_parser("preview-choose", help="apply the client's hook-preview pick (A or B) to the plan; then `reel run` renders it")
+    p.add_argument("--project", required=True)
+    p.add_argument("--option", required=True, choices=["A", "B"])
+    p.set_defaults(func=_cmd_preview_choose)
+
+    p = sub.add_parser("add-asset", help="add ONE hand-picked SFX / music / Lottie file with its licence and source (never bulk)")
+    p.add_argument("file")
+    p.add_argument("--kind", required=True, choices=["sfx", "music", "lottie"])
+    p.add_argument("--licence", required=True, help="a licence id from assets/licenses/registry.yaml, e.g. cc0-1.0, pixabay-content")
+    p.add_argument("--source", required=True, help='where it came from, e.g. "Pixabay", "Freesound"')
+    p.add_argument("--source-url", default="", help="the page you downloaded it from")
+    p.add_argument("--attribution", default="", help="exact credit text, when the licence requires one")
+    p.add_argument("--credit", default="", help="an optional credit the author asked for")
+    p.add_argument("--category", help="SFX category when the file name doesn't say it")
+    p.add_argument("--mood", help="music mood")
+    p.set_defaults(func=_cmd_add_asset)
 
     p = sub.add_parser("licences", help="licence of every library asset (assets/licenses/registry.yaml); exit 1 if any has none")
     p.add_argument("--backfill", action="store_true", help="write licence ids (and missing sha256) into the committed indexes")

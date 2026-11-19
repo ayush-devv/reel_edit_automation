@@ -18,6 +18,7 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
   let settings = clone(SETTINGS);
   // Review links: one sample note on the hold project, so the Revise inbox has something to show.
   const links = new Map<string, ReviewLink[]>();
+  let templates: Record<string, Record<string, unknown>> = {};
   const clientNotes = new Map<string, ReviewNote[]>([
     ["glow-serum-testimonial", [{ at: Date.now() / 1000 - 3600, link: "mockLink", name: "Priya (DearMa)", text: "0:12 spell the brand DearMa\nlove the ending" }]],
   ]);
@@ -226,6 +227,39 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
       await guard();
       must(id);
       projects.delete(id);
+    },
+    async updateProject(id, patch) {
+      await guard();
+      const p = must(id);
+      if (patch.name !== undefined) {
+        if (!patch.name.trim() || patch.name.length > 120) throw new ApiError(400, "a project name (1–120 characters) is required");
+        p.name = patch.name.trim();
+      }
+      if (patch.client !== undefined) p.client = patch.client?.trim() || null;
+      touch(p);
+    },
+    async templates() {
+      await guard();
+      return clone(templates);
+    },
+    async saveTemplates(all) {
+      await guard();
+      templates = clone(all);
+      return clone(templates);
+    },
+    async choosePreview(id, option) {
+      await guard();
+      const p = must(id);
+      if (!p.preview?.options[option]) throw new ApiError(400, `option ${option} is not available`);
+      p.preview = { ...p.preview, chosen: option };
+      p.status = "running";
+      p.needs_attention = [];
+      touch(p);
+      return job(id, "run", `Edit with look ${option}`);
+    },
+    async fetchStarterPacks() {
+      await guard();
+      return job("_library", "assets_fetch", "Get the starter packs");
     },
     async retry(id, stage) {
       await guard();

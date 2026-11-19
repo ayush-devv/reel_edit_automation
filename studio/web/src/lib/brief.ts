@@ -1,5 +1,5 @@
 // Brief form ⇄ engine Brief (engine/src/reel/brief.py, extra="forbid": only these keys may be sent).
-import type { Brief } from "../api/types";
+import type { Brief, UseCategory } from "../api/types";
 
 export const PLATFORMS = [
   { id: "platform.instagram_reels", label: "Instagram Reels" },
@@ -52,6 +52,10 @@ export interface BriefForm {
   notes: string;
   feed45: boolean;
   square: boolean;
+  /** Usage rights (licence gate): a political client can't use Pixabay assets, etc. */
+  useCategories: UseCategory[];
+  purpose: "editorial" | "organic" | "promo" | "paid_ad";
+  acceptCredits: boolean;
 }
 
 export const EMPTY_FORM: BriefForm = {
@@ -74,6 +78,9 @@ export const EMPTY_FORM: BriefForm = {
   notes: "",
   feed45: false,
   square: false,
+  useCategories: [],
+  purpose: "promo",
+  acceptCredits: true,
 };
 
 /** The owner's defaults (Settings → default brief and deliverables, FR-12) applied to an empty form. */
@@ -126,27 +133,37 @@ export function toBrief(f: BriefForm): Brief {
     vocabulary: csv(f.vocabulary),
     notes: opt(f.notes),
     deliverables: [...(f.feed45 ? (["feed_4x5"] as const) : []), ...(f.square ? (["square"] as const) : [])],
+    use_categories: f.useCategories,
+    purpose: f.purpose,
+    accept_credits: f.acceptCredits,
   };
   return brief;
 }
 
+/** A saved template (server-side) back into a form: unknown keys dropped, missing keys from EMPTY_FORM. */
+export function templateToForm(t: Record<string, unknown>): BriefForm {
+  const f: BriefForm = { ...EMPTY_FORM };
+  for (const k of Object.keys(EMPTY_FORM) as (keyof BriefForm)[]) {
+    if (k in t && typeof t[k] === typeof EMPTY_FORM[k]) (f as unknown as Record<string, unknown>)[k] = t[k];
+  }
+  return { ...f, name: "" };
+}
+
 const TEMPLATES_KEY = "reel.briefTemplates";
 
-/** Brief templates are a per-browser convenience (localStorage), minus the project name. */
-export function loadTemplates(): Record<string, BriefForm> {
+/** Templates this browser saved before they moved to the engine (read once, migrated, then cleared). */
+export function legacyTemplates(): Record<string, Record<string, unknown>> {
   try {
-    return JSON.parse(localStorage.getItem(TEMPLATES_KEY) ?? "{}") as Record<string, BriefForm>;
+    return JSON.parse(localStorage.getItem(TEMPLATES_KEY) ?? "{}") as Record<string, Record<string, unknown>>;
   } catch {
     return {};
   }
 }
 
-export function saveTemplate(name: string, f: BriefForm): void {
+export function clearLegacyTemplates(): void {
   try {
-    const all = loadTemplates();
-    all[name] = { ...f, name: "" };
-    localStorage.setItem(TEMPLATES_KEY, JSON.stringify(all));
+    localStorage.removeItem(TEMPLATES_KEY);
   } catch {
-    /* storage unavailable: templates are optional */
+    /* storage unavailable */
   }
 }

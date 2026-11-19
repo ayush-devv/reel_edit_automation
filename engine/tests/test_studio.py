@@ -473,6 +473,79 @@ def test_cli_rerun_and_revise_args(tmp_path, monkeypatch):
 # ------------------------------------------------------------------ unified contract: package, delivered, settings, lab, libraries
 
 
+def test_rename_and_set_client_without_touching_the_brief(env):
+    ws = make_project(env["root"])
+    c = env["c"]
+    assert c.patch("/api/projects/p1", json={"name": "  Juice myth  ", "client": "Globex"}).status_code == 204
+    p = c.get("/api/projects/p1").json()
+    assert p["name"] == "Juice myth" and p["client"] == "Globex"
+    assert c.patch("/api/projects/p1", json={"client": ""}).status_code == 204
+    assert c.get("/api/projects/p1").json()["client"] is None
+    assert c.patch("/api/projects/p1", json={"name": ""}).status_code in (400, 422)
+    assert json.loads((ws / "run_options.json").read_text())["brief"] is None  # the Editor's inputs are unchanged
+    from reel import project as project_mod
+    from reel.workspace import Workspace
+
+    c.patch("/api/projects/p1", json={"client": "Globex"})
+    assert project_mod.studio_client(Workspace(ws)) == "Globex"  # the licence gate's fallback client
+
+
+def test_templates_live_on_the_engine(env):
+    c = env["c"]
+    assert c.get("/api/templates").json() == {}
+    saved = c.put("/api/templates", json={"templates": {"Acme reels": {"client": "Acme", "purpose": "promo"}}}).json()
+    assert saved == {"Acme reels": {"client": "Acme", "purpose": "promo"}} and c.get("/api/templates").json() == saved
+    f = env["s"].prefs_file.parent / "templates.json"
+    assert (f.stat().st_mode & 0o777) == 0o600
+    assert c.put("/api/templates", json={"templates": {" ": {}}}).status_code == 400
+
+
+def test_starter_packs_run_as_a_library_job(env):
+    r = env["c"].post("/api/library/starter-packs")
+    assert r.status_code == 200 and r.json()["job"]["project"] == "_library"
+    assert env["launcher"].procs[-1][0].argv[3:] == ["assets", "fetch"]
+
+
+def test_plain_verdict_and_eta(env):
+    ws = make_project(env["root"])
+    v = env["c"].get("/api/projects/p1").json()["verdict_detail"]
+    assert v["plain"] == [{"gate": "reading_speed", "status": "warn", "title": "Reading speed",
+                           "sentence": "Captions go by faster than people can read in one stretch.", "at": [], "detail": "fast"}]
+    from reel.studio import projects as pr
+
+    for k in range(3):  # three finished projects, every stage 0.5 s per footage second (60 s footage → 30 s)
+        other = make_project(env["root"], f"q{k}")
+        st = json.loads((other / "state.json").read_text())
+        for e in st["stages"].values():
+            e["started"] = e["finished"] - 30
+        _w(other / "state.json", st)
+    stl = [{"name": "render", "status": "running", "started": 1000.0}, {"name": "overlay", "status": "pending"}]
+    assert pr.eta_s(ws, stl, now=1010.0) == 20 + 30  # render: 30 − 10 s spent; overlay: 30
+    assert pr.eta_s(ws, [{"name": "never_seen", "status": "pending"}]) is None  # < 3 samples: unknown, not a guess
+
+
+def test_create_project_checks_the_broll_folder(env, tmp_path):
+    files = {"files": ("a.mp4", b"x" * 10, "video/mp4")}
+    r = env["c"].post("/api/projects", data={"name": "x", "broll_folder": str(tmp_path / "nope")}, files=files)
+    assert r.status_code in (400, 503) and ("b-roll" in r.text or "toolchain" in r.text.lower())
+
+
+def test_hook_preview_waits_for_the_pick_then_renders(env):
+    ws = make_project(env["root"])
+    (ws / "qa" / "verdict.json").unlink()  # a --preview-first run: no render, no verdict yet
+    _w(ws / "export" / "preview" / "preview.json", {"frames": 90, "chosen": None, "options": {
+        "A": {"caption_family": "bold_pop", "look": "clean", "file": "export/preview/hook_A.mp4", "plan": {}},
+        "B": {"caption_family": "clean_phrase", "look": "warm", "file": "export/preview/hook_B.mp4", "plan": {"look": "warm"}}}})
+    c = env["c"]
+    p = c.get("/api/projects/p1").json()
+    assert p["status"] == "awaiting_choice" and "pick the hook look (A/B)" in p["needs_attention"] and p["preview"]["options"]["B"]["look"] == "warm"
+    assert c.post("/api/projects/p1/preview/choose", json={"option": "Z"}).status_code == 400  # the Studio maps validation errors to 400
+    r = c.post("/api/projects/p1/preview/choose", json={"option": "B"})
+    assert r.status_code == 200 and "--preview-first" not in env["launcher"].procs[-1][0].argv
+    assert json.loads((ws / "plan" / "finish.json").read_text())["grade"]["look"] == "warm"
+    assert c.get("/api/projects/p1").json()["preview"]["chosen"] == "B"
+
+
 def test_post_copy_route_serves_only_the_credited_version(env):
     ws = make_project(env["root"])
     c = env["c"]

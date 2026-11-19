@@ -169,6 +169,10 @@ export function makeProjects(): Project[] {
         gate("black", "pass", "0 black stretch(es)"),
         gate("reading_speed", "warn", "max 21.4 chars/s (limit 20)"),
       ],
+      plain: [
+        { gate: "proof_words", status: "fail", title: "Caption words to check", sentence: "1 caption word(s) the speech recogniser was unsure of — confirm or correct them.", at: ["0:12.40"], detail: "1 unconfirmed caption word(s)" },
+        { gate: "reading_speed", status: "warn", title: "Reading speed", sentence: "Captions go by faster than people can read in one stretch.", at: [], detail: "max 21.4 chars/s (limit 20)" },
+      ],
     },
     proof: [
       { i: 42, text: "Dioma", suggestion: "DearMa", at: "0:12.40", frame: 372, why: "unconfirmed name" },

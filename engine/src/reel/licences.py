@@ -197,11 +197,13 @@ class UseContext:
     today: dt.date = field(default_factory=dt.date.today)
 
     @classmethod
-    def from_brief(cls, brief, project: str = "") -> UseContext:
+    def from_brief(cls, brief, project: str = "", fallback_client: str | None = None) -> UseContext:
+        """`fallback_client`: the Studio's client label (rename / set client), used when the brief names none — otherwise
+        the single-client rule would never see the client of a project made from the command line."""
         if brief is None:
-            return cls(project=project)
-        return cls(client=brief.client, platform=brief.platform, categories=frozenset(brief.use_categories), purpose=brief.purpose,
-                   accept_credits=brief.accept_credits, project=project)
+            return cls(project=project, client=fallback_client or None)
+        return cls(client=brief.client or fallback_client or None, platform=brief.platform, categories=frozenset(brief.use_categories),
+                   purpose=brief.purpose, accept_credits=brief.accept_credits, project=project)
 
 
 Refusal = tuple[str, str]  # (code, message)

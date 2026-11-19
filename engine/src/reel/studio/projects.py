@@ -27,7 +27,7 @@ ID_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 MEDIA_PREFIXES = ("render/", "export/", "qa/sheets/", "qa/cuts/", "versions/")  # the NLE package is export/package/
 COVER_RE = re.compile(r"^cover[^/]*\.jpg$")
 STUDIO_FILE = "studio.json"
-ATTENTION_ORDER = {"hold": 0, "failed": 1, "sendable": 2, "running": 3, "queued": 4, "draft": 5, "delivered": 6}
+ATTENTION_ORDER = {"hold": 0, "awaiting_choice": 0, "failed": 1, "sendable": 2, "running": 3, "queued": 4, "draft": 5, "delivered": 6}
 
 
 def read_json(path: Path, default=None):
@@ -153,6 +153,10 @@ def summary(ws: Path, job: str | None = None) -> dict:
     st = stages(ws, job)
     status, stage = project_status(st, verdict, job)
     attention = []
+    pv = read_json(ws / "export" / "preview" / "preview.json")
+    if status == "draft" and pv and not pv.get("chosen"):  # a --preview-first run ended at the hook previews (G1.6)
+        status = "awaiting_choice"
+        attention.append("pick the hook look (A/B)")
     if status == "failed":
         attention.append(f"failed: {stage}")
     proof = (verdict or {}).get("proof_open") or []
@@ -341,11 +345,15 @@ def verdict_detail(ws: Path) -> dict | None:
     v = read_json(ws / "qa" / "verdict.json")
     if not v:
         return None
+    from reel import verdict_plain
+
     gates = []
-    for g in read_json(ws / "qa" / "gates.json", []) or []:
+    raw = read_json(ws / "qa" / "gates.json", []) or []
+    for g in raw:
         status = "pass" if g.get("ok") else ("fail" if g.get("mode") == "block" else "warn")
         gates.append({"name": g.get("gate"), "status": status, "detail": g.get("detail", ""), "measured": g.get("measured") or {}})
-    return {"verdict": v.get("status"), "reasons": v.get("reasons", []), "warnings": v.get("warnings", []), "gates": gates}
+    return {"verdict": v.get("status"), "reasons": v.get("reasons", []), "warnings": v.get("warnings", []), "gates": gates,
+            "plain": verdict_plain.explain(raw)}  # one plain sentence per check that didn't pass (UI plan A1)
 
 
 def review_view(ws: Path) -> dict | None:
@@ -523,14 +531,57 @@ def brief_and_brand(ws: Path) -> tuple[dict | None, str | None]:
     return brief, brand
 
 
+ETA_MIN_SAMPLES = 3
+
+
+def stage_rates(root: Path) -> dict[str, list[float]]:
+    """Seconds each stage took per second of footage, across this Mac's finished projects (UI plan B1)."""
+    rates: dict[str, list[float]] = {}
+    for ws in list_dirs(root):
+        footage = float(studio_meta(ws).get("footage_s") or 0)
+        if footage <= 0:
+            continue
+        for name, e in ((read_json(ws / "state.json", {}) or {}).get("stages") or {}).items():
+            if e.get("status") == "done" and e.get("started") and e.get("finished") and e.get("input_hash") not in ("none", "off"):
+                dur = float(e["finished"]) - float(e["started"])
+                if dur > 0:
+                    rates.setdefault(name, []).append(dur / footage)
+    return rates
+
+
+def eta_s(ws: Path, stage_list: list[dict], now: float | None = None) -> int | None:
+    """Seconds left: the median time of every stage still to run, scaled by this project's footage length, minus
+    the time the running stage has already spent. None until every remaining stage has ≥ 3 finished samples."""
+    import statistics
+    import time as _time
+
+    footage = float(studio_meta(ws).get("footage_s") or 0)
+    left = [st for st in stage_list if st["status"] in ("pending", "queued", "running")]
+    if footage <= 0 or not left:
+        return None
+    rates = stage_rates(ws.parent)
+    total = 0.0
+    for st in left:
+        r = rates.get(st["name"], [])
+        if len(r) < ETA_MIN_SAMPLES:
+            return None
+        need = statistics.median(r) * footage
+        if st["status"] == "running" and st.get("started"):
+            need = max(need * 0.1, need - ((now or _time.time()) - float(st["started"])))  # never "0 s left" while it runs
+        total += need
+    return int(round(total))
+
+
 def detail(ws: Path, job: str | None = None) -> dict:
     s = summary(ws, job)
     brief, brand = brief_and_brand(ws)
     verdict = read_json(ws / "qa" / "verdict.json") or {}
-    return s | {"brief": brief, "brand": brand, "stages": stages(ws, job), "decisions": decisions(ws),
+    st = stages(ws, job)
+    return s | {"brief": brief, "brand": brand, "stages": st, "decisions": decisions(ws),
                 "verdict_detail": verdict_detail(ws), "proof": verdict.get("proof_open") or [], "review": review_view(ws),
                 "media": media_view(ws), "versions": versions(ws), "calls": costs.calls(ws / "log" / "runs.jsonl"),
-                "platform_notes": platform_notes(ws), "eta_s": None}
+                "platform_notes": platform_notes(ws), "eta_s": eta_s(ws, st) if s.get("status") in ("running", "queued") else None,
+                "preview": read_json(ws / "export" / "preview" / "preview.json")}
 
 
 TIMELINE_LISTS = ("video", "audio", "transitions", "ducking", "titles", "flashes", "pips", "effects", "graphics")

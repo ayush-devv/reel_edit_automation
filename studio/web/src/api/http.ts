@@ -52,6 +52,8 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
     if (input.brand) form.append("brand", input.brand);
     if (input.reference_url) form.append("reference_url", input.reference_url);
     if (input.stock) form.append("stock", "1");
+    if (input.broll_folder) form.append("broll_folder", input.broll_folder);
+    if (input.preview_first) form.append("preview_first", "1");
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${base}/api/projects`);
@@ -83,6 +85,11 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
     project: (id) => get(`/api/projects/${enc(id)}`),
     createProject,
     deleteProject: (id) => request("DELETE", `/api/projects/${enc(id)}`),
+    updateProject: (id, patch) => request("PATCH", `/api/projects/${enc(id)}`, patch),
+    templates: () => get("/api/templates"),
+    saveTemplates: (all) => request("PUT", "/api/templates", { templates: all }),
+    fetchStarterPacks: () => post<JobRef>("/api/library/starter-packs"),
+    choosePreview: (id, option) => post<JobRef>(`/api/projects/${enc(id)}/preview/choose`, { option }),
     retry: (id, stage) => post<JobRef>(`/api/projects/${enc(id)}/retry`, stage ? { stage } : {}),
     cancel: (id) => post(`/api/projects/${enc(id)}/cancel`),
     timeline: (id) => get(`/api/projects/${enc(id)}/timeline`),

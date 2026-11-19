@@ -35,7 +35,14 @@ export interface NewProjectInput {
   reference_url?: string | null;
   /** Find stock b-roll on Pexels for this talk at edit time (needs the Pexels key in Settings). */
   stock?: boolean;
+  /** A folder of the client's own b-roll on this Mac (absolute path). */
+  broll_folder?: string | null;
+  /** Stop after rendering the hook in two looks for the client to pick (A/B). */
+  preview_first?: boolean;
 }
+
+/** Saved brief templates (server-side, ~/.config/reel/templates.json): name → form values. */
+export type Templates = Record<string, Record<string, unknown>>;
 
 /** Bytes sent so far, for the per-file progress bars (FR-2). */
 export type UploadProgress = (loaded: number, total: number) => void;
@@ -49,6 +56,14 @@ export interface Api {
   project(id: string): Promise<Project>;
   createProject(input: NewProjectInput, onProgress?: UploadProgress): Promise<{ id: string; job: Job }>;
   deleteProject(id: string): Promise<void>;
+  /** Rename a project or set its client (the Studio's label; the brief the Editor read is not changed). */
+  updateProject(id: string, patch: { name?: string; client?: string | null }): Promise<void>;
+  templates(): Promise<Templates>;
+  saveTemplates(all: Templates): Promise<Templates>;
+  /** Apply the hook-preview pick (A/B) and render the full reel. */
+  choosePreview(id: string, option: "A" | "B"): Promise<JobRef>;
+  /** Fetch the built-in SFX and music packs (`reel assets fetch`) as a job. */
+  fetchStarterPacks(): Promise<JobRef>;
   retry(id: string, stage?: string): Promise<JobRef>;
   cancel(id: string): Promise<void>;
   timeline(id: string): Promise<TimelineView>;
