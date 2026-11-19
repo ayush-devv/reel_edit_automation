@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useApi } from "../../api/context";
 import { friendlyError } from "../../api/errors";
-import type { BrollItem, CaptionFamily, MusicItem, SfxItem } from "../../api/types";
+import type { BrollItem, CaptionFamily, LicenceFields, MusicItem, SfxItem } from "../../api/types";
 import { Icon } from "../../components/icons";
 import { PageHeader } from "../../components/Shell";
 import { Table } from "../../components/Table";
@@ -12,6 +12,16 @@ import { useQuery } from "../../hooks/useQuery";
 import { prettyId } from "../../lib/format";
 
 type Tab = "sfx" | "music" | "broll" | "captions";
+
+/** Licence as the gate sees it: the registry id, the text as recorded (hover), and a refusal reason in red. */
+function LicenceCell({ r, extra }: { r: LicenceFields & { license: string; source?: string }; extra?: string | null }) {
+  return (
+    <span className="flex flex-col" title={[r.source, r.license, extra].filter(Boolean).join(" — ")}>
+      <span className="text-fg-secondary">{r.licence_id ?? r.license}</span>
+      {r.licence_problem && <span className="text-meta text-st-fail">{r.licence_problem}</span>}
+    </span>
+  );
+}
 const ms = (n: number) => (n >= 60000 ? `${Math.floor(n / 60000)}:${String(Math.round((n % 60000) / 1000)).padStart(2, "0")}` : `${(n / 1000).toFixed(1)} s`);
 
 function PlayButton({ src, label }: { src: string; label: string }) {
@@ -147,7 +157,7 @@ export default function Libraries() {
                     { key: "id", label: "Sound", render: (r) => <span className="text-fg-primary">{r.id}</span> },
                     { key: "c", label: "Category", render: (r) => <span className="rounded bg-bg-overlay px-1.5 py-0.5 text-label text-fg-secondary">{r.category}</span> },
                     { key: "d", label: "Length", align: "right", render: (r) => <Mono className="text-fg-secondary">{ms(r.duration_ms)}</Mono> },
-                    { key: "l", label: "Licence", render: (r) => <span className="text-fg-secondary">{r.source} — {r.license}</span> },
+                    { key: "l", label: "Licence", render: (r) => <LicenceCell r={r} /> },
                   ]}
                 />
               )}
@@ -163,7 +173,7 @@ export default function Libraries() {
                     { key: "m", label: "Mood", render: (r) => <span className="text-fg-secondary">{r.mood}</span> },
                     { key: "b", label: "Tempo", align: "right", render: (r) => <Mono className="text-fg-secondary">{r.bpm} bpm</Mono> },
                     { key: "d", label: "Length", align: "right", render: (r) => <Mono className="text-fg-secondary">{ms(r.duration_ms)}</Mono> },
-                    { key: "l", label: "Licence", render: (r) => <span className="text-fg-secondary" title={r.attribution ?? undefined}>{r.license}</span> },
+                    { key: "l", label: "Licence", render: (r) => <LicenceCell r={r} extra={r.attribution} /> },
                   ]}
                 />
               )}
@@ -178,7 +188,7 @@ export default function Libraries() {
                     { key: "d", label: "Clip", render: (r) => <span className="text-fg-primary">{r.description}</span> },
                     { key: "s", label: "Shot", render: (r) => <span className="text-fg-secondary">{r.shot}</span> },
                     { key: "len", label: "Length", align: "right", render: (r) => <Mono className="text-fg-secondary">{ms(r.duration_ms)}</Mono> },
-                    { key: "l", label: "Licence", render: (r) => <span className="text-fg-secondary">{r.license}</span> },
+                    { key: "l", label: "Licence", render: (r) => <LicenceCell r={r} /> },
                   ]}
                 />
               )}

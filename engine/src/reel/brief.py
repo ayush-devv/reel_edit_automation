@@ -29,6 +29,29 @@ class Brief(_Strict):
     vocabulary: list[str] = Field(default_factory=list)  # names/terms to spell correctly
     notes: str | None = None
     deliverables: list[str] = Field(default_factory=list)  # extra aspect ratios: feed_4x5 | square (9:16 master always)
+    # licence gate (reel.licences): what the reel is for decides which assets it may use
+    use_categories: list[str] = Field(default_factory=list)  # political | dating | drugs | alcohol | gambling | religious | adult
+    purpose: str = "promo"  # editorial | organic | promo | paid_ad
+    accept_credits: bool = True  # False: the client won't carry credits, so CC BY music/SFX are left out
+
+    @field_validator("use_categories")
+    @classmethod
+    def _categories(cls, v: list[str]) -> list[str]:
+        from reel.licences import CATEGORIES
+
+        bad = [c for c in v if c not in CATEGORIES]
+        if bad:
+            raise ValueError(f"unknown client categories {bad}; use {', '.join(CATEGORIES)}")
+        return v
+
+    @field_validator("purpose")
+    @classmethod
+    def _purpose(cls, v: str) -> str:
+        from reel.licences import PURPOSES
+
+        if v not in PURPOSES:
+            raise ValueError(f"purpose {v!r} must be one of {', '.join(PURPOSES)}")
+        return v
 
 
 class BrandColors(_Strict):

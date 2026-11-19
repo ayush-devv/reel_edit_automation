@@ -32,6 +32,15 @@ class Issue:
         return asdict(self)
 
 
+def _refused(idx, aid: str, path: str, what: str) -> list[Issue]:
+    """The licence gate refuses this asset for this brief (reel.licences): name the reason, never just 'unknown'."""
+    rs = (getattr(idx, "refused", None) or {}).get(aid)
+    if not rs:
+        return []
+    return [Issue("licence_refused", path, f"{what} '{aid}' can't be used in this reel: {'; '.join(m for _c, m in rs)}.",
+                  f"Pick another {what.lower()} from the menu (it only lists assets this reel may use).")]
+
+
 def errors(issues: list[Issue]) -> list[Issue]:
     return [i for i in issues if i.severity == "error"]
 
@@ -271,6 +280,7 @@ def validate_finish(fin: FinishPlan, story: StoryPlan, words: WordTable, idx: In
         uid(f"{path}.id", c.id)
         if c.sfx not in idx.sfx:
             issues.append(Issue("unknown_sfx", f"{path}.sfx", f"SFX '{c.sfx}' is not in the library.", "Pick an id from the SFX index."))
+        issues += _refused(idx, c.sfx, f"{path}.sfx", "SFX")
         if need_item(f"{path}.item", c.item):
             if c.anchor == SfxAnchor.word:
                 in_item(f"{path}.word", c.item, c.word)
@@ -282,6 +292,7 @@ def validate_finish(fin: FinishPlan, story: StoryPlan, words: WordTable, idx: In
     if m.track != "none" and m.track not in idx.music:
         issues.append(Issue("unknown_music", "music.track", f"Track '{m.track}' is not in the music library.", "Pick an id from the music index or 'none'."))
     if m.track != "none":
+        issues += _refused(idx, m.track, "music.track", "Track")
         _range_check(issues, "music.gain_db", m.gain_db, -30, -6, "Music gain")
         _range_check(issues, "music.duck_db", m.duck_db, 6, 24, "Ducking depth")
 
@@ -325,6 +336,7 @@ def validate_finish(fin: FinishPlan, story: StoryPlan, words: WordTable, idx: In
         uid(f"{path}.id", b.id)
         if b.asset not in idx.broll:
             issues.append(Issue("unknown_broll", f"{path}.asset", f"B-roll '{b.asset}' is not in the library.", "Pick an id from the b-roll index."))
+        issues += _refused(idx, b.asset, f"{path}.asset", "B-roll")
         if need_item(f"{path}.item", b.item):
             in_item(f"{path}.from_word", b.item, b.from_word)
             in_item(f"{path}.to_word", b.item, b.to_word)
@@ -440,6 +452,8 @@ def validate_graphics(fin, items, order, uid, need_item, in_item, idx, has_logo:
                 issues.append(Issue("graphic_needs_asset", f"{path}.asset", "lottie needs an animation id in `asset`.", "Pick one from the Lottie library list."))
             elif g.asset not in known:
                 issues.append(Issue("unknown_lottie", f"{path}.asset", f"'{g.asset}' is not in the Lottie library.", "Use an id from the Lottie library list."))
+            else:
+                issues += _refused(idx, g.asset, f"{path}.asset", "Animation")
         if kind == "cta_card" and g.item != order[-1]:
             issues.append(Issue("cta_not_last", f"{path}.item", "The CTA card belongs on the last item.", f"Use item {order[-1]}."))
     issues += _top_band_clashes(fin, items, order)

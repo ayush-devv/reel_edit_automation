@@ -65,6 +65,7 @@ def conform(ws: Workspace, folder: Path | list[Path], fps) -> list[dict]:
         out.append({"id": cid, "name": f.name, "file": str(mezz.relative_to(ws.root)), "duration_ms": int(dur * 1000),
                     "width": p.video.display_width, "height": p.video.display_height, "sheet": str(sheet.relative_to(ws.root)),
                     "source": lic.get("source", "client"), "license": lic.get("license", "client-supplied"),
+                    **{k: lic[k] for k in ("licence_id", "source_url", "sha256", "downloaded_at") if lic.get(k)},  # provenance (reel.licences)
                     **({"credit": f"{lic['author']} ({lic['page']})"} if lic.get("author") else {})})
     return out
 

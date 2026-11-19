@@ -1,0 +1,121 @@
+# Licence registry: one row per licence version (docs/product/asset-library-plan.md).
+#
+# The rules sit on the licence row; facts about one file sit on the asset in its index.
+# reel.licences resolves an asset in this order:
+#   1. its `licence_id`;
+#   2. its `source`, through the `sources:` map below;
+#   3. its `license` text, matched against the `aliases` regexes.
+# If none of these match, the asset has no licence, and the render gate refuses it.
+#
+# `text` is the licence text saved in this folder. `text_kind` says what that text is:
+#   official     the licence's own legal text
+#   pack-notice  the licence file shipped inside the pack
+#   summary      our own summary; the official text is at `url`
+#   missing      not saved yet: the site blocks automated download. Save the page as PDF/text,
+#                put it in this folder, and point `text` at it.
+# The per-render manifest records each text's sha256, so a later change of terms can be proven.
+#
+# Rule fields (defaults in reel.licences.Licence):
+#   commercial_ok          client and paid work allowed
+#   attribution_required   the post must carry the asset's `attribution` text
+#   client_transfer        sublicense | single_client | none
+#   sensitive_use          client categories this licence forbids
+#   allowed_platforms      ["*"] or platform ids (brief.platform)
+#   subscription           name in ~/.config/reel/subscriptions.json that must be active
+#   per_project_registration   each project needs a registration id on the asset
+#   deliver_source_files   false: never hand the raw file or an isolated stem to the client
+#   ml_indexing_ok         embeddings / ML features may be computed on these files
+#   blocked                a non-empty reason means the licence is never used
+
+licences:
+  - id: owned
+    title: Owned (made by this engine)
+    family: owned
+    text: procedural-owned.txt
+    text_kind: summary
+    aliases: ["^owned$"]
+    ml_indexing_ok: true
+
+  - id: cc0-1.0
+    title: Creative Commons Zero 1.0 Universal
+    family: public-domain
+    url: https://creativecommons.org/publicdomain/zero/1.0/legalcode
+    text: cc0-1.0-legalcode.txt
+    text_kind: official
+    retrieved: "2026-11-19"
+    aliases: ["^CC0"]
+    ml_indexing_ok: true
+
+  - id: cc-by-4.0
+    title: Creative Commons Attribution 4.0 International
+    family: cc-by
+    url: https://creativecommons.org/licenses/by/4.0/legalcode
+    text: cc-by-4.0-legalcode.txt
+    text_kind: official
+    retrieved: "2026-11-19"
+    aliases: ["^CC[- ]BY[- ]4\\.0$"]
+    attribution_required: true
+    ml_indexing_ok: true
+
+  - id: mit
+    title: MIT License
+    family: permissive-code
+    url: https://opensource.org/license/mit
+    text_kind: missing  # the MIT text carries each project's copyright line: vendor the project's own LICENSE file
+    aliases: ["^MIT$"]
+    ml_indexing_ok: true
+
+  - id: pexels
+    title: Pexels License
+    family: platform-content
+    url: https://www.pexels.com/license/
+    text_kind: missing  # pexels.com refuses automated download (403)
+    aliases: ["^Pexels License"]
+    notes: Free commercial use, no attribution required. No selling unaltered copies, no competing library, identifiable people never shown in a bad light.
+
+  - id: pixabay-content
+    title: Pixabay Content License
+    family: platform-content
+    url: https://pixabay.com/service/license-summary/
+    text_kind: missing  # pixabay.com refuses automated download (403)
+    aliases: ["^Pixabay Content Licen[cs]e"]
+    sensitive_use: [political]
+    notes: Free commercial use incl. client videos, no attribution required. No redistribution of unmodified files, no bulk or systematic copying; the research found political use excluded. Shield-marked music may be Content ID registered.
+
+  - id: client-supplied
+    title: Client-supplied material
+    family: client
+    text_kind: summary
+    aliases: ["^client-supplied$"]
+    client_transfer: single_client
+    notes: Footage or files the client handed over for their own reels; never reused for another client.
+
+  - id: sonniss-gdc-2.0
+    title: Sonniss GDC Game Audio Bundle licence v2.0
+    family: perpetual-pack
+    url: https://sonniss.com/gdc-bundle-license/
+    text_kind: missing
+    aliases: ["Sonniss"]
+    deliver_source_files: false
+    blocked: On hold until Sonniss confirms in writing that use by an AI editor is allowed (licence v2.0 heading "No AI Training or Usage").
+
+  - id: epidemic-pro
+    title: Epidemic Sound Pro (commercial subscription)
+    family: subscription
+    url: https://www.epidemicsound.com/our-plans/commercial-subscription
+    text_kind: missing
+    aliases: ["^Epidemic Sound"]
+    subscription: epidemic
+    notes: Covers videos published while the subscription is active. Not eligible for publishers over $5M or companies over $10M revenue a year. Downloaded by hand, per reel.
+
+# Packs: a source name (the asset's `source`) → its licence and the licence file shipped inside the pack.
+sources:
+  "reel procedural": {licence: owned}
+  "Kenney UI Audio": {licence: cc0-1.0, notice: kenney-ui-audio.txt}
+  "Kenney Interface Sounds": {licence: cc0-1.0, notice: kenney-interface-sounds.txt}
+  "Kenney Digital Audio": {licence: cc0-1.0, notice: kenney-digital-audio.txt}
+  "Kenney Impact Sounds": {licence: cc0-1.0, notice: kenney-impact-sounds.txt}
+  "Incompetech (Kevin MacLeod)": {licence: cc-by-4.0, notice: incompetech-cc-by-4.0.txt}
+  "Pexels": {licence: pexels}
+  "Pixabay": {licence: pixabay-content}
+  "client": {licence: client-supplied}

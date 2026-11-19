@@ -145,7 +145,10 @@ def index_music(folder: Path, *, source: str, license_: str, rel_to: Path | None
 
 def write_index(kind: str, entries: list[dict], *, replace: bool = False, root: Path = assets_mod.ASSETS_DIR) -> Path:
     """Merge into assets/<kind>/…index.json (by id); `replace` drops entries from the same source first."""
+    from reel import licences
+
     path, key = {"sfx": (root / "sfx" / "sfx_index.json", "sfx"), "music": (root / "music" / "music_index.json", "tracks")}[kind]
+    licences.stamp(entries)  # link each file to its licence row (assets/licenses/registry.yaml)
     data = json.loads(path.read_text()) if path.exists() else {key: []}
     sources = {e["source"] for e in entries}
     items = [e for e in data.get(key, []) if not (replace and e.get("source") in sources)]
@@ -176,16 +179,18 @@ def sfx_menu(sfx: dict[str, dict], per_category: int = 6) -> dict[str, list[dict
 def credit_lines(tl, idx=None) -> list[str]:
     """Attribution the post must carry for the music/SFX a timeline uses (CC BY tracks); [] when all
     assets are owned, CC0 or royalty-free without attribution. One block per asset, in timeline order."""
+    from reel.licences import used_assets
+
     if idx is None:
         idx = assets_mod.load()
     out: list[str] = []
-    used = [a.asset for a in tl.audio if a.role in ("music", "sfx")] + [c.asset for c in tl.video if c.id.startswith("br_")]
-    for aid in used:
-        snap = tl.assets.get(aid)
-        meta = (idx.music.get(aid) or idx.sfx.get(aid) or idx.broll.get(aid) or {})
+    # every library asset the reel uses, pips and Lottie included (reel.licences.used_assets)
+    for u in used_assets(tl, idx):
+        snap = tl.assets.get(u["id"])
+        meta = u["meta"]
         # the compile-time snapshot wins: a library moved or not yet fetched must never drop a required credit
         for text in ((snap.attribution if snap else "") or meta.get("attribution") or "", (snap.credit if snap else "") or meta.get("credit") or ""):
-            text = text.strip()
+            text = str(text).strip()
             if text and text not in out:
                 out.append(text)
     return out

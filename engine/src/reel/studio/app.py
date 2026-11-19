@@ -786,6 +786,10 @@ def _apply_adjust(ws: Path, kind: str, value):
     story = project.load_json_model(StoryPlan, ws / "plan" / "story.json")
     fin = project.load_json_model(FinishPlan, ws / "plan" / "finish.json")
     idx = project.indexes(w)
+    from reel import licences
+    from reel.brief import load_brief
+
+    idx.refused = licences.refused(idx, licences.UseContext.from_brief(load_brief(project.brief_path(w)), ws.name))
     note = None
 
     def ids_off(items: list, what: str) -> list:

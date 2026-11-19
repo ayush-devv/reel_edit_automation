@@ -84,6 +84,9 @@ def test_pixabay_fills_in_when_pexels_has_nothing(tmp_path):
     assert out["providers"] == ["pexels", "pixabay"] and out["clips"] == ["pixabay_7.mp4", "pixabay_8.mp4"]
     side = json.loads((tmp_path / "c" / "pixabay_7.json").read_text())
     assert side["source"] == "Pixabay" and "Pixabay Content License" in side["license"]
+    # provenance for the licence manifest: licence row, page, bytes, when
+    assert side["licence_id"] == "pixabay-content" and side["source_url"] == "https://pixabay.com/videos/7/"
+    assert len(side["sha256"]) == 64 and side["downloaded_at"].startswith("20")
     assert all(k == "" for u, k in calls if "pexels" not in u)  # the Pexels key never goes to Pixabay or a CDN
 
 

@@ -78,6 +78,31 @@ def _print_verdict(ws, loops: list | None = None) -> None:
         print(f"\nfull report: {v}")
 
 
+def _cmd_licences(args: argparse.Namespace) -> int:
+    """Licence census of the libraries; --backfill stamps licence ids; --brief shows what that brief refuses."""
+    from reel import assets, licences
+    from reel.brief import load_brief
+
+    c = licences.census(write=args.backfill)
+    for lid, kinds in sorted(c["by_licence"].items()):
+        print(f"{lid:18} " + ", ".join(f"{k} {n}" for k, n in sorted(kinds.items())))
+    for line in c["unresolved"]:
+        print(f"no licence on record: {line}")
+    for line in c["blocked"]:
+        print(f"blocked: {line}")
+    if args.backfill:
+        print(f"stamped {c['stamped']} field(s) into the indexes")
+    elif c["stamped"]:
+        print(f"{c['stamped']} field(s) missing — run with --backfill to write them")
+    if args.brief:
+        brief = load_brief(args.brief)
+        refused = licences.refused(assets.load(), licences.UseContext.from_brief(brief))
+        print(f"\nthis brief refuses {len(refused)} asset(s)")
+        for aid, rs in sorted(refused.items()):
+            print(f"  {aid}: {licences.reason(rs)}")
+    return 1 if c["unresolved"] else 0
+
+
 def _cmd_library(args: argparse.Namespace) -> int:
     from reel import library
 
@@ -508,6 +533,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--license", required=True, help="licence summary stored with every file")
     p.add_argument("--replace", action="store_true", help="drop previously indexed files from the same source first")
     p.set_defaults(func=_cmd_library)
+
+    p = sub.add_parser("licences", help="licence of every library asset (assets/licenses/registry.yaml); exit 1 if any has none")
+    p.add_argument("--backfill", action="store_true", help="write licence ids (and missing sha256) into the committed indexes")
+    p.add_argument("--brief", help="also list the assets this brief's licence gate refuses")
+    p.set_defaults(func=_cmd_licences)
 
     p = sub.add_parser("assets", help="asset libraries (SFX, music)")
     asub = p.add_subparsers(dest="assets_cmd", required=True)

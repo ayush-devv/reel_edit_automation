@@ -63,6 +63,15 @@ def load_json_model(model, path: Path):
     return model.model_validate_json(Path(path).read_text())
 
 
+def brief_path(ws: Workspace, options: dict | None = None) -> str | None:
+    """The run's brief, else the one the Studio saved in the project (revise and adjust runs may not pass it)."""
+    given = (options or {}).get("brief")
+    if given:
+        return str(given)
+    saved = ws.path("brief.json")
+    return str(saved) if saved.exists() else None
+
+
 def indexes(ws: Workspace):
     """Global asset libraries + this project's client b-roll pool (broll/index.json)."""
     from reel import assets

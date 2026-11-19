@@ -11,6 +11,8 @@ Keys: PEXELS_API_KEY and/or PIXABAY_API_KEY in the environment (Reel Studio pass
 
 from __future__ import annotations
 
+import datetime as dt
+import hashlib
 import json
 import os
 import urllib.parse
@@ -21,6 +23,7 @@ PIXABAY_API = "https://pixabay.com/api/videos/"
 LICENCE = "Pexels License — free commercial use, no attribution required; no resale of unaltered clips"
 PIXABAY_LICENCE = "Pixabay Content License — free commercial use, no attribution required; no redistribution of unmodified clips"
 SOURCE = {"pexels": ("Pexels", LICENCE), "pixabay": ("Pixabay", PIXABAY_LICENCE)}
+LICENCE_ID = {"pexels": "pexels", "pixabay": "pixabay-content"}  # rows in assets/licenses/registry.yaml
 KEY_ENV = {"pexels": "PEXELS_API_KEY", "pixabay": "PIXABAY_API_KEY"}
 ORDER = ("pexels", "pixabay")  # Pexels first when its key exists (portrait filter), else Pixabay
 
@@ -163,7 +166,10 @@ def download(results: list[dict], folder: Path, query: str, *, key: str | None =
             # Pexels file URLs are public CDN links; the key header is only sent to Pexels itself.
             dst.write_bytes(fetch(r["url"], (key or os.environ.get("PEXELS_API_KEY", "")) if provider == "pexels" else ""))
         source, licence = SOURCE[provider]
-        meta = {"source": source, "license": licence, "query": query, "page": r["page"], "author": r["author"]}
+        # provenance for the licence manifest (reel.licences): which licence, where from, when, which bytes
+        meta = {"source": source, "license": licence, "licence_id": LICENCE_ID[provider], "query": query, "page": r["page"],
+                "source_url": r["page"], "author": r["author"], "sha256": hashlib.sha256(dst.read_bytes()).hexdigest(),
+                "downloaded_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
         dst.with_suffix(".json").write_text(json.dumps(meta, indent=1))
         paths.append(dst)
     return paths

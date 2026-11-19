@@ -109,7 +109,10 @@ def index_folder(folder: Path, *, source: str, license_: str, rel_to: Path = ass
 
 
 def write_index(entries: list[dict], *, replace: bool = False, root: Path = assets_mod.ASSETS_DIR) -> Path:
+    from reel import licences
+
     path = root.joinpath(*INDEX)
+    licences.stamp(entries)
     data = json.loads(path.read_text()) if path.exists() else {"animations": []}
     sources = {e["source"] for e in entries}
     by = {e["id"]: e for e in data.get("animations", []) if not (replace and e.get("source") in sources)}

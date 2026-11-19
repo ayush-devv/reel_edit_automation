@@ -61,10 +61,21 @@ class Inputs:
 
 
 def load_inputs(ws: Workspace, brief_path: str | None = None, brand_path: str | None = None) -> Inputs:
+    from reel import licences
+
+    brief = brief_mod.load_brief(brief_path)
+    idx = project.indexes(ws)
+    use_brief = brief or brief_mod.load_brief(project.brief_path(ws))  # revise runs may not pass the brief; the project keeps it
+    idx.refused = licences.refused(idx, licences.UseContext.from_brief(use_brief, ws.root.name))  # gate before ranking
     return Inputs(ws=ws, words=project.word_table(ws), clips=project.clip_infos(ws), fps=project.project_fps(ws),
-                  idx=project.indexes(ws), kids=knowledge.node_ids(), edges=project.edges(ws),
-                  brief=brief_mod.load_brief(brief_path), brand=brief_mod.load_brand(brand_path),
+                  idx=idx, kids=knowledge.node_ids(), edges=project.edges(ws),
+                  brief=brief, brand=brief_mod.load_brand(brand_path),
                   vad=project.vad_speech(ws), scenes=project.scene_cuts(ws))
+
+
+def _allowed(idx, items: dict[str, dict]) -> dict[str, dict]:
+    """A library without the assets the licence gate refuses for this brief: the Editor never sees them."""
+    return {k: v for k, v in items.items() if k not in idx.refused}
 
 
 def all_required(node):
@@ -166,24 +177,27 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
                      f"tokens you may override: {', '.join(sorted((f.get('tokens') or {}).keys()))}")
     lines.append("")
     lines += ["## SFX library (pick by id; a handful per reel — ~8 reads as designed, ~20 as generic)", ""]
-    menu = library.sfx_menu(inp.idx.sfx)
+    menu = library.sfx_menu(_allowed(inp.idx, inp.idx.sfx))
     if not menu:
         lines += ["Empty — use none.", ""]
     for cat, items in menu.items():
         lines.append(f"- **{cat}**: " + ", ".join(f"`{e['id']}` {e.get('name', '')} ({e['duration_ms']} ms, peak at {e['peak_ms']} ms)" for e in items))
     lines.append("")
-    lines += _library("Music library (bed starts so a beat lands on the first cut; ducked under speech)", inp.idx.music, ("title", "mood", "energy", "bpm", "feel", "duration_ms"))
+    lines += _library("Music library (bed starts so a beat lands on the first cut; ducked under speech)", _allowed(inp.idx, inp.idx.music),
+                      ("title", "mood", "energy", "bpm", "feel", "duration_ms"))
     lines += ["## Lottie library (graphic kind `lottie`; our pack is recoloured to the brand accent)", ""]
-    if not inp.idx.lottie:
+    lottie = _allowed(inp.idx, inp.idx.lottie)
+    if not lottie:
         lines += ["Empty — no lottie graphics.", ""]
-    for lid, a in sorted(inp.idx.lottie.items(), key=lambda kv: kv[1].get("name", "")):
+    for lid, a in sorted(lottie.items(), key=lambda kv: kv[1].get("name", "")):
         lines.append(f"- `{lid}` {a.get('name', '')} — {a.get('description', '')} ({a.get('duration_ms', 0) / 1000:.1f} s, {a.get('aspect', '?')}; "
                      f"tags: {', '.join(a.get('tags', [])[:6])}; {a.get('source', '')})")
     lines.append("")
     lines += ["## B-roll (cutaways over the voice; `full` replaces the picture, `pip` = picture-in-picture card)", ""]
-    if not inp.idx.broll:
+    broll = _allowed(inp.idx, inp.idx.broll)
+    if not broll:
         lines += ["Empty — use none.", ""]
-    for bid, b in inp.idx.broll.items():
+    for bid, b in broll.items():
         lines.append(f"- `{bid}` {b.get('duration_ms', 0) / 1000:.1f} s · {b.get('shot', '?')}, {b.get('motion', '?')}, {b.get('mood', '')} — "
                      f"{b.get('description', b.get('name', ''))} ({b.get('source', 'library')})")
     lines.append("")

@@ -202,7 +202,12 @@ export interface BrandEntry {
   brand: Brand;
 }
 
-export interface SfxItem {
+/** Licence gate fields (reel.licences): the registry row, and why every reel refuses it (null = usable). */
+export interface LicenceFields {
+  licence_id?: string | null;
+  licence_problem?: string | null;
+}
+export interface SfxItem extends LicenceFields {
   id: string;
   category: string;
   duration_ms: number;
@@ -210,7 +215,7 @@ export interface SfxItem {
   license: string;
   file: string | null;
 }
-export interface MusicItem {
+export interface MusicItem extends LicenceFields {
   id: string;
   title: string;
   mood: string;
@@ -220,7 +225,7 @@ export interface MusicItem {
   license: string;
   attribution: string | null;
 }
-export interface BrollItem {
+export interface BrollItem extends LicenceFields {
   id: string;
   description: string;
   shot: string;

@@ -50,7 +50,11 @@ def _knowledge_fp() -> str:
 def _assets_fp() -> str:
     from reel import assets
 
-    return hash_inputs([file_fingerprint(f) for f in sorted(assets.ASSETS_DIR.rglob("*")) if f.is_file() and f.suffix in (".json", ".yaml")])
+    # assets/licenses/ is left out: a registry edit is checked by the stages' validate hooks (finish re-runs only when
+    # its plan uses an asset the gate now refuses), so it never re-buys every project's finish pass
+    lic = assets.ASSETS_DIR / "licenses"
+    return hash_inputs([file_fingerprint(f) for f in sorted(assets.ASSETS_DIR.rglob("*"))
+                        if f.is_file() and f.suffix in (".json", ".yaml") and not f.is_relative_to(lic)])
 
 
 def _caller(ctx: StageContext):
@@ -364,7 +368,19 @@ def clip_luts(ctx: StageContext, tl: Timeline) -> tuple[dict, dict]:
     return luts, measured
 
 
+def licence_gate(ctx: StageContext, tl: Timeline | None = None):
+    """The licence gate on the compiled timeline (reel.licences): raises LicenceRefused with every reason."""
+    from reel import licences
+
+    use = licences.UseContext.from_brief(brief_mod.load_brief(project.brief_path(ctx.ws, ctx.options)), ctx.ws.root.name)
+    res = licences.gate(tl or _timeline(ctx), project.indexes(ctx.ws), use)
+    if not res.ok:
+        raise licences.LicenceRefused(res)
+    return res
+
+
 def _render(ctx: StageContext) -> dict:
+    licence_gate(ctx)  # never spend a render on a reel that can't be delivered
     ev = enhanced_voice(ctx)
     # an enhanced clip's floor is its enhanced floor (room tone is lowered to it; the voice chain denoises against it)
     rt = {k: (s, e, round(db + ev[k][1], 1) if k in ev else db) for k, (s, e, db) in room_tones(ctx).items()}
@@ -505,25 +521,38 @@ def _package_hash(ctx: StageContext) -> str:
 
     files = ["render/final.mp4", "render/overlay.mov", "timeline/timeline.json", "plan/story.json", "plan/finish.json", "qa/verdict.json",
              "render/cover/cover.json", "render/cover/cover.jpg", *(f"render/stems/{b}.wav" for b in package.STEMS)]
-    return hash_inputs({f: _fp(ctx, f) for f in files} | {"code": file_fingerprint(Path(package.__file__)), "v": VERSION})
+    from reel import licences
+
+    # the brief, licence registry and subscriptions decide the licence gate: a change re-checks and re-writes the manifest
+    return hash_inputs({f: _fp(ctx, f) for f in files} | {"code": _code_fp("package", "licences"), "v": VERSION,
+                                                          "licences": licences.fingerprint(project.brief_path(ctx.ws, ctx.options))})
 
 
 def _package(ctx: StageContext) -> dict:
-    from reel import assets, package
+    from reel import package
     from reel.runner import load_state
 
     tl = _timeline(ctx)
+    gate = licence_gate(ctx, tl)
     story = project.load_json_model(StoryPlan, ctx.ws.path("plan", "story.json"))
     fin = project.load_json_model(FinishPlan, ctx.ws.path("plan", "finish.json"))
     comp = load_state(ctx.ws)["stages"].get("composite", {}).get("meta", {})
     v = _read_json(ctx, "qa", "verdict.json") or {}
-    return package.build(ctx.ws, tl, story, fin, project.word_table(ctx.ws), project.indexes(ctx.ws), lufs_in=comp.get("lufs_in"), verdict=v.get("status"))
+    return package.build(ctx.ws, tl, story, fin, project.word_table(ctx.ws), project.indexes(ctx.ws), lufs_in=comp.get("lufs_in"), verdict=v.get("status"),
+                         gate=gate)
+
+
+def _package_valid(ctx: StageContext) -> bool:
+    """A delivered package stays valid only while its licences do (a lapsed subscription, a ledger entry from another client)."""
+    licence_gate(ctx)
+    return True
 
 
 PACKAGE = Stage(name="package", input_hash=_package_hash,
                 outputs=lambda ctx: [ctx.ws.path("export", "package", f) for f in ("reel.mp4", "overlay.mov", "timeline.fcpxml", "timeline.otio",
-                                                                                     "captions.srt", "edit_list.md", "README.md")],
-                run=_package)
+                                                                                     "captions.srt", "edit_list.md", "README.md",
+                                                                                     "licences/manifest.json")],
+                run=_package, validate=_package_valid)
 
 # ------------------------------------------------------------------ delivery variants + review copy
 

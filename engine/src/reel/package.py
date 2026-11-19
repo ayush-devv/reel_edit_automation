@@ -10,6 +10,7 @@
   cover.jpg / cover_clean.jpg / covers/ / cover.json   thumbnail (reel.cover), when the cover stage ran
   README.md                what is baked where, how to open it, licences of assets used, the cover choice
   CREDITS.txt              only when a used asset requires attribution (CC BY music) — paste into the caption
+  licences/                proof of licence: manifest.json (asset → licence → hashes) + the licence texts (reel.licences)
 """
 
 from __future__ import annotations
@@ -265,6 +266,9 @@ Verdict: **{verdict or 'n/a'}** (see qa/verdict.md in the project).
 
 ## Licences of library assets used
 {chr(10).join(lic) or '- none'}
+
+**Proof of licence:** `licences/manifest.json` lists every library asset in this reel with its licence, source, file hash and the hash of the licence text; the texts are in `licences/`. Hand this folder to the client with the reel.
+
 {cover_section(cover)}"""
 
 
@@ -281,12 +285,18 @@ def _cover(ws, pkg: Path) -> dict | None:
     return json.loads((src / "cover.json").read_text())
 
 
-def build(ws, tl: Timeline, story: StoryPlan, finish: FinishPlan, words, idx, *, lufs_in: float | None = None, verdict: str | None = None) -> dict:
+def build(ws, tl: Timeline, story: StoryPlan, finish: FinishPlan, words, idx, *, lufs_in: float | None = None, verdict: str | None = None,
+          gate=None) -> dict:
     import opentimelineio as otio
 
-    from reel import mix
+    from reel import licences, mix
 
     pkg = ws.path("export", "package")
+    if gate is None:
+        gate = licences.gate(tl, idx, licences.UseContext(project=ws.root.name))
+    if not gate.ok:  # no package, and no stale proof of licence, for a reel that can't be delivered
+        shutil.rmtree(pkg / "licences", ignore_errors=True)
+        raise licences.LicenceRefused(gate)
     pkg.mkdir(parents=True, exist_ok=True)
     _link(ws.path("render", "final.mp4"), pkg / "reel.mp4")
     _link(ws.path("render", "overlay.mov"), pkg / "overlay.mov")
@@ -316,4 +326,7 @@ def build(ws, tl: Timeline, story: StoryPlan, finish: FinishPlan, words, idx, *,
     elif (pkg / "CREDITS.txt").exists():
         (pkg / "CREDITS.txt").unlink()  # a revision dropped the credited track (licences are known: checked above)
     atomic_write_bytes(pkg / "README.md", readme(tl, idx, offset, verdict, credits, cover).encode())
-    return {"files": sorted(str(p.relative_to(pkg)) for p in pkg.rglob("*") if p.is_file())}
+    licences.write_manifest(pkg, gate, ws.root, reel=ws.path("render", "final.mp4"), credits=credits)
+    licences.record_use(gate.items, gate.use)
+    return {"files": sorted(str(p.relative_to(pkg)) for p in pkg.rglob("*") if p.is_file()),
+            "licences": sorted({i["licence_id"] for i in gate.items if i["licence_id"]})}

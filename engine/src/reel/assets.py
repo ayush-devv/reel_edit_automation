@@ -22,6 +22,9 @@ class Indexes:
     broll: dict[str, dict] = field(default_factory=dict)
     caption_families: dict[str, dict] = field(default_factory=dict)
     lottie: dict[str, dict] = field(default_factory=dict)
+    # asset id → [(code, message)] for assets the licence gate refuses for this reel's brief (reel.licences.refused);
+    # the indexes stay complete, the Editor's menus leave these out and validation names the reason
+    refused: dict[str, list] = field(default_factory=dict)
 
 
 def _load_json_list(path: Path, key: str, root: Path | None = None) -> dict[str, dict]:

@@ -23,16 +23,25 @@ BRAND_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 
 def libraries() -> dict:
+    from reel import licences
+
     idx = assets.load()
+    reg = licences.load_registry()
+    blocked = licences.refused(idx, licences.UseContext(), reg)  # refused for every reel (no brief): blocked or unknown licence
     lic = lambda m: m.get("license") or m.get("licence") or m.get("rights")  # noqa: E731
+
+    def rights(k: str, m: dict) -> dict:
+        r = reg.resolve(m)
+        return {"licence_id": r.id if r else None, "licence_problem": licences.reason(blocked[k]) if k in blocked else None}
+
     return {
         "sfx": [{"id": k, "category": m.get("category"), "duration_ms": m.get("duration_ms"), "source": m.get("source"),
-                 "license": lic(m), "file": m.get("file")} for k, m in sorted(idx.sfx.items())],
+                 "license": lic(m), "file": m.get("file"), **rights(k, m)} for k, m in sorted(idx.sfx.items())],
         "music": [{"id": k, "title": m.get("title") or m.get("name") or k, "mood": m.get("mood"), "bpm": m.get("bpm"),
                    "duration_ms": m.get("duration_ms"), "source": m.get("source"), "license": lic(m),
-                   "attribution": m.get("attribution") or m.get("credit")} for k, m in sorted(idx.music.items())],
+                   "attribution": m.get("attribution") or m.get("credit"), **rights(k, m)} for k, m in sorted(idx.music.items())],
         "broll": [{"id": k, "description": m.get("description"), "shot": m.get("shot") or m.get("shot_type"), "tags": m.get("tags", []),
-                   "duration_ms": m.get("duration_ms"), "source": m.get("source"), "license": lic(m), "file": m.get("file")}
+                   "duration_ms": m.get("duration_ms"), "source": m.get("source"), "license": lic(m), "file": m.get("file"), **rights(k, m)}
                   for k, m in sorted(idx.broll.items())],
         "caption_families": [{"id": k, "for": m.get("for", []), "mood": m.get("mood"), "max_words": m.get("max_words"),
                               "tokens": m.get("tokens", {})} for k, m in idx.caption_families.items()],
