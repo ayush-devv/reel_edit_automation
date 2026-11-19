@@ -41,7 +41,7 @@ def _input_hash(ctx: StageContext) -> str:
     return hash_inputs({
         "mezz": file_fingerprint(report) if report.exists() else None,
         "language": o.get("language"), "brief": _content(o.get("brief")), "brand": _content(o.get("brand")),
-        "asr": o.get("asr_repo") or config.ASR_ENGINES, "visual": not o.get("skip_visual"), "v": VERSION,
+        "asr": o.get("asr_repo") or config.ASR_ENGINES, "visual": not o.get("skip_visual"), "v": VERSION, "faces": visual.FACE_DETECT_VERSION,
     })
 
 

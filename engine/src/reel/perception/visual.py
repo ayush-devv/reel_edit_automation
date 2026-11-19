@@ -46,7 +46,18 @@ def _face_model() -> Path:
     return path
 
 
-def faces(mezz: Path, fps: float = 4.0, width: int = 360) -> dict:
+def _iou(a: dict, b: dict) -> float:
+    x0, y0 = max(a["x"], b["x"]), max(a["y"], b["y"])
+    x1, y1 = min(a["x"] + a["w"], b["x"] + b["w"]), min(a["y"] + a["h"], b["y"] + b["h"])
+    inter = max(0.0, x1 - x0) * max(0.0, y1 - y0)
+    union = a["w"] * a["h"] + b["w"] * b["h"] - inter
+    return inter / union if union > 0 else 0.0
+
+
+FACE_DETECT_VERSION = 2  # 2: tiled re-detection for small faces in wide shots
+
+
+def faces(mezz: Path, fps: float = 4.0, width: int = 480) -> dict:
     """Face boxes per sample, normalised to the frame (x, y, w, h in 0–1)."""
     import mediapipe as mp
 
@@ -58,14 +69,25 @@ def faces(mezz: Path, fps: float = 4.0, width: int = 360) -> dict:
     samples = []
     # Context manager closes the detector deterministically (no noisy teardown in __del__).
     with mp.tasks.vision.FaceDetector.create_from_options(opts) as det:
-        for k, frame in enumerate(frames):
-            res = det.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(frame)))
-            boxes = []
+        def detect(img: np.ndarray, ox: int = 0, oy: int = 0) -> list[dict]:
+            res = det.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(img)))
+            out = []
             for d in res.detections:
                 b = d.bounding_box
-                boxes.append({"x": round(b.origin_x / w, 4), "y": round(b.origin_y / h, 4),
-                              "w": round(b.width / w, 4), "h": round(b.height / h, 4),
-                              "score": round(float(d.categories[0].score), 3) if d.categories else None})
+                out.append({"x": round((ox + b.origin_x) / w, 4), "y": round((oy + b.origin_y) / h, 4),
+                            "w": round(b.width / w, 4), "h": round(b.height / h, 4),
+                            "score": round(float(d.categories[0].score), 3) if d.categories else None})
+            return out
+
+        for k, frame in enumerate(frames):
+            boxes = detect(frame)
+            if not boxes and w > h:
+                # wide shots: faces too small for the short-range model on the whole frame — look again on square
+                # tiles across the frame (each face is then ~1.8× larger to the model), merging overlaps
+                for x0 in sorted({0, (w - h) // 2, w - h}):
+                    for b in detect(frame[:, x0:x0 + h], x0, 0):
+                        if not any(_iou(b, o) > 0.3 for o in boxes):
+                            boxes.append(b)
             samples.append({"t_us": int(round(k / fps * 1e6)), "faces": boxes})
     with_face = [s["faces"][0] for s in samples if s["faces"]]
     median = None

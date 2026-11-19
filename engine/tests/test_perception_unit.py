@@ -93,3 +93,12 @@ def test_rms_and_segment_stats():
     s = stats[0]
     assert s["words"] == 2 and s["low_conf_words"] == [1] and s["loudness_db"] > -10
     json.dumps(stats)  # serialisable
+
+
+def test_face_box_overlap_for_tile_merging():
+    from reel.perception.visual import _iou
+
+    a = {"x": 0.1, "y": 0.1, "w": 0.2, "h": 0.2}
+    assert abs(_iou(a, a) - 1.0) < 1e-9
+    assert _iou(a, {"x": 0.5, "y": 0.5, "w": 0.1, "h": 0.1}) == 0.0
+    assert 0.3 < _iou(a, {"x": 0.15, "y": 0.1, "w": 0.2, "h": 0.2}) < 0.7  # the same face seen in two overlapping tiles

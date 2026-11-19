@@ -127,7 +127,8 @@ const Captions: React.FC<{ track: CaptionTrack; p: OverlayProps }> = ({ track, p
     let dy = 0;
     let color = w.emph ? emph : base;
     if (t.anim === "pop") {
-      if (active) scale = 0.85 + 0.2 * spring({ frame: since, fps: p.fps, config: { damping: 12, stiffness: 220 } });
+      // a small lift on the spoken word; it never drops below the line's size (a shrinking word reads as a glitch)
+      if (active) scale = 1 + 0.06 * spring({ frame: since, fps: p.fps, config: { damping: 12, stiffness: 220 } });
     } else if (t.anim === "slide_fade") {
       const k = interpolate(entry, [0, animF], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
       opacity = k;
@@ -139,8 +140,10 @@ const Captions: React.FC<{ track: CaptionTrack; p: OverlayProps }> = ({ track, p
     }
     const emphScale = (t.highlight === "scale" || t.highlight === "word") && w.emph ? (t.highlight === "scale" ? num(t.emph_scale, 1.4) : 1.08) : 1;
     scale *= emphScale;
-    // transforms do not take layout space: widen the gap by the emphasised growth
-    const extra = (size * (emphScale - 1) * Math.max(3, w.text.length) * CHAR_EM(upperHeavy)) / 2;
+    // transforms do not take layout space: reserve the widest this word will ever grow to (emphasis × pop lift),
+    // so a growing word never runs into its neighbour ("thismessage")
+    const grow = emphScale * (t.anim === "pop" ? 1.06 : 1) - 1;
+    const extra = (size * grow * Math.max(3, w.text.length) * CHAR_EM(upperHeavy)) / 2;
     return (
       <span
         key={w.i}
