@@ -100,6 +100,7 @@ class SettingsBody(BaseModel):
     default_brief: dict = Field(default_factory=dict)
     default_deliverables: list[Literal["feed_4x5", "square"]] = Field(default_factory=list)
     pexels_key: str | None = Field(default=None, max_length=200)  # write-only; "" or absent keeps the saved key
+    pixabay_key: str | None = Field(default=None, max_length=200)  # write-only; "" or absent keeps the saved key
 
 
 class LabBody(BaseModel):
@@ -565,7 +566,8 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
     def settings_view() -> dict:
         prefs = load_prefs(s.prefs_file)
         return {"max_jobs": s.max_jobs, "projects_dir": str(s.projects_root), "default_brief": prefs["default_brief"],
-                "default_deliverables": prefs["default_deliverables"], "pexels_key_set": bool(prefs["pexels_key"])}
+                "default_deliverables": prefs["default_deliverables"], "pexels_key_set": bool(prefs["pexels_key"]),
+                "pixabay_key_set": bool(prefs.get("pixabay_key"))}
 
     @app.get("/api/settings")
     def get_settings():
@@ -586,6 +588,8 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
                                             "default_deliverables": list(dict.fromkeys(body.default_deliverables))}
         if body.pexels_key and body.pexels_key.strip():
             prefs["pexels_key"] = body.pexels_key.strip()
+        if body.pixabay_key and body.pixabay_key.strip():
+            prefs["pixabay_key"] = body.pixabay_key.strip()
         save_prefs(s.prefs_file, prefs)
         apply_prefs(s, prefs)
         mgr.tick()  # a higher limit starts queued jobs now

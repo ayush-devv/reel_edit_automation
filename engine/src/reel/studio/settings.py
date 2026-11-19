@@ -58,7 +58,7 @@ class Settings:
 
 # ------------------------------------------------------------------ the owner's preferences (studio_settings.json)
 
-PREF_DEFAULTS = {"max_jobs": MAX_JOBS_LIMIT, "default_brief": {}, "default_deliverables": [], "pexels_key": ""}
+PREF_DEFAULTS = {"max_jobs": MAX_JOBS_LIMIT, "default_brief": {}, "default_deliverables": [], "pexels_key": "", "pixabay_key": ""}
 
 
 def load_prefs(path: Path) -> dict:
@@ -85,7 +85,8 @@ def save_prefs(path: Path, prefs: dict) -> None:
 def apply_prefs(s: Settings, prefs: dict) -> None:
     """The preferences that change how the server runs: the job limit and the jobs' environment."""
     s.max_jobs = max(1, min(MAX_JOBS_LIMIT, int(prefs.get("max_jobs") or MAX_JOBS_LIMIT)))
-    if prefs.get("pexels_key"):
-        s.job_env["PEXELS_API_KEY"] = prefs["pexels_key"]
-    else:
-        s.job_env.pop("PEXELS_API_KEY", None)
+    for pref, env in (("pexels_key", "PEXELS_API_KEY"), ("pixabay_key", "PIXABAY_API_KEY")):
+        if prefs.get(pref):
+            s.job_env[env] = prefs[pref]
+        else:
+            s.job_env.pop(env, None)

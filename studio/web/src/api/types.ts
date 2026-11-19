@@ -311,6 +311,9 @@ export interface Settings {
   pexels_key_set: boolean;
   /** Write-only on PUT: a new Pexels key (never returned by GET). */
   pexels_key?: string;
+  pixabay_key_set?: boolean;
+  /** Write-only on PUT: a new Pixabay key (never returned by GET). */
+  pixabay_key?: string;
 }
 
 export interface PackageFile {

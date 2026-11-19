@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import shutil
 from fractions import Fraction
 from pathlib import Path
@@ -84,7 +83,7 @@ def _stock_hash(ctx: StageContext) -> str:
     if not ctx.options.get("stock"):
         return "off"
     return hash_inputs({"summary": _fp(ctx, "tables/summary.md"), "brief": _opt_file(ctx.options.get("brief")),
-                        "key": bool(os.environ.get("PEXELS_API_KEY")), "caps": [stock.MAX_PER_QUERY, stock.MAX_CLIPS],
+                        "keys": sorted(stock.available_keys()), "caps": [stock.MAX_PER_QUERY, stock.MAX_CLIPS],
                         "persona": file_fingerprint(stock.SCOUT), "v": VERSION})
 
 

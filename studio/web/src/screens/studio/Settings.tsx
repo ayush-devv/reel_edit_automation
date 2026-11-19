@@ -106,6 +106,7 @@ function SettingsForm() {
   const q = useQuery(() => api.settings(), [api]);
   const [s, setS] = useState<SettingsT | null>(null);
   const [key, setKey] = useState("");
+  const [pixKey, setPixKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   useEffect(() => {
@@ -122,8 +123,9 @@ function SettingsForm() {
           setBusy(true);
           setMsg(null);
           try {
-            setS(await api.saveSettings(key ? { ...s, pexels_key: key } : s));
+            setS(await api.saveSettings({ ...s, ...(key ? { pexels_key: key } : {}), ...(pixKey ? { pixabay_key: pixKey } : {}) }));
             setKey("");
+            setPixKey("");
             setMsg({ tone: "ok", text: "Saved." });
             refresh();
             q.reload();
@@ -173,6 +175,13 @@ function SettingsForm() {
             ))}
           </div>
         </fieldset>
+        <Field
+          label="Pixabay API key"
+          htmlFor="pixabay"
+          hint={s.pixabay_key_set ? "A key is saved on this Mac. Enter a new one to replace it." : "Free at pixabay.com/api/docs (log in; the key is shown on that page). Stored only on this Mac. Lets an edit find stock b-roll."}
+        >
+          <TextInput id="pixabay" type="password" autoComplete="off" value={pixKey} onChange={(e) => setPixKey(e.target.value)} placeholder={s.pixabay_key_set ? "••••••••••••" : "Paste your key…"} />
+        </Field>
         <Field label="Pexels API key" htmlFor="pexels" hint={s.pexels_key_set ? "A key is saved on this Mac. Enter a new one to replace it." : "Stored only on this Mac. Enables stock search in Libraries."}>
           <TextInput id="pexels" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={s.pexels_key_set ? "••••••••••••" : "Paste your key"} />
         </Field>

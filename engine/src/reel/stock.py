@@ -1,9 +1,12 @@
-"""Stock b-roll search (build step 10h): Pexels videos API → this project's b-roll pool.
+"""Stock b-roll search: Pexels and Pixabay video APIs → this project's b-roll pool.
 
-Licence (pexels.com/license, checked 2026-11-18 in the asset research): free for commercial
-use, no attribution required; not allowed to resell unaltered copies or build a competing
-stock library — so clips are downloaded per project and never added to a shared library.
-Needs PEXELS_API_KEY in the environment.
+Licences (checked in the asset research, docs/product/asset-engine-plan.md):
+- Pexels (pexels.com/license): free commercial use, no attribution required; no resale of unaltered clips, no
+  competing stock library. New Pexels API keys were paused in Nov 2026, so Pixabay is the second source.
+- Pixabay (Content License): free commercial use, no attribution required; no redistribution of unmodified files as
+  stock, and watch for trademarks/identifiable people. The API asks for 24 h caching and no hotlinking: we download.
+Either way clips are downloaded per project and never added to a shared library.
+Keys: PEXELS_API_KEY and/or PIXABAY_API_KEY in the environment (Reel Studio passes the ones saved in Settings).
 """
 
 from __future__ import annotations
@@ -14,7 +17,12 @@ import urllib.parse
 from pathlib import Path
 
 API = "https://api.pexels.com/videos/search"
+PIXABAY_API = "https://pixabay.com/api/videos/"
 LICENCE = "Pexels License — free commercial use, no attribution required; no resale of unaltered clips"
+PIXABAY_LICENCE = "Pixabay Content License — free commercial use, no attribution required; no redistribution of unmodified clips"
+SOURCE = {"pexels": ("Pexels", LICENCE), "pixabay": ("Pixabay", PIXABAY_LICENCE)}
+KEY_ENV = {"pexels": "PEXELS_API_KEY", "pixabay": "PIXABAY_API_KEY"}
+ORDER = ("pexels", "pixabay")  # Pexels first when its key exists (portrait filter), else Pixabay
 
 
 class StockError(RuntimeError):
@@ -27,11 +35,11 @@ MAX_CLIP_BYTES = 200 * 1024 * 1024
 def _get(url: str, key: str) -> bytes:
     from reel import net
 
-    return net.get(url, {"Authorization": key}, timeout=120, max_bytes=MAX_CLIP_BYTES)
+    return net.get(url, {"Authorization": key} if key else None, timeout=120, max_bytes=MAX_CLIP_BYTES)
 
 
 def pick_file(video: dict, min_h: int = 1280) -> dict | None:
-    """Best rendition: portrait first, at least `min_h` tall, smallest that qualifies."""
+    """Best Pexels rendition: portrait first, at least `min_h` tall, smallest that qualifies."""
     files = [f for f in video.get("video_files", []) if f.get("link") and f.get("height")]
     tall = [f for f in files if f["height"] >= f.get("width", 0) and f["height"] >= min_h]
     pool = tall or [f for f in files if f["height"] >= 720]
@@ -39,20 +47,57 @@ def pick_file(video: dict, min_h: int = 1280) -> dict | None:
 
 
 def search(query: str, *, n: int = 3, key: str | None = None, fetch=_get) -> list[dict]:
+    """Pexels video search (portrait first)."""
     key = key or os.environ.get("PEXELS_API_KEY")
     if not key:
-        raise StockError("set PEXELS_API_KEY (free key at pexels.com/api) to search stock b-roll")
+        raise StockError("set PEXELS_API_KEY (pexels.com/api) to search Pexels")
     url = f"{API}?{urllib.parse.urlencode({'query': query, 'orientation': 'portrait', 'per_page': max(n * 2, 6), 'size': 'medium'})}"
     data = json.loads(fetch(url, key))
     out = []
     for v in data.get("videos", []):
         f = pick_file(v)
         if f and 2 <= v.get("duration", 0) <= 30:
-            out.append({"id": v["id"], "url": f["link"], "w": f.get("width"), "h": f["height"], "duration": v["duration"],
+            out.append({"provider": "pexels", "id": v["id"], "url": f["link"], "w": f.get("width"), "h": f["height"], "duration": v["duration"],
                         "page": v.get("url"), "author": (v.get("user") or {}).get("name")})
         if len(out) >= n:
             break
     return out
+
+
+def pick_pixabay(videos: dict) -> dict | None:
+    """Best Pixabay rendition: portrait if any, else the sharpest of large/medium (cropping a vertical slice of a
+    landscape clip needs resolution), never above 4K."""
+    files = [f for f in (videos or {}).values() if isinstance(f, dict) and f.get("url") and f.get("width") and f.get("height")]
+    tall = [f for f in files if f["height"] >= f["width"] and f["height"] >= 1280]
+    if tall:
+        return min(tall, key=lambda f: f["height"])
+    wide = [f for f in files if 1080 <= f["height"] <= 2160]
+    return max(wide, key=lambda f: f["height"]) if wide else None
+
+
+def search_pixabay(query: str, *, n: int = 3, key: str | None = None, fetch=_get) -> list[dict]:
+    key = key or os.environ.get("PIXABAY_API_KEY")
+    if not key:
+        raise StockError("set PIXABAY_API_KEY (free key at pixabay.com/api/docs) to search Pixabay")
+    url = f"{PIXABAY_API}?{urllib.parse.urlencode({'key': key, 'q': query[:100], 'video_type': 'film', 'safesearch': 'true', 'per_page': max(n * 3, 3)})}"
+    data = json.loads(fetch(url, ""))  # the key is in the query string; no auth header
+    out = []
+    for v in data.get("hits", []):
+        f = pick_pixabay(v.get("videos"))
+        if f and 2 <= v.get("duration", 0) <= 30:
+            out.append({"provider": "pixabay", "id": v["id"], "url": f["url"], "w": f["width"], "h": f["height"], "duration": v["duration"],
+                        "page": v.get("pageURL"), "author": v.get("user")})
+        if len(out) >= n:
+            break
+    return out
+
+
+SEARCH = {"pexels": search, "pixabay": search_pixabay}
+
+
+def available_keys(keys: dict[str, str | None] | None = None) -> dict[str, str]:
+    keys = keys if keys is not None else {p: os.environ.get(env) for p, env in KEY_ENV.items()}
+    return {p: k for p in ORDER if (k := (keys.get(p) or "").strip())}
 
 
 MAX_PER_QUERY = 2
@@ -69,16 +114,18 @@ def scout_schema() -> dict:
                 "properties": {"query": {"type": "string", "maxLength": 60}, "moment": {"type": "string", "maxLength": 160}}}}}}
 
 
-def fetch_for_project(ws_root: Path, out: Path, caller, *, key: str | None = None, fetch=_get, log_file: Path | None = None) -> dict:
-    """Edit-time stock b-roll: Claude writes searches from the talk, Pexels fills the project's own pool.
+def fetch_for_project(ws_root: Path, out: Path, caller, *, key: str | None = None, keys: dict[str, str | None] | None = None, fetch=_get,
+                      log_file: Path | None = None) -> dict:
+    """Edit-time stock b-roll: Claude writes searches from the talk; Pexels and/or Pixabay fill the project's own pool.
 
+    `key` is a Pexels key (kept for callers that pass one); `keys` maps provider → key; default: the environment.
     Never raises: no key, a network error or no results is recorded in the returned status and the edit carries on
-    without stock clips. Clips stay in this project (Pexels licence: no shared library).
+    without stock clips. Clips stay in this project (licences: no shared library).
     """
-    key = key or os.environ.get("PEXELS_API_KEY")
-    status: dict = {"status": "ok", "queries": [], "clips": [], "errors": []}
-    if not key:
-        return {**status, "status": "skipped", "reason": "no Pexels API key (Studio → Settings)"}
+    have = available_keys({"pexels": key} if key else keys)
+    status: dict = {"status": "ok", "providers": list(have), "queries": [], "clips": [], "errors": []}
+    if not have:
+        return {**status, "status": "skipped", "reason": "no stock key: add a Pixabay (or Pexels) API key in Studio → Settings"}
     try:
         res = caller(SCOUT_PROMPT, scout_schema(), cwd=ws_root, persona_file=SCOUT, effort="low", log_file=log_file, label="stock_scout")
         queries = [q for q in (res.data or {}).get("queries", []) if str(q.get("query", "")).strip()][:5]
@@ -86,31 +133,37 @@ def fetch_for_project(ws_root: Path, out: Path, caller, *, key: str | None = Non
         return {**status, "status": "failed", "reason": f"couldn't write searches: {str(exc)[:200]}"}
     seen: set = set()
     for q in queries:
-        status["queries"].append({"query": q["query"].strip(), "moment": q.get("moment", "")})
+        query = q["query"].strip()
+        status["queries"].append({"query": query, "moment": q.get("moment", "")})
         if len(status["clips"]) >= MAX_CLIPS:
             break
-        try:
-            found = [r for r in search(q["query"].strip(), n=MAX_PER_QUERY + 2, key=key, fetch=fetch) if r["id"] not in seen]
-            picked = found[:MAX_PER_QUERY][: MAX_CLIPS - len(status["clips"])]
-            for path in download(picked, out, q["query"].strip(), key=key, fetch=fetch):
-                status["clips"].append(path.name)
-            seen.update(r["id"] for r in picked)
-        except Exception as exc:  # noqa: BLE001 — one failed search never stops the others
-            status["errors"].append(f"{q['query']}: {str(exc)[:160]}")
+        for provider, k in have.items():  # first provider with results wins for this query
+            try:
+                found = [r for r in SEARCH[provider](query, n=MAX_PER_QUERY + 2, key=k, fetch=fetch) if (provider, r["id"]) not in seen]
+                picked = found[:MAX_PER_QUERY][: MAX_CLIPS - len(status["clips"])]
+                for path in download(picked, out, query, key=k, fetch=fetch):
+                    status["clips"].append(path.name)
+                seen.update((provider, r["id"]) for r in picked)
+                if picked:
+                    break
+            except Exception as exc:  # noqa: BLE001 — one failed search never stops the others
+                status["errors"].append(f"{provider} · {query}: {str(exc)[:160]}")
     if not status["clips"]:
         status.update(status="failed" if status["errors"] else "empty", reason="no usable clips found")
     return status
 
 
 def download(results: list[dict], folder: Path, query: str, *, key: str | None = None, fetch=_get) -> list[Path]:
-    key = key or os.environ.get("PEXELS_API_KEY", "")
     folder.mkdir(parents=True, exist_ok=True)
     paths = []
     for r in results:
-        dst = folder / f"pexels_{r['id']}.mp4"
+        provider = r.get("provider", "pexels")
+        dst = folder / f"{provider}_{r['id']}.mp4"
         if not dst.exists():
-            dst.write_bytes(fetch(r["url"], key))
-        meta = {"source": "Pexels", "license": LICENCE, "query": query, "page": r["page"], "author": r["author"]}
+            # Pexels file URLs are public CDN links; the key header is only sent to Pexels itself.
+            dst.write_bytes(fetch(r["url"], (key or os.environ.get("PEXELS_API_KEY", "")) if provider == "pexels" else ""))
+        source, licence = SOURCE[provider]
+        meta = {"source": source, "license": licence, "query": query, "page": r["page"], "author": r["author"]}
         dst.with_suffix(".json").write_text(json.dumps(meta, indent=1))
         paths.append(dst)
     return paths

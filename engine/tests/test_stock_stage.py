@@ -42,9 +42,49 @@ def _fetch(per_query: dict[str, list[int]], fail: set[str] = frozenset()):
 
 def test_no_key_skips_without_calling_anyone(tmp_path, monkeypatch):
     monkeypatch.delenv("PEXELS_API_KEY", raising=False)
+    monkeypatch.delenv("PIXABAY_API_KEY", raising=False)
     caller_calls = []
     out = stock.fetch_for_project(tmp_path, tmp_path / "clips", lambda *a, **k: caller_calls.append(1))
-    assert out["status"] == "skipped" and "Pexels" in out["reason"] and not caller_calls and not (tmp_path / "clips").exists()
+    assert out["status"] == "skipped" and "Pixabay" in out["reason"] and not caller_calls and not (tmp_path / "clips").exists()
+
+
+def _pixabay_hit(i: int, w: int = 1920, h: int = 1080, dur: int = 10) -> dict:
+    return {"id": i, "duration": dur, "pageURL": f"https://pixabay.com/videos/{i}/", "user": f"U{i}",
+            "videos": {"large": {"url": f"https://cdn.pixabay.com/{i}_large.mp4", "width": w, "height": h},
+                       "medium": {"url": f"https://cdn.pixabay.com/{i}_medium.mp4", "width": w * 2 // 3, "height": h * 2 // 3},
+                       "tiny": {"url": f"https://cdn.pixabay.com/{i}_tiny.mp4", "width": 640, "height": 360}}}
+
+
+def test_pixabay_search_picks_the_sharpest_rendition_and_keeps_the_key_out_of_headers():
+    seen = []
+
+    def fetch(url, key):
+        seen.append((url, key))
+        return json.dumps({"hits": [_pixabay_hit(1), _pixabay_hit(2, dur=120), _pixabay_hit(3, w=1080, h=1920)]}).encode()
+
+    res = stock.search_pixabay("sugar cubes", n=3, key="PK", fetch=fetch)
+    assert [r["id"] for r in res] == [1, 3]  # the 2-minute clip is too long for a cutaway
+    assert res[0]["url"].endswith("1_large.mp4") and res[1]["h"] == 1280  # sharpest landscape; the smallest portrait ≥ 1280 tall
+    assert seen[0][1] == "" and "key=PK" in seen[0][0] and "video_type=film" in seen[0][0]
+
+
+def test_pixabay_fills_in_when_pexels_has_nothing(tmp_path):
+    calls = []
+
+    def fetch(url, key):
+        calls.append((url.split("?")[0], key))
+        if "api.pexels.com" in url:
+            return json.dumps({"videos": []}).encode()
+        if "pixabay.com/api" in url:
+            return json.dumps({"hits": [_pixabay_hit(7), _pixabay_hit(8)]}).encode()
+        return b"MP4DATA"
+
+    out = stock.fetch_for_project(tmp_path, tmp_path / "c", lambda *a, **k: _result({"queries": [{"query": "brain scan", "moment": ""}]}),
+                                  keys={"pexels": "XK", "pixabay": "PK"}, fetch=fetch)
+    assert out["providers"] == ["pexels", "pixabay"] and out["clips"] == ["pixabay_7.mp4", "pixabay_8.mp4"]
+    side = json.loads((tmp_path / "c" / "pixabay_7.json").read_text())
+    assert side["source"] == "Pixabay" and "Pixabay Content License" in side["license"]
+    assert all(k == "" for u, k in calls if "pexels" not in u)  # the Pexels key never goes to Pixabay or a CDN
 
 
 def test_queries_fill_the_pool_with_caps_dedupe_and_licence(tmp_path):
@@ -66,7 +106,7 @@ def test_failures_never_stop_the_edit(tmp_path):
     queries = [{"query": "sugar cubes", "moment": ""}, {"query": "juice glass", "moment": ""}]
     fetch, _ = _fetch({"sugar cubes": [1], "juice glass": [2]}, fail={"sugar cubes"})
     out = stock.fetch_for_project(tmp_path, tmp_path / "c", lambda *a, **k: _result({"queries": queries}), key="k", fetch=fetch)
-    assert out["status"] == "ok" and out["clips"] == ["pexels_2.mp4"] and out["errors"][0].startswith("sugar cubes")
+    assert out["status"] == "ok" and out["clips"] == ["pexels_2.mp4"] and out["errors"][0].startswith("pexels · sugar cubes")
     fetch, _ = _fetch({})
     out = stock.fetch_for_project(tmp_path, tmp_path / "e", lambda *a, **k: _result({"queries": queries}), key="k", fetch=fetch)
     assert out["status"] == "empty" and out["clips"] == []

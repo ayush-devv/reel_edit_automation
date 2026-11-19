@@ -506,14 +506,16 @@ def test_package_listing_and_delivered(env):
 def test_settings_persist_private_and_feed_the_queue(env):
     c, s = env["c"], env["s"]
     got = c.get("/api/settings").json()
-    assert got == {"max_jobs": 3, "projects_dir": str(env["root"]), "default_brief": {}, "default_deliverables": [], "pexels_key_set": False}
+    assert got == {"max_jobs": 3, "projects_dir": str(env["root"]), "default_brief": {}, "default_deliverables": [], "pexels_key_set": False,
+                   "pixabay_key_set": False}
     new = {**got, "max_jobs": 1, "default_brief": {"language": "hinglish", "platform": "platform.tiktok"}, "default_deliverables": ["square"],
-           "pexels_key": "sekret-key"}
+           "pexels_key": "sekret-key", "pixabay_key": "pix-sekret"}
     r = c.put("/api/settings", json=new)
-    assert r.status_code == 200 and r.json()["pexels_key_set"] is True and "pexels_key" not in r.json()
+    assert r.status_code == 200 and r.json()["pexels_key_set"] is True and r.json()["pixabay_key_set"] is True
+    assert "pexels_key" not in r.json() and "pixabay_key" not in r.json()
     assert "sekret" not in c.get("/api/settings").text and c.get("/api/health").json()["jobs"]["limit"] == 1
     assert (s.prefs_file.stat().st_mode & 0o777) == 0o600 and json.loads(s.prefs_file.read_text())["pexels_key"] == "sekret-key"
-    assert s.job_env["PEXELS_API_KEY"] == "sekret-key"  # reaches the job subprocesses, never the queue file
+    assert s.job_env["PEXELS_API_KEY"] == "sekret-key" and s.job_env["PIXABAY_API_KEY"] == "pix-sekret"  # reach the jobs, never the queue file
     assert c.put("/api/settings", json={**new, "pexels_key": ""}).json()["pexels_key_set"] is True  # blank keeps the key
     for bad in ({**new, "max_jobs": 4}, {**new, "projects_dir": "/elsewhere"}, {**new, "default_brief": {"bogus": 1}},
                 {**new, "default_deliverables": ["vertical"]}):

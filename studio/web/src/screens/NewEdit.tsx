@@ -56,7 +56,7 @@ export default function NewEdit() {
   const [form, setForm] = useState<BriefForm>(EMPTY_FORM);
   const [brand, setBrand] = useState("");
   const [refUrl, setRefUrl] = useState("");
-  const keySet = !!settings.data?.pexels_key_set;
+  const keySet = !!(settings.data?.pexels_key_set || settings.data?.pixabay_key_set);
   const [stockWanted, setStockWanted] = useState(true);
   const stock = keySet && stockWanted;
   const [sent, setSent] = useState<{ loaded: number; total: number } | null>(null);
@@ -244,8 +244,8 @@ export default function NewEdit() {
                 label="Find stock b-roll for this talk"
                 description={
                   keySet
-                    ? "The Editor writes searches from what is said and picks cutaways from Pexels (free for commercial use). Clips stay in this project."
-                    : "Needs a free Pexels key. Add it in Settings → Pexels API key."
+                    ? "The Editor writes searches from what is said and picks cutaways from Pixabay / Pexels (free for commercial use). Clips stay in this project."
+                    : "Needs a free Pixabay API key (pixabay.com/api/docs). Add it in Settings."
                 }
               />
               <TF label="Reference reel (optional)" value={refUrl} onChange={setRefUrl} placeholder="/Users/you/Downloads/reference.mp4" hint="A video file on this Mac (links aren’t supported). The Editor studies its pacing and caption style." />

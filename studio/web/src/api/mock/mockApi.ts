@@ -422,8 +422,8 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
       await guard();
       if (s.max_jobs < 1 || s.max_jobs > 3) throw new ApiError(400, "Edits at once must be between 1 and 3 (memory guard).");
       if (s.projects_dir !== settings.projects_dir) throw new ApiError(400, "the projects folder is set when the studio starts: `reel studio --projects <folder>`");
-      const { pexels_key, ...rest } = s;
-      settings = { ...clone(rest), pexels_key_set: settings.pexels_key_set || !!pexels_key?.trim() };
+      const { pexels_key, pixabay_key, ...rest } = s;
+      settings = { ...clone(rest), pexels_key_set: settings.pexels_key_set || !!pexels_key?.trim(), pixabay_key_set: settings.pixabay_key_set || !!pixabay_key?.trim() };
       startQueued();
       return clone(settings);
     },
