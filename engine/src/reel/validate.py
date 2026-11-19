@@ -219,9 +219,14 @@ def validate_finish(fin: FinishPlan, story: StoryPlan, words: WordTable, idx: In
         _range_check(issues, f"{path}.scale", p.scale, 1.0, 2.0, "Scale")
         _range_check(issues, f"{path}.ramp_frames", p.ramp_frames, 0, 120, "Ramp")
 
+    sped = set()
     for n, s in enumerate(fin.speeds):
         path = f"speeds[{n}]"
         uid(f"{path}.id", s.id)
+        if s.item in sped:
+            issues.append(Issue("duplicate_speed", f"{path}.item", f"Item {s.item} already has a speed change.",
+                                "Keep one speed entry per item (use ramp_to for a change within it)."))
+        sped.add(s.item)
         _range_check(issues, f"{path}.rate", s.rate, 0.25, 4.0, "Speed")
         if s.ramp_to:
             _range_check(issues, f"{path}.ramp_to", s.ramp_to, 0.25, 4.0, "Ramp target speed")

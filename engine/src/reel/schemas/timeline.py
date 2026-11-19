@@ -48,6 +48,11 @@ class Asset(_Strict):
     kind: AssetKind
     uri: str  # path relative to the workspace or repo
     duration_us: int | None = None
+    # licence snapshot taken at compile time: credits never depend on the library still being on disk
+    license: str = ""
+    attribution: str = ""  # text the post must carry (CC BY), "" when none
+    credit: str = ""  # a credit the asset's owner asked for (client / stock b-roll)
+    restrictions: str = ""  # e.g. "renders only, never deliver the source files"
 
 
 class VideoClip(_Strict):

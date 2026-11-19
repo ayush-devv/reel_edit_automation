@@ -150,7 +150,7 @@ def shots(c: VideoClip, fps: Fraction, cuts_us: list[int], samples: list[dict], 
     tracks = {t["id"]: t for t in (speakers or {}).get("tracks") or []}
 
     def add(t_us: int, shot: Shot) -> None:
-        shot.start_f = round(tb.us_to_frame(t_us - src0, fps) / c.speed)
+        shot.start_f = tb.src_to_out_frame(t_us - src0, fps, c.speed, c.speed_to, src1 - src0)
         if out and shot.start_f <= out[-1].start_f:
             return
         if shot.path:
@@ -184,7 +184,7 @@ def shots(c: VideoClip, fps: Fraction, cuts_us: list[int], samples: list[dict], 
                     sm = smooth_path(pts, crop_w)
                     step = max(1, round(TRACK_STEP_S / max((sm[1][0] - sm[0][0]) / 1e6, 1e-3))) if len(sm) > 1 else 1
                     keep = sm[::step] + ([sm[-1]] if (len(sm) - 1) % step else [])
-                    path = [(max(0, round(tb.us_to_frame(tu - src0, fps) / c.speed)), x) for tu, x in keep]
+                    path = [(max(0, tb.src_to_out_frame(tu - src0, fps, c.speed, c.speed_to, src1 - src0)), x) for tu, x in keep]
         else:
             box, centre = None, prev
         add(a, Shot(start_f=0, centre=centre, box=box, layout=layout, path=path))

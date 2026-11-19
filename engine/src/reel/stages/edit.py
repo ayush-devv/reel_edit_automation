@@ -9,11 +9,14 @@ unchanged inputs and never keeps a stale plan. The Claude caller is injectable t
 from __future__ import annotations
 
 import json
+import logging
 import shutil
+from fractions import Fraction
 from pathlib import Path
 
 from reel import brief as brief_mod
-from reel import claude_call, decide, mix, overlay, project, render
+from reel import claude_call, decide, mix, overlay, project, render, tools
+from reel import timebase as tb
 from reel.compile import compile_timeline, proof_list
 from reel.runner import Stage, StageContext
 from reel.schemas.plan import FinishPlan, StoryPlan
@@ -22,6 +25,7 @@ from reel.validate import errors, validate_finish, validate_story
 from reel.workspace import atomic_write_json, file_fingerprint, hash_inputs
 
 VERSION = 2
+log = logging.getLogger(__name__)
 TABLE_FILES = ("tables/script.md", "tables/segments.json", "tables/takes.json", "tables/words.tsv", "tables/summary.md",
                "tables/sheets.json", "perception/words.json", "perception/edges.json")
 
@@ -161,7 +165,22 @@ def _compile_hash(ctx: StageContext) -> str:
                                                  "perception/edges.json", "source/manifest.json", "perception/palette.json",
                                                  "broll/index.json")}
                        | {"assets": _assets_fp(), "brand": _opt_file(ctx.options.get("brand")), "proof": _fp(ctx, "qa/proof_confirmed.json"),
-                          "code": _code_fp("compile", "adapt", "script"), "v": VERSION})
+                          "logo": _logo_source_fp(ctx), "code": _code_fp("compile", "adapt", "script"), "v": VERSION})
+
+
+def _logo_source_fp(ctx: StageContext) -> str | None:
+    """The brand logo's contents (not just its path): replacing the image must re-compile and re-render."""
+    bp = ctx.options.get("brand")
+    if not bp:
+        return None
+    try:
+        logo = brief_mod.load_brand(bp).logo
+    except Exception:  # noqa: BLE001 — an unreadable brand kit fails in compile with a clear error
+        return None
+    if not logo:
+        return None
+    src = Path(logo) if Path(logo).is_absolute() else Path(bp).parent / logo
+    return file_fingerprint(src) if src.is_file() else None
 
 
 def _brand_logo(ctx: StageContext, brand) -> str | None:
@@ -408,7 +427,22 @@ def _cover(ctx: StageContext) -> dict:
 
     story = project.load_json_model(StoryPlan, ctx.ws.path("plan", "story.json"))
     fin = project.load_json_model(FinishPlan, ctx.ws.path("plan", "finish.json"))
-    return cover.build(ctx.ws, _timeline(ctx), story, fin, project.word_table(ctx.ws))
+    try:
+        return cover.build(ctx.ws, _timeline(ctx), story, fin, project.word_table(ctx.ws))
+    except Exception as exc:  # noqa: BLE001 — a thumbnail must never stop packaging and delivery
+        log.exception("cover failed; falling back to a plain frame")
+        out = ctx.ws.path("render", "cover")
+        out.mkdir(parents=True, exist_ok=True)
+        tl = _timeline(ctx)
+        fps = tb.parse_rate(tl.fps)
+        at = float(Fraction(min(tl.duration_f - 1, max(0, tl.duration_f // 10))) / fps)  # early, past the first cut usually
+        for name in ("cover_clean.jpg", "cover.jpg"):
+            tools.ffmpeg(["-y", "-ss", f"{at:.3f}", "-i", str(ctx.ws.path("render", "base.mov")), "-frames:v", "1", "-vf", "scale=1080:1920",
+                          "-q:v", "2", str(out / name)])
+        f = round(at * fps)
+        atomic_write_json(out / "cover.json", {"error": f"{type(exc).__name__}: {exc}", "frame": f, "tc": f"{int(at // 60)}:{at % 60:05.2f}",
+                                               "title": "", "fallback": "plain frame at 10 % of the reel; rerun with --force cover"})
+        return {"error": f"{type(exc).__name__}: {exc}", "fallback_frame": f}
 
 
 COVER = Stage(name="cover", input_hash=_cover_hash, run=_cover,

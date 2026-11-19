@@ -232,11 +232,22 @@ def proof_list(tl: Timeline, story: StoryPlan, words: WordTable) -> list[dict]:
             in_f = tb.us_to_frame(c.src_in_us, fps)
             if w.filler or not (w.low_conf or w.vocab_suspect or w.suspect):
                 continue
-            f = c.at_f + max(0, min(round((tb.us_to_frame(w.start_us, fps, mode="floor") - in_f) / c.speed), c.dur_f))
+            f = c.at_f + max(0, min(tb.src_to_out_frame(w.start_us - c.src_in_us, fps, c.speed, c.speed_to, c.src_out_us - c.src_in_us), c.dur_f))
             t = float(Fraction(f) / fps)
             why = ", ".join(r for r, flag in (("unconfirmed name", w.vocab_suspect), ("low confidence", w.low_conf), ("timing", w.suspect)) if flag)
             out.append({"i": w.i, "text": w.text, "suggestion": w.vocab_suggestion, "frame": f, "at": f"{int(t // 60)}:{t % 60:05.2f}", "why": why})
     return out
+
+
+def _licence(meta: dict) -> dict:
+    return {k: str(meta.get(k) or "").strip() for k in ("license", "attribution", "credit", "restrictions")}
+
+
+def _ease_value(e: Ease, t: float) -> float:
+    """Progress 0..1 of an eased move at time fraction t (same curves as render.scale_expr)."""
+    t = min(1.0, max(0.0, t))
+    return {Ease.hold: 0.0, Ease.linear: t, Ease.ease_in: t * t, Ease.ease_out: 1 - (1 - t) * (1 - t),
+            Ease.ease_in_out: t * t * (3 - 2 * t)}.get(e, t)
 
 
 BEAT_TOL_US = 45_000  # a cut within this of a beat reads as "on the beat"
@@ -428,6 +439,10 @@ def compile_timeline(
                 clip.scale.append(Keyframe(f=0, v=carried, ease=Ease.hold))
             for p in ps:
                 k = word_out_frame(by[p.at_word], p.item) - clip.at_f
+                if clip.scale and clip.scale[-1].f > k:  # the previous ramp is still running: stop it where it is now
+                    a, b = clip.scale[-2], clip.scale[-1]
+                    t = (k - a.f) / max(1, b.f - a.f)
+                    clip.scale[-1] = Keyframe(f=k, v=round(a.v + (b.v - a.v) * _ease_value(b.ease, t), 4), ease=b.ease)
                 if p.ramp_frames == 0:
                     clip.scale.append(Keyframe(f=k, v=p.scale, ease=Ease.hold))
                 else:
@@ -503,14 +518,15 @@ def compile_timeline(
         dur_sfx = min(dur_sfx - skip_f, total - start)
         if dur_sfx <= 0:
             continue
-        assets.setdefault(c.sfx, Asset(id=c.sfx, kind=AssetKind.sfx, uri=meta.get("file", ""), duration_us=int(meta.get("duration_ms", 0)) * 1000))
+        assets.setdefault(c.sfx, Asset(id=c.sfx, kind=AssetKind.sfx, uri=meta.get("file", ""), duration_us=int(meta.get("duration_ms", 0)) * 1000, **_licence(meta)))
         audio.append(AudioClip(id=c.id, asset=c.sfx, at_f=start, dur_f=dur_sfx, src_in_us=tb.frame_to_us(skip_f, fps), gain_db=c.gain_db, role="sfx"))
 
     # ---- music bed: a beat lands on the first cut; ducked under every kept speech span
     ducking = []
     if finish.music.track != "none":
         meta = idx.music[finish.music.track]
-        assets.setdefault(finish.music.track, Asset(id=finish.music.track, kind=AssetKind.music, uri=meta.get("file", ""), duration_us=int(meta.get("duration_ms", 0)) * 1000))
+        assets.setdefault(finish.music.track, Asset(id=finish.music.track, kind=AssetKind.music, uri=meta.get("file", ""),
+                                                    duration_us=int(meta.get("duration_ms", 0)) * 1000, **_licence(meta)))
         first_cut_us = tb.frame_to_us(segments[0].out_end, fps) if len(segments) > 1 else 0
         cuts_us = [tb.frame_to_us(sg.out_end, fps) for sg in segments[:-1]]
         offset_us = music_offset_us(meta, first_cut_us, tb.frame_to_us(total, fps), cuts_us)
@@ -531,7 +547,8 @@ def compile_timeline(
         if b.mode == "pip":
             pips.append(PipEvent(id=b.id, uri=meta.get("file", ""), start_f=start, end_f=end, src_in_us=src_in))
             continue
-        assets.setdefault(b.asset, Asset(id=b.asset, kind=AssetKind.video, uri=meta.get("file", ""), duration_us=int(meta.get("duration_ms", 0)) * 1000))
+        assets.setdefault(b.asset, Asset(id=b.asset, kind=AssetKind.video, uri=meta.get("file", ""), duration_us=int(meta.get("duration_ms", 0)) * 1000,
+                                         **_licence(meta)))
         video.append(VideoClip(id=f"br_{b.id}", asset=b.asset, at_f=start, dur_f=end - start, src_in_us=src_in,
                                src_out_us=src_in + tb.frame_to_us(end - start, fps), src=Provenance(item=b.item, words=[b.from_word, b.to_word])))
 

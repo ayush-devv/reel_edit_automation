@@ -141,10 +141,11 @@ def transition_graph(k: int, inp: str, out: str, c: VideoClip, head, tail, w: in
         cur = f"tg{k}"
     fades = []
     for kind, colour in (("dip_to_black", "black"), ("dip_to_white", "white")):
-        if tail and tail[0] == kind:
-            fades.append(f"fade=t=out:start_frame={c.dur_f - tail[1]}:nb_frames={tail[1]}:color={colour}")
+        if tail and tail[0] == kind:  # a dip longer than a very short shot covers the whole shot, never a negative start
+            n = min(tail[1], c.dur_f)
+            fades.append(f"fade=t=out:start_frame={c.dur_f - n}:nb_frames={n}:color={colour}")
         if head and head[0] == kind:
-            fades.append(f"fade=t=in:start_frame=0:nb_frames={head[1]}:color={colour}")
+            fades.append(f"fade=t=in:start_frame=0:nb_frames={min(head[1], c.dur_f)}:color={colour}")
     stmts.append(f"[{cur}]{','.join(fades) or 'null'}[{out}]")
     return stmts
 

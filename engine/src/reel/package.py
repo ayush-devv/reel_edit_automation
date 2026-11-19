@@ -202,14 +202,18 @@ def edit_list(tl: Timeline, story: StoryPlan, finish: FinishPlan, words) -> str:
 
 
 def credits_text(lines: list[str]) -> str:
-    """CREDITS.txt: paste into the post caption — the licences of these tracks require it."""
-    return "Credits (paste into the post caption / description):\n\n" + "\n\n".join(lines) + "\n"
+    """CREDITS.txt: paste into the post caption — the licences of these tracks require it. CC BY 4.0 treats music
+    synchronised to video as adapted material, so the credit also says it was edited (§3(a)(1)(B))."""
+    return ("Credits (paste into the post caption / description):\n\n" + "\n\n".join(lines)
+            + "\n\nMusic edited and synchronised to video.\n")
 
 
 def cover_section(cover: dict | None) -> str:
     """README section: the chosen cover, where to set it in the app, and the runners-up."""
     if not cover:
         return ""
+    if cover.get("error"):
+        return f"\n## Cover\n\nThe cover picker failed ({cover['error']}); `cover.jpg` is a plain frame at {cover.get('tc', '?')}. {cover.get('fallback', '')}\n"
     rows = [f"| {n} | {c['tc']} (frame {c['frame']}) | {c['score']:.3f} | {c['face_area']:.3f} | {c['sharp']:.2f} | {c['expression']:.2f} | "
             f"{c.get('blink') if c.get('blink') is not None else '—'} | {c['why']} | {c.get('file', '')} |"
             for n, c in enumerate(cover.get("top", []), 1)]
@@ -286,8 +290,13 @@ def build(ws, tl: Timeline, story: StoryPlan, finish: FinishPlan, words, idx, *,
     pkg.mkdir(parents=True, exist_ok=True)
     _link(ws.path("render", "final.mp4"), pkg / "reel.mp4")
     _link(ws.path("render", "overlay.mov"), pkg / "overlay.mov")
+    # SFX whose licence allows renders only (e.g. Sonniss): the isolated SFX stem would hand over the sounds themselves
+    no_sfx_stem = any("never deliver" in (a.restrictions or "").lower() for a in tl.assets.values() if a.kind.value == "sfx")
     for s in STEMS:
         src = ws.path("render", "stems", f"{s}.wav")
+        if s == "sfx" and no_sfx_stem:
+            (pkg / "stems" / "sfx.wav").unlink(missing_ok=True)
+            continue
         if src.exists():
             _link(src, pkg / "stems" / f"{s}.wav")
     name = ws.root.name
@@ -298,10 +307,13 @@ def build(ws, tl: Timeline, story: StoryPlan, finish: FinishPlan, words, idx, *,
     atomic_write_bytes(pkg / "edit_list.md", edit_list(tl, story, finish, words).encode())
     cover = _cover(ws, pkg)
     offset = (mix.TARGET_I - lufs_in) if lufs_in is not None and lufs_in > mix.SILENT_LUFS else None
+    unknown = library.unknown_licences(tl, idx)
+    if unknown:  # never deliver a reel whose music/SFX licence we cannot state
+        raise ValueError(f"licence unknown for {', '.join(unknown)}: run `reel assets fetch` (or re-index) before packaging")
     credits = library.credit_lines(tl, idx)
     if credits:
         atomic_write_bytes(pkg / "CREDITS.txt", credits_text(credits).encode())
     elif (pkg / "CREDITS.txt").exists():
-        (pkg / "CREDITS.txt").unlink()  # a revision dropped the credited track
+        (pkg / "CREDITS.txt").unlink()  # a revision dropped the credited track (licences are known: checked above)
     atomic_write_bytes(pkg / "README.md", readme(tl, idx, offset, verdict, credits, cover).encode())
     return {"files": sorted(str(p.relative_to(pkg)) for p in pkg.rglob("*") if p.is_file())}

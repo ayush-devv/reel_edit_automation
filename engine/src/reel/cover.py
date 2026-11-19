@@ -426,6 +426,8 @@ def build(ws, tl: Timeline, story: StoryPlan, finish: FinishPlan, words: WordTab
     for n, c in enumerate(top, 1):
         c["file"] = f"covers/cover_{n}.jpg"
         write_jpeg(full[c["frame"]], out / c["file"])
+    if not top:
+        raise ValueError("no usable cover candidates (frames could not be decoded)")
     best = top[0]
     write_jpeg(full[best["frame"]], out / "cover_clean.jpg")
     try:

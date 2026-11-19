@@ -80,6 +80,7 @@ def _peak_db(y: np.ndarray) -> float:
 
 
 def index_sfx(folder: Path, *, source: str, license_: str, rel_to: Path | None = None) -> list[dict]:
+    check_licence(license_)
     out = []
     for f in sorted(p for p in folder.rglob("*") if p.suffix.lower() in AUDIO_EXT and not p.name.startswith(".")):
         cat = sfx_category(f.relative_to(folder))
@@ -118,6 +119,7 @@ def beats(y: np.ndarray, rate: int) -> tuple[float, list[int], list[int]]:
 def index_music(folder: Path, *, source: str, license_: str, rel_to: Path | None = None) -> list[dict]:
     import librosa
 
+    check_licence(license_)
     out = []
     for f in sorted(p for p in folder.rglob("*") if p.suffix.lower() in MUSIC_EXT and not p.name.startswith(".")):
         try:
@@ -127,6 +129,8 @@ def index_music(folder: Path, *, source: str, license_: str, rel_to: Path | None
         bpm, beat_ms, down_ms = beats(y, rate)
         side = f.with_suffix(".json")
         meta = json.loads(side.read_text()) if side.exists() else {}
+        if FORBIDDEN_LICENCE.search(str(meta.get("license", ""))):
+            continue  # a per-track sidecar may not smuggle in a ShareAlike / NonCommercial track
         stored = _stored_path(f, rel_to)
         out.append({"id": _id("music", stored if rel_to is not None else f), "file": stored, "title": meta.get("title", f.stem),
                     "duration_ms": int(round(y.size / rate * 1000)), "bpm": bpm, "beats_ms": beat_ms, "downbeats_ms": down_ms,
@@ -171,11 +175,37 @@ def credit_lines(tl, idx=None) -> list[str]:
     if idx is None:
         idx = assets_mod.load()
     out: list[str] = []
+    used = [a.asset for a in tl.audio if a.role in ("music", "sfx")] + [c.asset for c in tl.video if c.id.startswith("br_")]
+    for aid in used:
+        snap = tl.assets.get(aid)
+        meta = (idx.music.get(aid) or idx.sfx.get(aid) or idx.broll.get(aid) or {})
+        # the compile-time snapshot wins: a library moved or not yet fetched must never drop a required credit
+        for text in ((snap.attribution if snap else "") or meta.get("attribution") or "", (snap.credit if snap else "") or meta.get("credit") or ""):
+            text = text.strip()
+            if text and text not in out:
+                out.append(text)
+    return out
+
+
+def unknown_licences(tl, idx=None) -> list[str]:
+    """Library assets the timeline uses whose licence is unknown (neither snapshotted nor in the index)."""
+    if idx is None:
+        idx = assets_mod.load()
+    bad = []
     for a in tl.audio:
         if a.role not in ("music", "sfx"):
             continue
-        meta = (idx.music if a.role == "music" else idx.sfx).get(a.asset) or idx.sfx.get(a.asset) or idx.music.get(a.asset) or {}
-        text = (meta.get("attribution") or "").strip()
-        if text and text not in out:
-            out.append(text)
-    return out
+        snap = tl.assets.get(a.asset)
+        meta = idx.music.get(a.asset) or idx.sfx.get(a.asset) or {}
+        if not ((snap and snap.license) or meta.get("license")):
+            bad.append(a.asset)
+    return sorted(set(bad))
+
+
+FORBIDDEN_LICENCE = re.compile(r"(^|[-_\s])(SA|NC|ND)([-_\s.]|$)|share.?alike|non.?commercial|no.?deriv", re.I)
+
+
+def check_licence(licence: str) -> None:
+    """Never index ShareAlike, NonCommercial or NoDerivatives material: it cannot go into a paid client's reel."""
+    if FORBIDDEN_LICENCE.search(licence or ""):
+        raise ValueError(f"licence {licence!r} is ShareAlike / NonCommercial / NoDerivatives — not usable in client reels")

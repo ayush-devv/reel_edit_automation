@@ -145,3 +145,28 @@ def test_cover_without_drawtext_ships_the_clean_frame(tmp_path, monkeypatch):
     out = ws.path("render", "cover")
     assert (out / "cover.jpg").read_bytes() == (out / "cover_clean.jpg").read_bytes()
     assert "skipped" in json.loads((out / "cover.json").read_text())["text"]
+
+
+def test_cover_stage_falls_back_to_a_plain_frame_and_never_blocks_packaging(tmp_path, monkeypatch):
+    from reel.runner import StageContext
+    from reel.stages import edit
+    from reel.workspace import atomic_write_json
+
+    tl = compile_timeline(_story(), _finish(), WORDS, CLIPS, FPS, IDX)
+    ws = Workspace.create(tmp_path / "p")
+    tools.ffmpeg(["-y", "-f", "lavfi", "-i", f"testsrc2=s=1080x1920:r=30:d={tl.duration_f / 30 + 0.2:.2f}", "-frames:v", str(tl.duration_f),
+                  "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(ws.path("render", "base.mov"))])
+    atomic_write_json(ws.path("timeline", "timeline.json"), tl.model_dump(mode="json"))
+    atomic_write_json(ws.path("plan", "story.json"), _story().model_dump(mode="json"))
+    atomic_write_json(ws.path("plan", "finish.json"), _finish().model_dump(mode="json"))
+    atomic_write_json(ws.path("perception", "words.json"), WORDS.model_dump(mode="json"))
+
+    def boom(*a, **k):
+        raise RuntimeError("landmarker exploded")
+
+    monkeypatch.setattr(cover, "build", boom)
+    meta = edit._cover(StageContext(ws=ws, options={}))
+    out = ws.path("render", "cover")
+    assert "landmarker exploded" in meta["error"]
+    assert all((out / f).exists() for f in ("cover.jpg", "cover_clean.jpg", "cover.json"))
+    assert "plain frame" in package.cover_section(json.loads((out / "cover.json").read_text()))

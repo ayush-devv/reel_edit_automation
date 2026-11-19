@@ -100,3 +100,19 @@ def audio_bounds(segments: Iterable[Segment], fps: Fraction, rate: int = config.
     lengths equals the total exactly — no drift however many cuts there are.
     """
     return [(frame_to_sample(s.out_start, fps, rate), frame_to_sample(s.out_end, fps, rate)) for s in segments]
+
+
+def src_to_out_frame(rel_us: int, fps: Fraction, speed: float, speed_to: float = 0.0, src_dur_us: int = 0) -> int:
+    """Output frame (clip-relative) shown at `rel_us` into a clip's source range.
+    Constant speed: t / speed. Ramp (speed eases linearly in source time from `speed` to `speed_to` over
+    `src_dur_us`): t_out = D/(r1−r0)·ln((r0 + (r1−r0)·t/D)/r0) — the same integral the renderer uses."""
+    import math
+
+    t = rel_us / 1e6
+    if speed_to and abs(speed_to - speed) > 1e-6 and src_dur_us > 0:
+        d = src_dur_us / 1e6
+        t = min(max(t, 0.0), d)
+        t_out = d / (speed_to - speed) * math.log((speed + (speed_to - speed) * t / d) / speed)
+    else:
+        t_out = t / speed
+    return round(t_out * fps)

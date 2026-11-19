@@ -257,3 +257,14 @@ def test_holds_and_pulses_compile_and_validate():
     bad = _finish(holds=[Hold(id="h1", item="k01", frames=90, reason="r")], beat_pulse=0.04, music=_finish().music.model_copy(update={"track": "none"}))
     codes = {i.code for i in validate_finish(bad, _story(), WORDS, IDX)}
     assert {"out_of_range", "pulse_without_music"} <= codes
+
+
+def test_a_new_punch_cuts_a_running_ramp_short():
+    fin = _finish(punch_ins=[PunchIn(id="p1", item="k01", at_word=8, scale=1.2, ramp_frames=30, ease=Ease.linear, reason="r"),
+                             PunchIn(id="p2", item="k01", at_word=9, scale=1.4, ramp_frames=0, ease=Ease.hold, reason="r")])
+    v = next(c for c in compile_timeline(_story(), fin, WORDS, CLIPS, FPS, IDX).video if c.id == "v_k01")
+    fs = [k.f for k in v.scale]
+    assert fs == sorted(fs)  # keyframes in time order
+    assert v.scale[-1].v == 1.4  # the later punch wins and holds
+    mid = v.scale[-2]
+    assert 1.0 < mid.v < 1.2  # the first ramp stopped part-way, where the second punch began

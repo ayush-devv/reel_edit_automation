@@ -31,7 +31,7 @@ def meta(video_id: str) -> dict | None:
         with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True, **JS}) as y:
             i = y.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
     except yt_dlp.utils.DownloadError as e:
-        print(f"  skip {video_id}: {str(e).splitlines()[0][:120]}")
+        print(f"  skip {video_id}: {(str(e).splitlines() or ['unreadable'])[0][:120]}")
         return None
     return {"id": video_id, "date": i.get("upload_date"), "duration": i.get("duration"), "title": i.get("title")}
 

@@ -58,3 +58,16 @@ def test_layout_rejects_empty_segment():
 def test_frames_for_duration():
     assert tb.frames_for_duration(Fraction(60), Fraction(30)) == 1800
     assert tb.frames_for_duration(Fraction(4), Fraction(30000, 1001)) == 120
+
+
+def test_src_to_out_frame_matches_the_ramp_integral():
+    from fractions import Fraction
+
+    from reel import timebase as tb
+    from reel.compile import ramp_factor
+
+    fps = Fraction(25)
+    assert tb.src_to_out_frame(2_000_000, fps, 2.0) == 25  # constant 2×: 2 s of source = 1 s out
+    end = tb.src_to_out_frame(6_000_000, fps, 1.0, 4.0, 6_000_000)
+    assert end == round(150 * ramp_factor(1.0, 4.0))  # whole ramp = the compiled length
+    assert tb.src_to_out_frame(3_000_000, fps, 1.0, 4.0, 6_000_000) < 75  # slow start: half the source comes out early
