@@ -48,6 +48,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                "brief": absolute(args.brief), "brand": absolute(args.brand), "asr_repo": args.asr_repo, "skip_visual": args.skip_visual,
                "broll": absolute(args.broll), "reference": absolute(args.reference)}
     options["skip_review"] = args.skip_review
+    options["voice_enhance"] = not args.no_voice_enhance
     atomic_write_json(ws.path("run_options.json"), options)  # `reel revise` / `reel proof` reuse them
     if args.analyse_only:
         state = run_pipeline(ws, PIPELINE, options=options, force=set(args.force or []))
@@ -373,6 +374,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--brand", help="brand kit JSON (brands/<client>.json)")
     p.add_argument("--asr-repo", help="override the ASR model repo (default mlx-community/whisper-large-v3-turbo)")
     p.add_argument("--skip-visual", action="store_true", help="skip OCR, scenes, faces, palette, motion (faster)")
+    p.add_argument("--no-voice-enhance", action="store_true", help="keep the original voice (no DeepFilterNet; the ffmpeg chain still applies)")
     p.add_argument("--analyse-only", action="store_true", help="stop after the footage tables (no Claude calls)")
     p.add_argument("--skip-review", action="store_true", help="QA gates only, no Reviewer call")
     p.add_argument("--reference", help="a finished reel the client likes: its pacing, captions and colour become the style to match")
