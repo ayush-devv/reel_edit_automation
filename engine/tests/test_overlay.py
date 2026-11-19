@@ -233,3 +233,33 @@ def test_every_graphic_kind_renders_in_its_window(tmp_path):
     # colour contact sheet over a test picture (for a human look: tmp_path/look.png)
     tools.ffmpeg(["-y", "-f", "lavfi", "-i", "testsrc2=s=1080x1920:r=25:d=6", "-i", str(ov), "-filter_complex",
                   f"[0][1]overlay=format=auto,select='{sel}',scale=270:480,tile={len(kinds)}x1", "-frames:v", "1", "-update", "1", str(tmp_path / "look.png")])
+
+
+def test_top_band_graphics_never_share_the_band():
+    fin = _finish(hook_title=HookTitle(text="One money trick", style="card", reason="r"),
+                  graphics=[_g("a", "lower_third", 7, 9, text="Asha · Founder", style="bar"),  # opening line: under the hook title
+                            _g("b", "keyword_card", 18, 20, item="k02", text="ten percent", style="pill"),
+                            _g("c", "emoji_pop", 19, 21, item="k02", emoji="🔥", position="upper_right"),  # overlaps b in time
+                            _g("d", "counter", 7, 8, text="{n}%", value=10, position="center")])  # centre: not the top band
+    codes = [i.code for i in validate_finish(fin, _story(), WORDS, IDX)]
+    assert codes.count("graphic_under_title") == 1 and codes.count("graphics_overlap") == 1
+    assert "counter_decimals" in {i.code for i in validate_finish(_finish(graphics=[_g("e", "counter", 18, 20, item="k02", text="{n}x", value=2.255)]),
+                                                                    _story(), WORDS, IDX)}
+
+
+def test_point_callout_maps_source_coordinates_through_the_crop():
+    from reel import framing
+
+    # 1920x1080 source cropped to 1080x1920, crop centred on x=0.7 of the source
+    shot = framing.Shot(0, (0.7, 0.5), None)
+    x, y = overlay.source_point_to_output(shot, 1920, 1080, 1080, 1920, 0.7, 0.5)
+    assert x == pytest.approx(0.5, abs=0.01) and y == pytest.approx(0.5, abs=0.01)  # the crop centre lands mid-frame
+    fill = framing.Shot(0, (0.5, 0.5), None, layout="fill")
+    fx, fy = overlay.source_point_to_output(fill, 1920, 1080, 1080, 1920, 0.25, 0.0)
+    assert fx == 0.25 and fy == pytest.approx((1920 - 1080 * 1080 / 1920) / 2 / 1920, abs=0.01)  # top of the fitted picture
+
+
+def test_brand_colours_must_be_hex():
+    assert BrandColors(accent="#f06").accent == "#FF0066"
+    with pytest.raises(Exception):
+        BrandColors(accent="red")

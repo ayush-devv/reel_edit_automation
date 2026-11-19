@@ -91,8 +91,8 @@ def system_memory() -> dict:
 # ------------------------------------------------------------------ launcher
 
 
-def popen_launcher(job: Job, logf):
-    env = {**os.environ, "PYTHONUNBUFFERED": "1"}  # log lines reach studio_job.log (and SSE) as they happen
+def popen_launcher(job: Job, logf, extra_env: dict | None = None):
+    env = {**os.environ, **(extra_env or {}), "PYTHONUNBUFFERED": "1"}  # log lines reach studio_job.log (and SSE) as they happen
     return subprocess.Popen(job.argv, cwd=job.cwd, stdout=logf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                             start_new_session=True, env=env)
 
@@ -113,7 +113,7 @@ def _signal(proc, pid: int | None, sig: int) -> None:
 class JobManager:
     def __init__(self, settings, launcher: Callable | None = None, on_finish: Callable[[Job], None] | None = None):
         self.s = settings
-        self.launcher = launcher or popen_launcher
+        self.launcher = launcher or (lambda job, logf: popen_launcher(job, logf, settings.job_env))
         self.on_finish = on_finish
         self.lock = threading.RLock()
         self.jobs: dict[str, Job] = {}

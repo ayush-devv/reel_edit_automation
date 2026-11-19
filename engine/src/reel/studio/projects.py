@@ -27,7 +27,7 @@ ID_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 MEDIA_PREFIXES = ("render/", "export/", "qa/sheets/", "qa/cuts/", "versions/")  # the NLE package is export/package/
 COVER_RE = re.compile(r"^cover[^/]*\.jpg$")
 STUDIO_FILE = "studio.json"
-ATTENTION_ORDER = {"hold": 0, "failed": 1, "sendable": 2, "running": 3, "queued": 3, "draft": 4, "delivered": 5}
+ATTENTION_ORDER = {"hold": 0, "failed": 1, "sendable": 2, "running": 3, "queued": 4, "draft": 5, "delivered": 6}
 
 
 def read_json(path: Path, default=None):
@@ -165,11 +165,16 @@ def summary(ws: Path, job: str | None = None) -> dict:
             "duration_s": _reel_duration(ws, state), "cost_usd": costs.project_total(ws / "log" / "runs.jsonl"),
             "verdict": (verdict or {}).get("status") if (verdict or {}).get("status") in ("sendable", "hold") else None,
             "needs_attention": attention, "thumb": "cover.jpg" if (ws / "cover.jpg").exists() else None,
-            "delivered": iso(meta.get("delivered"))}
+            "delivered_at": iso(meta.get("delivered"))}
+
+
+def is_delivered(s: dict) -> bool:
+    """The "Delivered" group: marked delivered and finished (a delivered reel that is re-editing shows as editing)."""
+    return bool(s.get("delivered_at")) and s["status"] in ("sendable", "hold")
 
 
 def attention_key(s: dict) -> tuple:
-    group = "delivered" if s.get("delivered") and s["status"] == "sendable" else s["status"]
+    group = "delivered" if is_delivered(s) else s["status"]
     return ATTENTION_ORDER.get(group, 9), -(datetime.fromisoformat(s["updated"]).timestamp() if s["updated"] else 0)
 
 
@@ -242,17 +247,26 @@ def _stage_time(state: dict, name: str, fallback: Path) -> float:
 
 def decisions(ws: Path) -> list[dict]:
     files = [ws / "state.json", ws / "plan" / "story.json", ws / "plan" / "finish.json", ws / "qa" / "review.json",
-             ws / "qa" / "verdict.json", ws / "perception" / "words.json", ws / "plan" / "history"]
+             ws / "qa" / "verdict.json", ws / "perception" / "words.json", ws / "plan" / "history", ws / "log" / "runs.jsonl"]
     return _cached(f"decisions:{ws}", files, lambda: _build_decisions(ws))
 
 
-def _d(at: float, kind: str, title: str, detail: str, knowledge: list | None = None) -> dict:
-    return {"at": at, "kind": kind, "title": title, "detail": detail or "", "knowledge": list(knowledge or [])}
+def _d(at: float, kind: str, title: str, detail: str, knowledge: list | None = None, cost: float | None = None) -> dict:
+    d = {"at": at, "kind": kind, "title": title, "detail": detail or "", "knowledge": list(knowledge or [])}
+    if cost:
+        d["cost_usd"] = round(cost, 4)
+    return d
+
+
+def _call_cost(calls: list[dict], prefix: str) -> float:
+    """AI cost of the Editor / Reviewer calls behind a group of decisions (labels: story, story_readback, story:fix1, …)."""
+    return sum(c["cost_usd"] for c in calls if str(c.get("label", "")).startswith(prefix))
 
 
 def _build_decisions(ws: Path) -> list[dict]:
     state = read_json(ws / "state.json", {}) or {}
     words = words_text(ws)
+    calls = costs.calls(ws / "log" / "runs.jsonl")
     out: list[dict] = []
     story = read_json(ws / "plan" / "story.json")
     if story:
@@ -260,14 +274,15 @@ def _build_decisions(ws: Path) -> list[dict]:
         items = story.get("items", [])
         hook = next((h for h in story.get("hook_options", []) if h.get("id") == story.get("hook")), None)
         if items:
-            out.append(_d(at, "story", f"Hook: “{_line(words, items[0], 90)}”", (hook or {}).get("reason", ""), story.get("knowledge_used")))
+            out.append(_d(at, "story", f"Hook: “{_line(words, items[0], 90)}”", (hook or {}).get("reason", ""), story.get("knowledge_used"),
+                          _call_cost(calls, "story")))
         for it in items:
             out.append(_d(at, "story", f"Keep {it.get('id')} ({it.get('beat')}): “{_line(words, it, 90)}”", it.get("reason", "")))
     fin = read_json(ws / "plan" / "finish.json")
     if fin:
         at = _stage_time(state, "finish", ws / "plan" / "finish.json")
         cap, grade, music, ht = fin.get("captions") or {}, fin.get("grade") or {}, fin.get("music") or {}, fin.get("hook_title") or {}
-        out.append(_d(at, "finish", f"Captions: {cap.get('family')}", cap.get("reason", ""), fin.get("knowledge_used")))
+        out.append(_d(at, "finish", f"Captions: {cap.get('family')}", cap.get("reason", ""), fin.get("knowledge_used"), _call_cost(calls, "finish")))
         if (ht.get("text") or "").strip():
             out.append(_d(at, "finish", f"Hook title “{ht['text']}” ({ht.get('style')})", ht.get("reason", "")))
         look = f"Look: {grade.get('look')} at {grade.get('strength')}"
@@ -299,6 +314,8 @@ def _build_decisions(ws: Path) -> list[dict]:
     review = read_json(ws / "qa" / "review.json")
     qa_at = _stage_time(state, "qa", ws / "qa" / "verdict.json")
     if review:
+        out.append(_d(qa_at, "review", f"Reviewer: {'sendable' if review.get('sendable') else 'hold'}", review.get("summary", ""),
+                      cost=_call_cost(calls, "review")))
         for i in review.get("issues", []):
             out.append(_d(qa_at, "review", f"{i.get('severity')} · {i.get('category')} at {i.get('at') or 'whole reel'}",
                           f"{i.get('problem', '')} Fix: {i.get('fix', '')}".strip()))
@@ -365,30 +382,93 @@ def media_path(ws: Path, rel: str) -> Path | None:
     return p
 
 
-def package_files(ws: Path) -> list[dict]:
+PACKAGE_KINDS = {  # export/package/<name> → (kind, label)
+    ".fcpxml": ("timeline", "Final Cut Pro timeline"), ".otio": ("timeline", "OpenTimelineIO timeline"),
+    ".srt": ("captions", "Captions · SRT"), ".vtt": ("captions", "Captions · WebVTT"),
+    "overlay.mov": ("overlay", "Overlay with transparency (captions, titles, graphics)"),
+    "edit_list.md": ("edit_list", "Edit list with reasons"), "README.md": ("other", "Read me"),
+}
+VARIANT_LABEL = {"feed_4x5": "Feed · 4:5 · 1080×1350", "square": "Square · 1:1 · 1080×1080"}
+
+
+def _bytes(p: Path) -> int:
+    return sum(f.stat().st_size for f in p.rglob("*") if f.is_file()) if p.is_dir() else p.stat().st_size
+
+
+def package_listing(ws: Path) -> dict:
+    """FR-9: what there is to hand over. Every `path` is relative to the project folder (a media path for files)."""
+    rel = lambda p: str(p.relative_to(ws))  # noqa: E731
     pkg = ws / "export" / "package"
-    if not pkg.exists():
+    tl = read_json(ws / "timeline" / "timeline.json", {}) or {}
+    size = f" · {tl['width']}×{tl['height']}" if tl.get("width") and tl.get("height") else ""
+    cover = "cover.jpg" if (ws / "cover.jpg").exists() else None
+    files: list[dict] = []
+    final = next((p for p in (pkg / "reel.mp4", ws / "export" / "reel.mp4", ws / "render" / "final.mp4") if p.exists()), None)
+    if final:
+        files.append({"path": rel(final), "label": f"Final reel · 9:16{size}", "kind": "final", "bytes": _bytes(final), "thumb": cover})
+    variants = ws / "export" / "variants"
+    for p in sorted(variants.glob("*.mp4")) if variants.exists() else []:
+        name = p.stem.removeprefix("reel_")
+        files.append({"path": rel(p), "label": VARIANT_LABEL.get(name, name.replace("_", " ")), "kind": "variant", "bytes": _bytes(p), "thumb": None})
+    review = ws / "export" / "review" / "review.mp4"
+    if review.exists():
+        files.append({"path": rel(review), "label": "Review copy · small, watermarked", "kind": "review_copy", "bytes": _bytes(review), "thumb": None})
+    for p in sorted(pkg.iterdir()) if pkg.exists() else []:
+        if p.name.startswith(".") or p == final:
+            continue
+        if p.is_dir():
+            kind, label = ("stems", "Audio stems · dialogue, music, effects") if p.name == "stems" else ("other", p.name)
+            files.append({"path": rel(p) + "/", "label": label, "kind": kind, "bytes": _bytes(p), "thumb": None})
+            continue
+        kind, label = PACKAGE_KINDS.get(p.name) or PACKAGE_KINDS.get(p.suffix.lower()) or ("other", p.name)
+        files.append({"path": rel(p), "label": label, "kind": kind, "bytes": _bytes(p), "thumb": None})
+    return {"files": files, "warnings": [*platform_notes(ws), *_credit_lines(ws)]}
+
+
+def platform_notes(ws: Path) -> list[str]:
+    stages_ = (read_json(ws / "state.json", {}) or {}).get("stages", {})
+    return list(((stages_.get("variants") or {}).get("meta") or {}).get("platform_notes") or [])
+
+
+def _credit_lines(ws: Path) -> list[str]:
+    """Licences that ask for a credit line in the post (music bed, sound effects used)."""
+    fin = read_json(ws / "plan" / "finish.json", {}) or {}
+    track = (fin.get("music") or {}).get("track")
+    if not track or track == "none":
         return []
-    return [{"path": str(p.relative_to(ws)), "name": str(p.relative_to(pkg)), "bytes": p.stat().st_size}
-            for p in sorted(pkg.rglob("*")) if p.is_file()]
+    try:
+        from reel import assets
+
+        meta = assets.load().music.get(track) or {}
+    except Exception:  # noqa: BLE001 — a missing library only loses the hint
+        return []
+    credit = meta.get("attribution") or meta.get("credit")
+    return [f"Music “{meta.get('title') or track}” needs a credit line in the post: “{credit}”."] if credit else []
 
 
 def versions(ws: Path) -> list[dict]:
+    """Version history, oldest first. Before the first change the finished edit is a virtual version 1
+    ("Original edit", final = render/final.mp4); the first change snapshots it into versions/1/."""
     root = ws / "versions"
     out = []
     for d in sorted((d for d in root.iterdir() if d.is_dir() and d.name.isdigit()), key=lambda d: int(d.name)) if root.exists() else []:
         meta = read_json(d / "meta.json", {}) or {}
-        v = {"n": int(d.name), "created": iso(meta.get("created") or d.stat().st_mtime), "label": meta.get("label", "")}
+        v = {"n": int(d.name), "created": iso(meta.get("created") or d.stat().st_mtime), "label": meta.get("label", ""),
+             "reply": meta.get("reply") or "", "cost_usd": meta.get("cost_usd")}
         if (d / "final.mp4").exists():
             v["final"] = f"versions/{d.name}/final.mp4"
         out.append(v)
+    final = ws / "render" / "final.mp4"
+    if not out and final.exists():
+        out.append({"n": 1, "created": iso(final.stat().st_mtime), "label": "Original edit", "reply": "", "cost_usd": None,
+                    "final": "render/final.mp4"})
     return out
 
 
 VERSION_FILES = ("plan/story.json", "plan/finish.json", "plan/story_readback.txt", "timeline/timeline.json")
 
 
-def snapshot(ws: Path, label: str) -> int:
+def snapshot(ws: Path, label: str, *, reply: str = "", cost_usd: float | None = None) -> int:
     """Copy the plans, the timeline and the final render into versions/<n>/ (the render is hard-linked)."""
     existing = [int(d.name) for d in (ws / "versions").iterdir() if d.name.isdigit()] if (ws / "versions").exists() else []
     n = max(existing, default=0) + 1
@@ -404,8 +484,13 @@ def snapshot(ws: Path, label: str) -> int:
             os.link(final, dst / "final.mp4")
         except OSError:
             shutil.copy2(final, dst / "final.mp4")
-    atomic_write_json(dst / "meta.json", {"n": n, "created": time.time(), "label": label})
+    atomic_write_json(dst / "meta.json", {"n": n, "created": time.time(), "label": label, "reply": reply, "cost_usd": cost_usd})
     return n
+
+
+def has_snapshots(ws: Path) -> bool:
+    root = ws / "versions"
+    return root.exists() and any(d.name.isdigit() for d in root.iterdir())
 
 
 def restore_plans(ws: Path, n: int) -> bool:
@@ -441,25 +526,79 @@ def detail(ws: Path, job: str | None = None) -> dict:
     return s | {"brief": brief, "brand": brand, "stages": stages(ws, job), "decisions": decisions(ws),
                 "verdict_detail": verdict_detail(ws), "proof": verdict.get("proof_open") or [], "review": review_view(ws),
                 "media": media_view(ws), "versions": versions(ws), "calls": costs.calls(ws / "log" / "runs.jsonl"),
-                "package": package_files(ws),
-                "platform_notes": ((read_json(ws / "state.json", {}) or {}).get("stages", {}).get("variants") or {}).get("meta", {}).get("platform_notes", [])}
+                "platform_notes": platform_notes(ws), "eta_s": None}
+
+
+TIMELINE_LISTS = ("video", "audio", "transitions", "ducking", "titles", "flashes", "pips", "effects", "graphics")
+
+
+def normalized_timeline(raw: dict) -> dict:
+    """The timeline with every default filled in: older timeline.json files omit defaulted keys (effects, graphics,
+    grade.grain, …), and the web app reads them all."""
+    from reel.schemas.timeline import Timeline
+
+    try:
+        return Timeline.model_validate(raw).model_dump(mode="json")
+    except Exception:  # noqa: BLE001 — an older or hand-edited timeline still shows, with the list keys filled in
+        out = dict(raw)
+        for key in TIMELINE_LISTS:
+            if not isinstance(out.get(key), list):
+                out[key] = []
+        out["grade"] = {"look": "none", "strength": 0.0, "correct": True, "grain": 0.0, "vignette": 0.0, **(raw.get("grade") or {})}
+        return out
 
 
 def timeline_view(ws: Path) -> dict | None:
-    tl = read_json(ws / "timeline" / "timeline.json")
-    if tl is None:
+    """FR-5 layers: the timeline, the Editor's reason for every block (keyed like the blocks), the kept lines, and the
+    current value of every guided adjustment (FR-8)."""
+    raw = read_json(ws / "timeline" / "timeline.json")
+    if raw is None:
         return None
+    tl = normalized_timeline(raw)
     words = words_text(ws)
     story = read_json(ws / "plan" / "story.json", {}) or {}
     fin = read_json(ws / "plan" / "finish.json", {}) or {}
-    items = {it["id"]: {"beat": it.get("beat"), "reason": it.get("reason", ""), "text": _line(words, it, 10_000), "clip": it.get("clip"),
-                        "word_start": it.get("word_start"), "word_end": it.get("word_end")} for it in story.get("items", [])}
+    items = {it["id"]: {"beat": it.get("beat") or "", "text": _line(words, it, 10_000)} for it in story.get("items", [])}
+
+    reasons: dict[str, str] = {}
+
+    def add(key: str, text: str | None) -> None:
+        if text:
+            reasons[key] = f"{reasons[key]} {text}" if key in reasons else text
+
     hook = next((h for h in story.get("hook_options", []) if h.get("id") == story.get("hook")), None)
-    reasons: dict[str, dict] = {}
+    for it in story.get("items", []):
+        add(it["id"], it.get("reason"))
+    if hook and hook.get("item"):
+        add(hook["item"], f"Hook: {hook.get('reason', '')}".strip())
     for key in ("hook_title", "captions", "grade", "music"):
-        if fin.get(key):
-            reasons[key] = {"kind": key, **{k: v for k, v in fin[key].items() if k != "tokens"}}
-    for kind in ("punch_ins", "speeds", "transitions", "sfx", "broll", "effects", "graphics", "holds"):
-        for x in fin.get(kind, []):
-            reasons[x["id"]] = {"kind": kind, **x}
-    return {"timeline": tl, "story": items, "hook": hook, "finish": reasons}
+        add(key, (fin.get(key) or {}).get("reason"))
+    clips_of: dict[str, list[str]] = {}
+    for c in tl.get("video", []):
+        clips_of.setdefault((c.get("src") or {}).get("item", ""), []).append(c["id"])
+    for c in tl.get("audio", []):  # dialogue blocks carry their line's reason
+        if c.get("role") == "voice" and (c.get("src") or {}).get("item") in items:
+            add(c["id"], next((it.get("reason") for it in story.get("items", []) if it["id"] == c["src"]["item"]), None))
+    for kind, word in (("punch_ins", "Punch-in"), ("speeds", "Speed"), ("holds", "Freeze")):
+        for x in fin.get(kind, []):  # placed on the item's video clip(s): the punch-in block is the clip
+            for cid in clips_of.get(x.get("item", ""), []):
+                if cid.startswith("v_"):
+                    add(cid, f"{word}: {x.get('reason', '')}".strip())
+            add(x["id"], x.get("reason"))
+    for kind in ("transitions", "sfx", "effects", "graphics", "broll"):
+        for x in fin.get(kind, []):  # same id on the timeline (sfx audio clip, pip, effect, graphic, transition)
+            add(x["id"], x.get("reason"))
+            if kind == "broll":
+                add(f"br_{x['id']}", x.get("reason"))  # full-frame b-roll is a video clip
+
+    grade, cap, music = fin.get("grade") or {}, fin.get("captions") or {}, fin.get("music") or {}
+    tgrade = tl.get("grade") or {}
+    adjust = {
+        "caption_family": cap.get("family") or (tl.get("captions") or {}).get("family"),
+        "caption_tokens": {t["key"]: t["value"] for t in cap.get("tokens") or [] if "key" in t},
+        "look": grade.get("look", tgrade.get("look", "none")), "look_strength": grade.get("strength", tgrade.get("strength", 0.0)),
+        "grain": grade.get("grain", tgrade.get("grain", 0.0)), "vignette": grade.get("vignette", tgrade.get("vignette", 0.0)),
+        "music_track": music.get("track", "none"), "music_gain_db": music.get("gain_db", -18.0),
+        "max_pause_ms": story.get("max_pause_ms"), "sfx": len(fin.get("sfx") or []), "punch_ins": len(fin.get("punch_ins") or []),
+    }
+    return {"timeline": tl, "reasons": reasons, "story": items, "adjust": adjust}

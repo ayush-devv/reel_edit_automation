@@ -64,8 +64,25 @@ def load_inputs(ws: Workspace, brief_path: str | None = None, brand_path: str | 
                   brief=brief_mod.load_brief(brief_path), brand=brief_mod.load_brand(brand_path))
 
 
+def all_required(node):
+    """Every property of every object is required in what Claude must return: a field with a default is
+    optional in pydantic's schema, and a revision that omits it would silently reset it (graphics, effects,
+    holds … dropped). Defaults stay on the models only to load plans written before a field existed."""
+    if isinstance(node, dict):
+        if node.get("type") == "object" and "properties" in node:
+            node["required"] = list(node["properties"])
+            for prop in node["properties"].values():
+                prop.pop("default", None)
+        for v in node.values():
+            all_required(v)
+    elif isinstance(node, list):
+        for v in node:
+            all_required(v)
+    return node
+
+
 def schema(model: type[BaseModel]) -> dict:
-    return model.model_json_schema()
+    return all_required(model.model_json_schema())
 
 
 # ------------------------------------------------------------------ context packs
@@ -92,7 +109,7 @@ def story_pack(inp: Inputs) -> str:
     if ref.exists():
         lines += [ref.read_text(), ""]
     lines.append(knowledge.story_context(b.genre_hint if b else None))
-    lines.append(knowledge.LIBRARY_POINTER)
+    lines.append(knowledge.library_pointer())
     return "\n".join(lines)
 
 
@@ -122,11 +139,13 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
              "  - `emoji_pop` (one emoji; upper_left | upper_right | beside_face) — a reaction on a punchline, 0–3 per reel;",
              "  - `keyword_card` (1–4 words; style pill | under | marker | box | plain; upper | center) — the one idea of a beat, not a caption copy;",
              "  - `lower_third` (\"Name · Role\"; bar | tag) — first time a person is introduced;",
-             "  - `callout` (circle | box | underline | arrow; position face, or point with x,y 0–1 read off the contact sheet; optional ≤ 3-word label);",
+             "  - `callout` (circle | box | underline | arrow; position face, or point with x,y = fractions (0–1) of the SOURCE frame as seen on the contact sheet — the engine maps them through the crop; optional ≤ 3-word label);",
              "  - `counter` (value + text with {n}, e.g. \"₹{n} crore\", \"{n}%\") — when a number is the story;",
              "  - `text_card` (full screen, ≤ 8 words; dark | light | color) — a chapter or list beat; it hides the speaker, so use 0–2;",
              "  - `cta_card` (last item only; bar | card) — the brief's call to action;",
-             "  - `progress_bar` and `logo_watermark` (whole reel; the logo needs a brand logo).",
+             "  - `progress_bar` and `logo_watermark` (whole reel; the logo needs a brand logo; top_right | top_left).",
+             "  Top band = lower_third, emoji_pop upper_*, counter/keyword_card upper, cta bar: one at a time, never during the hook title (opening line). "
+             "Emoji: one standard emoji (country flags and keycaps are not available).",
              "  Rules (pro motion design): sentence case, short claims without a full stop; two cards in a row never share size, entry and position; "
              "one style direction per creator — keep the same graphic styles across a reel; graphics never sit on the face or the captions.",
              "- Captions: kinetic captions in the family you choose, with your emphasis words; a brand kit overrides family/tokens.", ""]
@@ -160,7 +179,7 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
     if ref.exists():
         lines += [ref.read_text(), ""]
     lines.append(knowledge.finish_context(story.genre))
-    lines.append(knowledge.LIBRARY_POINTER)
+    lines.append(knowledge.library_pointer())
     return "\n".join(lines)
 
 

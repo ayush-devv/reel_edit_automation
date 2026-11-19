@@ -155,7 +155,7 @@ GRAPHIC_STYLES = {
     "emoji_pop": ({""}, {"", "upper_left", "upper_right", "beside_face"}),
     "keyword_card": ({"", "pill", "under", "marker", "box", "plain"}, {"", "upper", "center"}),
     "lower_third": ({"", "bar", "tag"}, {""}),
-    "callout": ({"circle", "box", "underline", "arrow"}, {"face", "point"}),
+    "callout": ({"", "circle", "box", "underline", "arrow"}, {"", "face", "point"}),
     "counter": ({""}, {"", "upper", "center"}),
     "text_card": ({"", "dark", "light", "color"}, {""}),
     "cta_card": ({"", "bar", "card"}, {""}),
@@ -422,11 +422,44 @@ def validate_graphics(fin, items, order, uid, need_item, in_item, idx, has_logo:
             if g.value <= 0:
                 issues.append(Issue("counter_value", f"{path}.value", "Counter value must be positive.", "Set the number it counts up to."))
         if kind == "callout" and g.position == "point" and not (0 <= g.x <= 1 and 0 <= g.y <= 1):
-            issues.append(Issue("callout_point", path, "A point callout needs x and y between 0 and 1 (output frame).",
+            issues.append(Issue("callout_point", path, "A point callout needs x and y between 0 and 1 (fractions of the source frame on the contact sheet).",
                                 "Read the point off the contact sheet, or use position face."))
+        if kind == "counter" and g.value > 0 and round(g.value, 2) != g.value:
+            issues.append(Issue("counter_decimals", f"{path}.value", f"Counter value {g.value} has more than 2 decimals.",
+                                "Round it the way it is said (the counter shows the exact number)."))
         if kind == "cta_card" and g.item != order[-1]:
             issues.append(Issue("cta_not_last", f"{path}.item", "The CTA card belongs on the last item.", f"Use item {order[-1]}."))
+    issues += _top_band_clashes(fin, items, order)
     if len(fin.graphics) > GRAPHICS_MAX:
         issues.append(Issue("too_many_graphics", "graphics", f"{len(fin.graphics)} graphics in one reel.",
                             f"Keep at most {GRAPHICS_MAX}: graphics compete with the speaker.", "warning"))
+    return issues
+
+
+TOP_BAND = {("lower_third", ""), ("lower_third", "bar"), ("lower_third", "tag"), ("emoji_pop", ""), ("emoji_pop", "upper_left"),
+            ("emoji_pop", "upper_right"), ("counter", ""), ("counter", "upper"), ("keyword_card", ""), ("keyword_card", "upper"),
+            ("cta_card", ""), ("cta_card", "bar")}
+
+
+def _band(g) -> bool:
+    key = (g.kind.value, g.position if g.kind.value != "lower_third" else g.style)
+    return (g.kind.value, g.position) in TOP_BAND or key in TOP_BAND
+
+
+def _top_band_clashes(fin, items, order) -> list[Issue]:
+    """Graphics placed in the top band must not share it in time: with each other, or with the hook title over
+    the opening line (both would draw in the same place)."""
+    from reel.compile import WHOLE_REEL_GRAPHICS
+
+    issues = []
+    tops = [(n, g) for n, g in enumerate(fin.graphics) if g.kind.value not in WHOLE_REEL_GRAPHICS and _band(g) and g.item in items]
+    if fin.hook_title.text.strip() and order:
+        for n, g in tops:
+            if g.item == order[0]:
+                issues.append(Issue("graphic_under_title", f"graphics[{n}]", f"{g.kind.value} sits in the top band during the opening line, "
+                                    "where the hook title is.", "Move it to a later item, use position center/beside_face, or drop the hook title."))
+    for (n1, a), (n2, b) in ((x, y) for i, x in enumerate(tops) for y in tops[i + 1:]):
+        if a.item == b.item and a.from_word <= b.to_word and b.from_word <= a.to_word:
+            issues.append(Issue("graphics_overlap", f"graphics[{n2}]", f"{b.kind.value} and {a.kind.value} (graphics[{n1}]) share the top band at the same time.",
+                                "Give them different words, or move one to another position."))
     return issues

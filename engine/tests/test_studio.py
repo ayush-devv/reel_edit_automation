@@ -92,7 +92,15 @@ def make_project(root: Path, pid: str = "p1", *, verdict: str = "hold", runs: li
         "speeds": [], "transitions": [], "sfx": [], "broll": [], "knowledge_used": [],
         "captions": {"family": "bold_pop", "tokens": [{"key": "emph_color", "value": "#FFD400"}], "emphasis_words": [2], "script": "latin", "reason": "energy"},
         "music": {"track": "none", "gain_db": -18, "duck_db": 12, "reason": "speech only"}})
-    _w(ws / "timeline" / "timeline.json", {"fps": "30/1", "duration_f": 375, "video": []})
+    clip = {"asset": "c01", "src_in_us": 0}
+    _w(ws / "timeline" / "timeline.json", {  # a valid Timeline written without its defaults, like older engine versions
+        "fps": "30/1", "width": 1080, "height": 1920, "duration_f": 72,
+        "assets": {"c01": {"id": "c01", "kind": "video", "uri": "source/c01.mp4"}},
+        "video": [{"id": "v_k01", **clip, "at_f": 0, "dur_f": 36, "src_out_us": 1_200_000, "src": {"item": "k01", "words": [0, 2]}},
+                  {"id": "v_k02", **clip, "at_f": 36, "dur_f": 36, "src_out_us": 2_400_000, "scale": [{"f": 0, "v": 1.0}, {"f": 6, "v": 1.2}],
+                   "src": {"item": "k02", "words": [3, 5]}}],
+        "audio": [{"id": "a_k01", **clip, "at_f": 0, "dur_f": 36, "role": "voice", "src": {"item": "k01", "words": [0, 2]}}],
+        "grade": {"look": "clean", "strength": 0.4}})
     _w(ws / "qa" / "verdict.json", {"status": verdict, "reasons": ["proof_words: 1 unconfirmed"] if verdict == "hold" else [], "warnings": [],
                                     "fix_request": "", "proof_open": [{"i": 2, "text": "sugar", "suggestion": None, "at": "0:00.80", "frame": 24, "why": "low confidence"}]
                                     if verdict == "hold" else []})
@@ -114,7 +122,8 @@ def env(tmp_path):
     launcher = Launcher()
     s = Settings(projects_root=root, brands_root=tmp_path / "brands", token_file=tmp_path / "cfg" / "studio_token",
                  web_dist=tmp_path / "dist", eval_manifest=tmp_path / "eval" / "manifest.yaml", scoreboard=tmp_path / "eval" / "sb.jsonl",
-                 improve_log=tmp_path / "eval" / "improve.jsonl", python="python", doctor=lambda: {"ok": True, "items": []},
+                 improve_log=tmp_path / "eval" / "improve.jsonl", calibration_report=tmp_path / "eval" / "calibration.json",
+                 prefs_file=tmp_path / "cfg" / "studio_settings.json", python="python", doctor=lambda: {"ok": True, "items": []},
                  start_scheduler=False, poll_s=0.05, sse_max_s=1.5)
     app = create_app(s, launcher=launcher)
     client = TestClient(app)
@@ -165,7 +174,16 @@ def test_project_list_and_detail(env):
     assert d["media"]["final"] == "render/final.mp4"
 
     tl = env["c"].get("/api/projects/p1/timeline").json()
-    assert tl["story"]["k01"]["text"] == "How much sugar" and tl["finish"]["p01"]["reason"] == "emphasis"
+    assert tl["story"]["k01"] == {"beat": "hook", "text": "How much sugar"}
+    assert tl["timeline"]["effects"] == [] and tl["timeline"]["grade"]["grain"] == 0.0  # defaults filled in
+    r = tl["reasons"]  # keyed like the layer blocks: plan item, punch-in clip, dialogue clip, singletons
+    assert r["k01"].startswith("opens on the question") and "Hook: a question hook" in r["k01"]
+    assert r["v_k02"] == "Punch-in: emphasis" and r["a_k01"] == "opens on the question" and r["grade"] == "neutral"
+    assert tl["adjust"]["caption_family"] == "bold_pop" and tl["adjust"]["caption_tokens"] == {"emph_color": "#FFD400"}
+    assert tl["adjust"]["punch_ins"] == 1 and tl["adjust"]["max_pause_ms"] is None
+    assert d["versions"] == [{"n": 1, "created": d["versions"][0]["created"], "label": "Original edit", "reply": "", "cost_usd": None,
+                              "final": "render/final.mp4"}]  # virtual until the first change
+    assert d["eta_s"] is None and d["delivered_at"] is None
     assert env["c"].get("/api/projects/nope").status_code == 404
     assert env["c"].get("/api/projects/.trash").status_code == 404
 
@@ -231,7 +249,8 @@ def test_adjust_validation_422_then_applies(env):
     assert c.post("/api/projects/p1/adjust", json={"kind": "look", "value": "warm"}).status_code == 409  # one job per project
     env["launcher"].finish()
     vs = c.get("/api/projects/p1/versions").json()
-    assert [v["label"] for v in vs] == ["Original edit", "Manual: caption family"] and vs[1]["final"] == "versions/2/final.mp4"
+    assert [v["label"] for v in vs] == ["Original edit", "Manual"] and vs[1]["final"] == "versions/2/final.mp4"
+    assert vs[1]["reply"] == "caption family → clean_phrase"
     assert (ws / "versions" / "1" / "plan" / "finish.json").exists()
     assert c.post("/api/projects/p1/adjust", json={"kind": "punch_ins_off", "value": True}).status_code == 200
     assert json.loads((ws / "plan" / "finish.json").read_text())["punch_ins"] == []
@@ -387,11 +406,14 @@ def test_release_lock_refuses_holdout(env):
 
 def test_brands_crud_and_label(env):
     c = env["c"]
-    assert c.post("/api/brands", json={"client": "Dear Ma", "colors": {"accent": "#FF3399"}}).json()["id"] == "dear-ma"
-    assert c.post("/api/brands", json={"client": "Dear Ma"}).status_code == 409
-    assert c.post("/api/brands", json={"client": "X", "bogus": 1}).status_code == 400
-    assert c.put("/api/brands/dear-ma", json={"client": "Dear Ma", "look": "warm"}).json()["look"] == "warm"
-    assert c.get("/api/brands/dear-ma").json()["look"] == "warm" and len(c.get("/api/brands").json()) == 1
+    made = c.post("/api/brands", json={"brand": {"client": "Dear Ma", "colors": {"accent": "#FF3399"}}}).json()
+    assert made["id"] == "dear-ma" and made["brand"]["colors"]["accent"] == "#FF3399" and made["brand"]["caption_tokens"] == {}
+    assert c.post("/api/brands", json={"id": "dear-ma", "brand": {"client": "Dear Ma"}}).status_code == 409
+    assert c.post("/api/brands", json={"brand": {"client": "X", "bogus": 1}}).status_code == 400
+    assert c.post("/api/brands", json={"client": "X"}).status_code == 400  # the Brand goes inside {id?, brand}
+    assert c.put("/api/brands/dear-ma", json={"client": "Dear Ma", "look": "warm"}).json()["brand"]["look"] == "warm"
+    assert c.get("/api/brands/dear-ma").json()["brand"]["look"] == "warm"
+    assert [b["id"] for b in c.get("/api/brands").json()] == ["dear-ma"]
     assert c.get("/api/brands/..%2fx").status_code == 404
     ws = make_project(env["root"])
     assert c.post("/api/projects/p1/label", json={"sendable": False, "reason": "captions"}).status_code == 204
@@ -446,3 +468,158 @@ def test_cli_rerun_and_revise_args(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "_cmd_revise", lambda args: got.append(args.request) or 0)
     cli.main(["revise", "--project", "p", "--", "-make the hook faster"])
     assert got == ["-make the hook faster"]
+
+
+# ------------------------------------------------------------------ unified contract: package, delivered, settings, lab, libraries
+
+
+def test_package_listing_and_delivered(env):
+    ws = make_project(env["root"])
+    _w(ws / "export" / "package" / "reel.mp4", "x" * 10)
+    _w(ws / "export" / "package" / "timeline.fcpxml", "<fcpxml/>")
+    _w(ws / "export" / "package" / "captions.srt", "1")
+    _w(ws / "export" / "package" / "stems" / "dialogue.wav", "ab")
+    _w(ws / "export" / "package" / "stems" / "music.wav", "cd")
+    _w(ws / "export" / "variants" / "reel_square.mp4", "sq")
+    _w(ws / "export" / "review" / "review.mp4", "rv")
+    (ws / "cover.jpg").write_bytes(b"jpg")
+    c = env["c"]
+    pkg = c.get("/api/projects/p1/package").json()
+    by = {f["kind"]: f for f in pkg["files"]}
+    assert by["final"] == {"path": "export/package/reel.mp4", "label": "Final reel · 9:16 · 1080×1920", "kind": "final", "bytes": 10, "thumb": "cover.jpg"}
+    assert by["variant"]["label"].startswith("Square") and by["review_copy"]["path"] == "export/review/review.mp4"
+    assert by["stems"] == {"path": "export/package/stems/", "label": "Audio stems · dialogue, music, effects", "kind": "stems", "bytes": 4, "thumb": None}
+    assert {f["kind"] for f in pkg["files"]} >= {"timeline", "captions", "other"} and pkg["warnings"] == []
+    for f in pkg["files"]:  # every file (not folder) is servable as media
+        if not f["path"].endswith("/"):
+            assert c.get(f"/api/projects/p1/media/{f['path']}").status_code == 200, f["path"]
+
+    assert c.post("/api/projects/p1/delivered").status_code == 204  # no body: marks delivered
+    s = c.get("/api/projects").json()[0]
+    assert s["delivered_at"] and "delivered" not in s
+    make_project(env["root"], "p2", verdict="sendable")
+    assert [p["id"] for p in c.get("/api/projects").json()] == ["p2", "p1"]  # delivered sorts last
+    assert c.post("/api/projects/p1/delivered", json={"delivered": False}).status_code == 204
+    assert c.get("/api/projects/p1").json()["delivered_at"] is None
+
+
+def test_settings_persist_private_and_feed_the_queue(env):
+    c, s = env["c"], env["s"]
+    got = c.get("/api/settings").json()
+    assert got == {"max_jobs": 3, "projects_dir": str(env["root"]), "default_brief": {}, "default_deliverables": [], "pexels_key_set": False}
+    new = {**got, "max_jobs": 1, "default_brief": {"language": "hinglish", "platform": "platform.tiktok"}, "default_deliverables": ["square"],
+           "pexels_key": "sekret-key"}
+    r = c.put("/api/settings", json=new)
+    assert r.status_code == 200 and r.json()["pexels_key_set"] is True and "pexels_key" not in r.json()
+    assert "sekret" not in c.get("/api/settings").text and c.get("/api/health").json()["jobs"]["limit"] == 1
+    assert (s.prefs_file.stat().st_mode & 0o777) == 0o600 and json.loads(s.prefs_file.read_text())["pexels_key"] == "sekret-key"
+    assert s.job_env["PEXELS_API_KEY"] == "sekret-key"  # reaches the job subprocesses, never the queue file
+    assert c.put("/api/settings", json={**new, "pexels_key": ""}).json()["pexels_key_set"] is True  # blank keeps the key
+    for bad in ({**new, "max_jobs": 4}, {**new, "projects_dir": "/elsewhere"}, {**new, "default_brief": {"bogus": 1}},
+                {**new, "default_deliverables": ["vertical"]}):
+        assert c.put("/api/settings", json=bad).status_code == 400, bad
+    # max_jobs drives the queue
+    for i in range(2):
+        make_project(env["root"], f"m{i}")
+    assert [c.post(f"/api/projects/m{i}/retry", json={}).json()["job"]["status"] for i in range(2)] == ["running", "queued"]
+    c.put("/api/settings", json={**new, "max_jobs": 2})
+    assert len(c.get("/api/jobs").json()["running"]) == 2
+    # a restart reads the saved preferences
+    app2 = create_app(Settings(**{**s.__dict__, "max_jobs": 3, "job_env": {}}), launcher=Launcher())
+    assert app2.state.settings.max_jobs == 2 and app2.state.settings.job_env["PEXELS_API_KEY"] == "sekret-key"
+
+
+def test_lab_shape(env):
+    s = env["s"]
+    _w(s.eval_manifest, json.dumps({"reels": [{"id": "a", "split": "tuning", "language": "en", "channel": "@x"},
+                                               {"id": "b", "split": "holdout", "language": "hinglish"}]}))
+    _w(s.scoreboard, "\n".join(json.dumps(r) for r in [
+        {"run_id": "r1", "time": 1795000000.0, "split": "tuning", "mean_primary": 61.5, "vetoed": 0,
+         "reels": [{"id": "a", "primary": 61.5, "families": {"story": 0.5, "captions": 0.7}, "vetoes": []}]},
+        {"run_id": "r2", "time": 1795000100.0, "split": "tuning", "mean_primary": None, "reels": []}]))
+    _w(s.improve_log, "\n".join(json.dumps(r) for r in [
+        {"round": 0, "diagnosis": "d", "changes": [{"kind": "edit", "node_id": "tech.x"}], "outcome": "accepted", "decision": {"mean_gain": 2.0, "reasons": []}},
+        {"round": 1, "diagnosis": "nothing", "changes": [], "problems": ["bad node"], "outcome": "invalid proposal"}]))
+    _w(s.calibration_report, {"rule": "r", "gates": {"black": {"false_alarms": 2, "known_good": 6, "catch_rate": 1.0, "mode_now": "warn",
+                                                               "promote_to_block": False}}})
+    lab = env["c"].get("/api/lab").json()
+    assert lab["gold"] == {"pairs": 2, "tuning": 1, "holdout": 1, "hinglish": 1}
+    assert lab["gold_pairs"][0] == {"id": "a", "split": "tuning", "language": "en", "source": "@x"}
+    assert lab["runs"] == [{"id": "r1", "at": lab["runs"][0]["at"], "split": "tuning", "primary": 0.615, "families": {"story": 0.5, "captions": 0.7},
+                            "vetoed": 0, "reels": [{"id": "a", "primary": 0.615, "verdict": None, "vetoes": []}]}]  # null scores dropped
+    assert lab["improve_history"][0] | {"at": None} == {"at": None, "round": 0, "change": "edit tech.x", "outcome": "accepted", "gain": 0.02, "reason": None}
+    assert lab["improve_history"][1]["outcome"] == "invalid" and lab["improve_history"][1]["reason"] == "bad node"
+    cal = lab["calibration"]
+    assert cal["agreement"] is None and cal["n_labels"] == 0 and cal["trusted"] is False
+    assert cal["gates"] == [{"name": "black", "mode": "warn", "false_alarm_rate": 0.333, "catch_rate": 1.0, "promote_to_block": False}]
+    assert lab["release_locked"] is True and lab["lock_reason"].startswith("Release check locked")
+    r = env["c"].post("/api/lab/improve", json={"budget": 7})
+    assert r.status_code == 200 and env["launcher"].procs[-1][0].argv[3:6] == ["improve", "--budget", "7"]
+
+
+def test_library_media_and_query_token(env, monkeypatch, tmp_path):
+    from reel import assets
+
+    wav = tmp_path / "pop.wav"
+    wav.write_bytes(b"RIFF....")
+    monkeypatch.setattr(assets, "load", lambda *a, **k: assets.Indexes(sfx={"pop_1": {"id": "pop_1", "file": str(wav), "category": "pop"}},
+                                                                        music={}, broll={}, caption_families={}))
+    bare = TestClient(env["app"])
+    assert bare.get(f"/api/libraries/sfx/pop_1/media?token={env['token']}").content == b"RIFF...."
+    assert bare.get("/api/libraries/sfx/pop_1/media").status_code == 401
+    assert env["c"].get("/api/libraries/sfx/nope/media").status_code == 404
+    assert env["c"].get("/api/libraries/fonts/pop_1/media").status_code == 400
+    lib = env["c"].get("/api/libraries").json()
+    assert lib["sfx"][0]["id"] == "pop_1" and lib["unreadable"] == []
+
+
+def test_job_versions_reply_cost_and_sse_snapshot_after_done(env):
+    ws = make_project(env["root"])
+    c = env["c"]
+    r = c.post("/api/projects/p1/revise", json={"request": "make the hook faster"})
+    assert r.status_code == 200 and r.json()["job"]["kind"] == "revise" and r.json()["job"]["status"] == "running"
+    job_id = r.json()["job"]["id"]
+    _w(ws / "plan" / "history" / "001_request.json", {"request": "make the hook faster", "reply": "Trimmed the opening breath."})
+    with open(ws / "log" / "runs.jsonl", "a") as f:
+        f.write(json.dumps({"time": time.time() + 1, "label": "revision", "session_id": "z", "cost_usd": 0.09, "cost_cum_usd": 0.09, "exit": 0}) + "\n")
+
+    def later():
+        time.sleep(0.3)
+        env["launcher"].finish("revise")
+
+    threading.Thread(target=later).start()
+    r = c.get(f"/api/projects/p1/events?token={env['token']}", headers={"X-Reel-Token": ""})
+    events = [(b.split("event: ")[1].split("\n")[0], json.loads(b.split("data: ", 1)[1])) for b in r.text.split("\n\n") if "event: " in b]
+    names = [e for e, _ in events]
+    job_ev = next(d for e, d in events if e == "job" and d["status"] == "done")
+    assert job_ev["id"] == job_id
+    assert next(d for e, d in events if e == "revision") == {"reply": "Trimmed the opening breath.", "request": "make the hook faster", "version": 2}
+    assert names.index("done") < len(names) - 1 and names[names.index("done") + 1] == "snapshot"
+    snap = events[names.index("done") + 1][1]
+    assert [v["label"] for v in snap["versions"]] == ["Original edit", "Revision: “make the hook faster”"]
+    assert snap["versions"][1]["reply"] == "Trimmed the opening breath." and snap["versions"][1]["cost_usd"] == pytest.approx(0.09)
+    # proof fixes become versions too; restoring the current version is refused
+    assert c.post("/api/projects/p1/proof", json={"words": [{"i": 2, "text": "sugar"}]}).status_code == 200
+    env["launcher"].finish("proof")
+    vs = c.get("/api/projects/p1/versions").json()
+    assert vs[-1]["label"] == "Caption fix" and vs[-1]["reply"] == "Caption words: “sugar” confirmed"
+    assert c.post(f"/api/projects/p1/versions/{vs[-1]['n']}/restore").status_code == 400
+    assert c.post("/api/projects/p1/versions/1/restore").status_code == 200
+
+
+def test_decision_costs_and_reviewer_summary(env):
+    rows = [{"time": 1, "label": "story", "session_id": "s1", "cost_usd": 0.5, "cost_cum_usd": 0.5, "exit": 0},
+            {"time": 2, "label": "finish", "session_id": "s2", "cost_usd": 0.25, "cost_cum_usd": 0.25, "exit": 0},
+            {"time": 3, "label": "review", "session_id": "s3", "cost_usd": 0.125, "cost_cum_usd": 0.125, "exit": 0}]
+    make_project(env["root"], runs=rows)
+    d = env["c"].get("/api/projects/p1").json()
+    cost = {x["title"]: x.get("cost_usd") for x in d["decisions"]}
+    assert cost["Captions: bold_pop"] == 0.25 and cost["Reviewer: sendable"] == 0.125
+    assert next(x for x in d["decisions"] if x["title"].startswith("Hook"))["cost_usd"] == 0.5
+    assert all("cost_usd" not in x for x in d["decisions"] if x["title"].startswith("Keep"))
+
+
+def test_cost_days_cover_the_whole_window(tmp_path):
+    make_project(tmp_path, "a", runs=[{"time": 86400 * 9.5, "label": "story", "cost_usd": 0.2}])
+    days = costs.summary(tmp_path, days=3, now=86400 * 10)["by_day"]
+    assert len(days) == 3 and days[-1]["date"] == time.strftime("%Y-%m-%d", time.localtime(86400 * 10)) and sum(d["usd"] for d in days) == pytest.approx(0.2)

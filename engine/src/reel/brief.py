@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class _Strict(BaseModel):
@@ -32,10 +32,26 @@ class Brief(_Strict):
 
 
 class BrandColors(_Strict):
+    """#RRGGBB only: the overlay computes contrast from these (a name or #FFF would give NaN luminance)."""
+
     primary: str | None = None
     secondary: str | None = None
     accent: str | None = None
     text: str | None = None
+
+    @field_validator("primary", "secondary", "accent", "text")
+    @classmethod
+    def _hex(cls, v: str | None) -> str | None:
+        import re
+
+        if v is None:
+            return v
+        v = v.strip()
+        if re.fullmatch(r"#[0-9a-fA-F]{3}", v):
+            v = "#" + "".join(ch * 2 for ch in v[1:])
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", v):
+            raise ValueError(f"brand colour {v!r} must be #RRGGBB")
+        return v.upper()
 
 
 class Brand(_Strict):

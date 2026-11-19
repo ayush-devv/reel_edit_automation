@@ -147,14 +147,21 @@ def library_files() -> dict[str, str]:
     groups = _by_file()
     total = sum(len(v) for v in groups.values())
     idx = ["# Knowledge index (every node; read the file named in each heading for full details)", "",
-           f"{total} nodes. Rules marked [code] are enforced by the engine — you need not apply them.", ""]
+           f"{total} nodes. `L<n>` = the line where the node starts in its file: read just that node with the Read tool "
+           "(offset = n, limit = 40) instead of the whole file. Rules marked [code] are enforced by the engine — you need not apply them.", ""]
     files: dict[str, str] = {}
     for stem, items in groups.items():
+        details = [_detail(n) for n in items]
+        body = f"# {stem}\n\n" + "\n".join(details)
+        line, at = 3, {}  # 1-based line of each node's heading in <stem>.md
+        for n, d in zip(items, details):
+            at[n["id"]] = line
+            line += d.count("\n") + 1
         idx += [f"## {stem} → `context/knowledge/{stem}.md` ({len(items)})", ""]
-        idx += [f"- `{n['id']}` ({n.get('type', '?')}, {n.get('evidence_level', '?')}){' [code]' if _code_enforced(n) else ''} — "
+        idx += [f"- `{n['id']}` L{at[n['id']]} ({n.get('type', '?')}, {n.get('evidence_level', '?')}){' [code]' if _code_enforced(n) else ''} — "
                 f"{n.get('name', '')}: {' '.join(str(n.get('summary', '')).split())[:100]}" for n in items]
         idx.append("")
-        files[f"{stem}.md"] = f"# {stem}\n\n" + "\n".join(_detail(n) for n in items)
+        files[f"{stem}.md"] = body
     files["index.md"] = "\n".join(idx)
     caps = yaml.safe_load((config.KNOWLEDGE_DIR / "capabilities.yaml").read_text()).get("capabilities", [])
     cap = ["# Editing capabilities: what this build can do", "",
@@ -174,7 +181,8 @@ def write_library(ws) -> None:
         atomic_write_bytes(ws.path(*LIBRARY_DIR, rel), text.encode())
 
 
-LIBRARY_POINTER = ("\n## Full knowledge library\n\nThe nodes above are a starting shortlist. Every node (313+) is listed in "
-                   "`context/knowledge/index.md`; read the matching `context/knowledge/<file>.md` for full details of any node "
-                   "you may use, and `context/knowledge/capabilities.md` for what the renderer can and cannot do. "
-                   "Cite every node you relied on, from anywhere in the library.\n")
+def library_pointer() -> str:
+    return ("\n## Full knowledge library\n\nThe nodes above are a starting shortlist. All "
+            f"{len(nodes())} nodes are listed in `context/knowledge/index.md` with the line where each starts; read a node you may use "
+            "with Read(offset=line, limit=40) on its `context/knowledge/<file>.md`, and `context/knowledge/capabilities.md` for what the "
+            "renderer can and cannot do. Cite every node you relied on, from anywhere in the library.\n")

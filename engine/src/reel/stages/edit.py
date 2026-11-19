@@ -195,6 +195,10 @@ def _compile(ctx: StageContext) -> dict:
     pal = _read_json(ctx, "perception", "palette.json") or {}
     palette = [c["hex"] for v in pal.values() for c in (v.get("colors") or [])]
     tl, adapted = adapt.adapt(tl, ctx.ws.root, palette, locked=set(tokens))
+    if tl.captions and not accent:  # graphics follow the caption emphasis colour that survived adaptation
+        emph = tl.captions.tokens.get("emph_color")
+        if emph:
+            tl = tl.model_copy(update={"graphics": [g.model_copy(update={"accent": emph}) for g in tl.graphics]})
     atomic_write_json(ctx.ws.path("timeline", "timeline.json"), tl.model_dump(mode="json"))
     proof = proof_list(tl, story, inp.words)
     atomic_write_json(ctx.ws.path("qa", "proof_list.json"), proof)

@@ -46,6 +46,8 @@ TITLE_MIN_US = 1_500_000  # hook title on screen at least this long …
 TITLE_MAX_US = 3_000_000
 GRAPHIC_MIN_US = 1_200_000  # a graphic stays at least this long (it has to be read)
 TEXT_CARD_MIN_US = 2_000_000  # a full-screen card needs its word entrance plus a beat to read
+# entrance animation + time to read before the 0.3 s exit (counter: 1.3 s count-up; keyword marks draw after the words)
+GRAPHIC_MIN_US_BY_KIND = {"text_card": TEXT_CARD_MIN_US, "counter": 2_200_000, "keyword_card": 2_000_000, "callout": 1_600_000}
 WHOLE_REEL_GRAPHICS = {"progress_bar", "logo_watermark"}  # … and at most this long (or to the end of the first item, if sooner past the minimum)
 
 
@@ -297,6 +299,9 @@ def add_beat_pulses(video: list[VideoClip], meta: dict, offset_us: int, total_f:
             continue
         if any(k - 2 <= kf.f <= k + PULSE_UP_F + PULSE_DOWN_F + 2 for kf in clip.scale):
             continue
+        ks = sorted(clip.scale, key=lambda kf: kf.f)
+        if any(a.f < k < b.f and b.ease != Ease.hold and a.v != b.v for a, b in zip(ks, ks[1:])):
+            continue  # a punch-in is ramping here: a pulse would bend its curve
         v = 1.0
         for kf in sorted(clip.scale, key=lambda kf: kf.f):
             if kf.f <= k:
@@ -545,7 +550,7 @@ def compile_timeline(
             start, end = 0, total
         else:
             start = word_out_frame(by[g.from_word], g.item)
-            min_us = TEXT_CARD_MIN_US if g.kind.value == "text_card" else GRAPHIC_MIN_US
+            min_us = GRAPHIC_MIN_US_BY_KIND.get(g.kind.value, GRAPHIC_MIN_US)
             end = max(start + tb.us_to_frame(min_us, fps, mode="ceil"), word_out_frame(by[g.to_word], g.item, end=True))
         if g.kind.value == "cta_card":
             end = total  # an end card stays to the last frame

@@ -1,7 +1,7 @@
 """Per-install token (NFR-4): 32 random bytes, hex, in ~/.config/reel/studio_token (0600).
 
 Every /api/* request carries `X-Reel-Token`. Only the endpoints a browser loads by URL (SSE, media,
-package.zip) may pass it as `?token=` instead. Checked in ASGI middleware, before any body parsing.
+package.zip, library previews) may pass it as `?token=` instead. Checked in ASGI middleware, before any body parsing.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import secrets
 from pathlib import Path
 from urllib.parse import parse_qs
 
-QUERY_TOKEN_PATHS = re.compile(r"^/api/projects/[^/]+/(events|media/.+|package\.zip)$")
+QUERY_TOKEN_PATHS = re.compile(r"^/api/(projects/[^/]+/(events|media/.+|package\.zip)|libraries/(sfx|music|broll)/[^/]+/media)$")
 
 
 def load_or_create_token(path: Path) -> str:

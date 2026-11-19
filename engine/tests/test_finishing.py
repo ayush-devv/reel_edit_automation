@@ -450,3 +450,14 @@ def test_speed_ramp_length_matches_the_integral(tmp_path):
     tl.audio[0].speed = 1.0 / factor
     meta = render.render_base(tl, tmp_path, tmp_path / "r.mp4", finish_audio=False)
     assert meta["frames"] == dur_f == 69
+
+
+def test_no_beat_pulse_inside_a_punch_in_ramp():
+    from reel.compile import add_beat_pulses
+    from reel.schemas.plan import Ease
+    from reel.schemas.timeline import Keyframe
+
+    prov = Provenance(item="k0", words=[0, 0])
+    c = VideoClip(id="v_k0", asset="c", at_f=0, dur_f=100, src_in_us=0, src_out_us=4_000_000, src=prov,
+                  scale=[Keyframe(f=0, v=1.0, ease=Ease.hold), Keyframe(f=10, v=1.0, ease=Ease.linear), Keyframe(f=70, v=1.25, ease=Ease.linear)])
+    assert add_beat_pulses([c], {"downbeats_ms": [1600]}, 0, 100, Fraction(25), 0.04) == 0  # frame 40: mid-ramp

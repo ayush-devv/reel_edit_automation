@@ -25,7 +25,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from reel import config
 from reel.studio import auth, catalog, costs, events, projects
 from reel.studio.jobs import ESTIMATE_GB, JobConflict, JobManager, estimate_render_gb, estimate_run_gb
-from reel.studio.settings import Settings
+from reel.studio.settings import MAX_JOBS_LIMIT, Settings, apply_prefs, load_prefs, save_prefs
 from reel.workspace import Workspace, atomic_write_bytes, atomic_write_json
 
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".mkv", ".webm"}  # FR-2
@@ -89,10 +89,18 @@ class IndexBody(BaseModel):
     replace: bool = False
 
 
+class SettingsBody(BaseModel):
+    max_jobs: int = Field(ge=1, le=MAX_JOBS_LIMIT)
+    projects_dir: str | None = None  # read-only: `reel studio --projects <folder>` sets it
+    default_brief: dict = Field(default_factory=dict)
+    default_deliverables: list[Literal["feed_4x5", "square"]] = Field(default_factory=list)
+    pexels_key: str | None = Field(default=None, max_length=200)  # write-only; "" or absent keeps the saved key
+
+
 class LabBody(BaseModel):
     set: Literal["tuning", "holdout"] = "tuning"
     release: bool = False
-    budget: int = Field(default=100, ge=1, le=10000)
+    budget: int = Field(default=100, ge=1, le=10000)  # reel runs (one edit of one gold reel), not dollars
     runs: int = Field(default=3, ge=1, le=20)
     rounds: int = Field(default=5, ge=1, le=50)
     dry_run: bool = False
@@ -105,6 +113,8 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
     s = settings or Settings()
     s.projects_root.mkdir(parents=True, exist_ok=True)
     token = auth.load_or_create_token(s.token_file)
+    if s.prefs_file.exists():
+        apply_prefs(s, load_prefs(s.prefs_file))
     doctor = catalog._Doctor(s.doctor)
     mgr = JobManager(s, launcher=launcher, on_finish=lambda job: _after_job(s, job))
 
@@ -178,7 +188,7 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
 
     def baseline(ws: Path) -> None:
         """The edit as it was before the first change becomes version 1."""
-        if not projects.versions(ws) and (ws / "render" / "final.mp4").exists():
+        if not projects.has_snapshots(ws) and (ws / "render" / "final.mp4").exists():
             projects.snapshot(ws, "Original edit")
 
     def build_project(pid: str, ws: Path) -> dict:
@@ -320,8 +330,9 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         _need_edit(ws)
         busy(pid, ws)
         baseline(ws)
+        req = " ".join(body.request.split())
         return {"job": submit(pid, "revise", cli("revise", "--project", ws, "--", body.request), ws=ws, est_gb=estimate_render_gb(reel_s(ws)),
-                              label=f"Revision: {body.request[:80]}", after={"snapshot": f"Revision: {body.request[:120]}"})}
+                              label=f"Revision: {req[:80]}", after={"snapshot": f"Revision: “{req[:120]}”"})}
 
     @app.post("/api/projects/{pid}/notes/preview")
     def notes_preview(pid: str, body: NotesBody):
@@ -329,9 +340,9 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
 
         ws = ws_of(pid)
         tl, story, words = _edit_inputs(ws)
-        parsed = notes.parse(body.text)
-        return {"anchored": [notes.anchor(n, tl, story, words) for n in parsed],
-                "notes": [{"t": n.t, "text": n.text} for n in parsed]}
+        parsed = notes.parse(body.text)  # one note per non-empty line, so anchored[i] is the i-th line sent
+        return {"anchored": [notes.anchor(n, tl, story, words).removeprefix("- ") for n in parsed],
+                "notes": [{"t": n.t, "text": n.text} for n in parsed], "unreadable": []}
 
     @app.post("/api/projects/{pid}/notes/apply")
     def notes_apply(pid: str, body: NotesBody):
@@ -358,14 +369,19 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         if unknown:
             raise ApiError(400, "these words are not on the proof list", unknown)
         busy(pid, ws)
+        baseline(ws)
         path = ws / "qa" / "proof_confirmed.json"
         conf = projects.read_json(path, {}) or {}
+        said = []
         for w in body.words:  # same file `reel proof` writes: ok as heard, or the corrected text
             text = w.text.strip()
-            conf[str(w.i)] = {"ok": True} if not text or text == known[w.i].get("text") else {"ok": True, "text": text}
+            heard = known[w.i].get("text")
+            conf[str(w.i)] = {"ok": True} if not text or text == heard else {"ok": True, "text": text}
+            said.append(f"“{heard}” confirmed" if not text or text == heard else f"“{heard}” → “{text}”")
         atomic_write_json(path, conf)
         return {"job": submit(pid, "proof", cli("rerun", "--project", ws, "--from", "compile"), ws=ws, est_gb=estimate_render_gb(reel_s(ws)),
-                              label=f"Proof: {len(body.words)} word(s)")}
+                              label=f"Proof: {len(body.words)} word(s)",
+                              after={"snapshot": "Caption fix", "reply": "Caption words: " + ", ".join(said)})}
 
     @app.post("/api/projects/{pid}/adjust")
     def adjust(pid: str, body: AdjustBody):
@@ -377,9 +393,9 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         if body.kind == "max_pause_ms":  # only then: a re-dumped story.json changes bytes, which the finish stage fingerprints
             atomic_write_json(ws / "plan" / "story.json", story.model_dump(mode="json"))
         atomic_write_json(ws / "plan" / "finish.json", fin.model_dump(mode="json"))
-        label = f"Manual: {body.kind.replace('_', ' ')}"
+        change = f"{body.kind.replace('_', ' ')} → {_show(body.value)}"
         job = submit(pid, "adjust", cli("rerun", "--project", ws, "--from", "compile"), ws=ws, est_gb=estimate_render_gb(reel_s(ws)),
-                     label=label, after={"snapshot": label})
+                     label=f"Manual: {change}", after={"snapshot": "Manual", "reply": change})
         return {"job": job, **({"note": note} if note else {})}
 
     @app.get("/api/projects/{pid}/versions")
@@ -389,13 +405,16 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
     @app.post("/api/projects/{pid}/versions/{n}/restore")
     def restore(pid: str, n: int):
         ws = ws_of(pid)
-        if not any(v["n"] == n for v in projects.versions(ws)):
+        vs = projects.versions(ws)
+        if not any(v["n"] == n for v in vs):
             raise ApiError(404, f"no version {n}")
+        if not projects.has_snapshots(ws) or n == vs[-1]["n"]:
+            raise ApiError(400, f"version {n} is the current version")
         busy(pid, ws)
         if not projects.restore_plans(ws, n):
             raise ApiError(400, f"version {n} has no plans to restore")
         return {"job": submit(pid, "restore", cli("rerun", "--project", ws, "--from", "compile"), ws=ws, est_gb=estimate_render_gb(reel_s(ws)),
-                              label=f"Restore version {n}", after={"snapshot": f"Restored version {n}"})}
+                              label=f"Restore version {n}", after={"snapshot": f"Restored v{n}", "reply": f"Restored version {n} as the current reel."})}
 
     # -------------------------------------------------------------- delivery, labels
 
@@ -415,6 +434,10 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         atomic_write_json(ws / "run_options.json", opts)
         return {"job": submit(pid, "deliver", cli("rerun", "--project", ws, "--from", "package"), ws=ws, est_gb=estimate_render_gb(reel_s(ws)),
                               label="Deliver" + (f" ({', '.join(wanted)})" if wanted else ""))}
+
+    @app.get("/api/projects/{pid}/package")
+    def package(pid: str):
+        return projects.package_listing(ws_of(pid))
 
     @app.get("/api/projects/{pid}/package.zip")
     def package_zip(pid: str):
@@ -440,7 +463,8 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         return Response(status_code=204)
 
     @app.post("/api/projects/{pid}/delivered", status_code=204)
-    def delivered(pid: str, body: DeliveredBody):
+    def delivered(pid: str, body: DeliveredBody | None = None):
+        body = body or DeliveredBody()
         projects.update_studio_meta(ws_of(pid), delivered=time.time() if body.delivered else None)
         return Response(status_code=204)
 
@@ -449,6 +473,13 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
     @app.get("/api/libraries")
     def libraries():
         return catalog.libraries()
+
+    @app.get("/api/libraries/{kind}/{item_id}/media")
+    def library_media(kind: Literal["sfx", "music", "broll"], item_id: str):
+        p = catalog.library_file(kind, item_id)
+        if p is None:
+            raise ApiError(404, f"no {kind} file for {item_id!r}")
+        return FileResponse(p)
 
     @app.post("/api/libraries/index")
     def index_library(body: IndexBody):
@@ -468,11 +499,13 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         p = catalog.brand_path(s.brands_root, bid)
         if p is None or not p.exists():
             raise ApiError(404, f"no brand kit {bid!r}")
-        return {"id": bid, **json.loads(p.read_text())}
+        return catalog.brand_entry(bid, json.loads(p.read_text()))
 
     @app.post("/api/brands", status_code=201)
     def create_brand(body: dict):
-        brand = _brand(body)
+        if not isinstance(body.get("brand"), dict):
+            raise ApiError(400, "send {id?, brand}")
+        brand = _brand(body["brand"])
         bid = str(body.get("id") or catalog.brand_slug(brand.client))
         p = catalog.brand_path(s.brands_root, bid)
         if p is None:
@@ -521,6 +554,37 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
     def job_list():
         return {"running": [j.public() for j in mgr.running()], "queued": [j.public() for j in mgr.queued()]}
 
+    # -------------------------------------------------------------- settings (FR-12)
+
+    def settings_view() -> dict:
+        prefs = load_prefs(s.prefs_file)
+        return {"max_jobs": s.max_jobs, "projects_dir": str(s.projects_root), "default_brief": prefs["default_brief"],
+                "default_deliverables": prefs["default_deliverables"], "pexels_key_set": bool(prefs["pexels_key"])}
+
+    @app.get("/api/settings")
+    def get_settings():
+        return settings_view()
+
+    @app.put("/api/settings")
+    def put_settings(body: SettingsBody):
+        from reel.brief import Brief
+
+        if body.projects_dir and Path(body.projects_dir).expanduser().resolve() != s.projects_root.resolve():
+            raise ApiError(400, "the projects folder is set when the studio starts: `reel studio --projects <folder>`")
+        brief = {k: v for k, v in body.default_brief.items() if k != "project"}
+        try:
+            Brief.model_validate({"project": "defaults", **brief})
+        except ValidationError as exc:
+            raise ApiError(400, "the default brief is not valid", jsonable_encoder(exc.errors())) from exc
+        prefs = load_prefs(s.prefs_file) | {"max_jobs": body.max_jobs, "default_brief": brief,
+                                            "default_deliverables": list(dict.fromkeys(body.default_deliverables))}
+        if body.pexels_key and body.pexels_key.strip():
+            prefs["pexels_key"] = body.pexels_key.strip()
+        save_prefs(s.prefs_file, prefs)
+        apply_prefs(s, prefs)
+        mgr.tick()  # a higher limit starts queued jobs now
+        return settings_view()
+
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
     def api_not_found(rest: str):
         raise ApiError(404, f"no endpoint /api/{rest}")
@@ -547,12 +611,27 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
 
 
 def _after_job(s: Settings, job) -> None:
-    """A successful revision / notes / adjustment / restore becomes a new version (FR-6 history)."""
+    """A successful revision / notes / proof fix / adjustment / restore becomes a new version (FR-6 history), with the
+    Editor's one-line reply (revise / notes) or what changed, and the AI cost of the job."""
     label = job.after.get("snapshot")
     if label and not job.project.startswith("_"):
         ws = projects.project_dir(s.projects_root, job.project)
         if ws is not None:
-            job.after["version"] = projects.snapshot(ws, label)
+            reply = job.after.get("reply", "")
+            if job.kind in ("revise", "notes"):
+                reply = (projects.last_revision(ws) or {}).get("reply") or reply
+            spent = sum(c["cost_usd"] for c in costs.calls(ws / "log" / "runs.jsonl") if (c.get("time") or 0) >= (job.started or time.time()))
+            job.after["version"] = projects.snapshot(ws, label, reply=reply, cost_usd=round(spent, 4))
+
+
+def _show(value) -> str:
+    if isinstance(value, bool):
+        return "off" if value else "on"
+    if isinstance(value, dict):
+        return f"{value.get('key')} {value.get('value')}"
+    if isinstance(value, list):
+        return ", ".join(map(str, value)) + " off"
+    return str(value)
 
 
 def _run_args(ws: Path, opts: dict, force: str | None = None) -> list[str]:

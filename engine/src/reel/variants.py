@@ -68,6 +68,9 @@ def make_variant(ws, tl: Timeline, name: str) -> dict:
             if b:
                 span[key] = {**b, "y": (b["y"] * tl.height - y) / h, "h": b["h"] * tl.height / h}
         span["text"] = [{**z, "y": (z["y"] * tl.height - y) / h, "h": z["h"] * tl.height / h} for z in span.get("text", [])]
+    for g in props.get("graphics", []):  # point callouts aim at a spot in the picture: it moves with the crop too
+        if g.get("kind") == "callout" and g.get("position") == "point" and g.get("y", -1) >= 0:
+            g["y"] = min(1.0, max(0.0, (g["y"] * tl.height - y) / h))
     ov = out_dir / "overlay.mov"
     overlay.render_overlay(props, ov, public_dir=ws.root)
     final = ws.path("export", "variants", f"reel_{name}.mp4")

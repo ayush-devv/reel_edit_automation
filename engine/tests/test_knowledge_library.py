@@ -17,3 +17,13 @@ def test_library_lists_every_node_and_capability(tmp_path):
 
 def test_unknown_capability_is_no():
     assert capability_status.status("cap.nope")[0] == "no"
+
+
+def test_index_line_numbers_point_at_each_node():
+    import re
+
+    files = knowledge.library_files()
+    refs = re.findall(r"- `([^`]+)` L(\d+)", files["index.md"])
+    assert len(refs) == len(knowledge.node_ids())
+    for nid, line in refs:
+        assert any(body.split("\n")[int(line) - 1:int(line)] == [f"### `{nid}`"] for name, body in files.items() if name not in ("index.md", "capabilities.md")), nid

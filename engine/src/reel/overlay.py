@@ -75,6 +75,7 @@ def build_props(tl: Timeline, root: Path, faces: dict | None, ocr: dict | None =
     """Overlay props. Face spans are per shot (camera cuts and speaker switches inside a clip get their own framing)."""
     fps = tb.parse_rate(tl.fps)
     spans, sizes = [], {}
+    shot_spans = []  # (start_f, end_f, shot, src_w, src_h) for mapping source points to the output frame
     for c in sorted((c for c in tl.video if c.id.startswith("v_")), key=lambda c: c.at_f):
         if c.asset not in sizes:
             sizes[c.asset] = render.source_size(root / tl.assets[c.asset].uri)
@@ -97,15 +98,41 @@ def build_props(tl: Timeline, root: Path, faces: dict | None, ocr: dict | None =
                        "w": round(b["w"] * sw / tl.width, 4), "h": round(b["h"] * sh / tl.height, 4)}
             if end > start:
                 spans.append({"start_f": start, "end_f": end, "box": box, "text": zones})
+                shot_spans.append((start, end, shot, sw_, sh_))
     d = tl.model_dump(mode="json")
     from reel import emoji
 
     for g in d["graphics"]:
         if g["kind"] == "emoji_pop":
             g["uri"] = emoji.svg_uri(g["emoji"]) or ""
+        if g["kind"] == "callout" and g["position"] == "point" and g["x"] >= 0:
+            hit = next((sp for sp in shot_spans if sp[0] <= g["start_f"] < sp[1]), None)
+            if hit:
+                g["x"], g["y"] = source_point_to_output(hit[2], hit[3], hit[4], tl.width, tl.height, g["x"], g["y"], g["start_f"] - hit[0])
     d["graphics"] = [g for g in d["graphics"] if g["kind"] != "emoji_pop" or g["uri"]]
     return {"fps": float(fps), "width": tl.width, "height": tl.height, "duration_f": tl.duration_f,
             "captions": d["captions"], "titles": d["titles"], "flashes": d["flashes"], "pips": d["pips"], "graphics": d["graphics"], "faces": spans, "safe": SAFE}
+
+
+def source_point_to_output(shot, src_w: int, src_h: int, out_w: int, out_h: int, x: float, y: float, rel_f: int = 0) -> tuple[float, float]:
+    """A point the Editor read off a contact sheet (normalised SOURCE frame) → normalised OUTPUT frame,
+    through that shot's framing: fill (whole frame fitted to the width) or the cover crop (static or tracked)."""
+    if shot.layout == "fill":
+        s = out_w / src_w
+        top = (out_h - src_h * s) / 2
+        return round(x, 4), round(min(1.0, max(0.0, (top + y * src_h * s) / out_h)), 4)
+    centre = shot.centre
+    if shot.path:  # tracked crop: the crop centre at that moment of the shot
+        pts = sorted(shot.path)
+        cx = pts[0][1]
+        for (f0, x0), (f1, x1) in zip(pts, pts[1:]):
+            if f0 <= rel_f + shot.start_f <= f1:
+                cx = x0 + (x1 - x0) * ((rel_f + shot.start_f - f0) / max(1, f1 - f0))
+                break
+            cx = x1
+        centre = (cx, centre[1])
+    sw, sh, cx0, cy0 = render.cover_crop(src_w, src_h, out_w, out_h, centre)
+    return round(min(1.0, max(0.0, (x * sw - cx0) / out_w)), 4), round(min(1.0, max(0.0, (y * sh - cy0) / out_h)), 4)
 
 
 def render_overlay(props: dict, out: Path, *, timeout_s: int = 1800, public_dir: Path | None = None,

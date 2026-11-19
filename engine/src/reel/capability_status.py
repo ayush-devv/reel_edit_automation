@@ -94,7 +94,7 @@ STATUS: dict[str, tuple[str, str]] = {
     "cap.effect.glitch": ("partial", "transition type=glitch; effects type=rgb_split"),
     "cap.effect.light_leak": ("yes", "finish.effects type=light_leak (procedural, screen-blended)"),
     "cap.effect.exposure_pulse": ("yes", "finish.effects type=exposure_pulse"),
-    "cap.transition.light_leak": ("partial", "effects type=light_leak across the cut"),
+    "cap.transition.light_leak": ("partial", "effects type=light_leak inside one item (place it on the last words before a cut)"),
     "cap.effect.motion_blur": ("partial", "inside whip transitions"),
     "cap.graphics.emoji": ("yes", "finish.graphics emoji_pop (Noto emoji SVG, pop + float)"),
     "cap.graphics.sticker": ("partial", "emoji_pop only"),

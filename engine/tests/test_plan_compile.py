@@ -179,6 +179,21 @@ def test_claude_schemas_fit_structured_outputs(model):
 
     walk(model.model_json_schema())
 
+    # what Claude receives: every property required (a revision must restate graphics, effects, holds …)
+    from reel import decide
+
+    def req(node):
+        if isinstance(node, dict):
+            if node.get("type") == "object" and "properties" in node:
+                assert set(node.get("required", [])) == set(node["properties"]), node.get("title")
+            for v in node.values():
+                req(v)
+        elif isinstance(node, list):
+            for v in node:
+                req(v)
+
+    req(decide.schema(model))
+
 
 def test_every_timeline_field_has_one_owner():
     owners = field_owners()

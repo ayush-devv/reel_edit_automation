@@ -1,4 +1,5 @@
-"""Server-sent events for one project: snapshot first, then stage / decision / log / job / revision / done.
+"""Server-sent events for one project: snapshot first, then stage / decision / log / job / revision / done
+(each `done` is followed by a fresh `snapshot`).
 
 Polls the workspace every `poll_s` (250 ms). The Project is rebuilt only when a watched file or the
 project's job changes, so an idle stream costs a few stat() calls per tick.
@@ -84,8 +85,11 @@ async def stream(request, ws: Path, pid: str, mgr, settings, build_project):
                 if job.status == "done" and job.kind in ("revise", "notes"):
                     rev = projects.last_revision(ws) or {}
                     out.append(ev("revision", {"reply": rev.get("reply", ""), "request": rev.get("request", ""), "version": job.after.get("version")}))
-                summary = await asyncio.to_thread(projects.summary, ws, mgr.project_state(pid))
-                out.append(ev("done", {"status": summary["status"], "job": job.status, "kind": job.kind}))
+                snap = await asyncio.to_thread(build_project)  # the job changed the edit: verdict, proof, versions, media
+                out.append(ev("done", {"status": snap["status"], "job": job.status, "kind": job.kind}))
+                out.append(ev("snapshot", snap))
+                last_stage = {s["name"]: (s["status"], s["finished"], s.get("error")) for s in snap["stages"]}
+                seen |= {projects.decision_key(d) for d in snap["decisions"]}
         # technical log, at most `log_lines_per_s` lines a second (the rest waits; a flood keeps only the newest 500)
         if log.exists() and log.stat().st_size > offset:
             with open(log, "rb") as f:

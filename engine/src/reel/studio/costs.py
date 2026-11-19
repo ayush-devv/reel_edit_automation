@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 
@@ -60,6 +60,8 @@ def summary(projects_root: Path, days: int = 30, now: float | None = None) -> di
             by_project[pid] = by_project.get(pid, 0.0) + c["cost_usd"]
             day = datetime.fromtimestamp(c["time"]).strftime("%Y-%m-%d")
             by_day[day] = by_day.get(day, 0.0) + c["cost_usd"]
+    end = datetime.fromtimestamp(now or time.time()).date()
+    days_list = [(end - timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]  # every day of the window, oldest first
     return {"total_usd": round(sum(by_project.values()), 4), "calls": n,
             "by_project": [{"id": k, "usd": round(v, 4)} for k, v in sorted(by_project.items(), key=lambda kv: -kv[1])],
-            "by_day": [{"date": k, "usd": round(v, 4)} for k, v in sorted(by_day.items())]}
+            "by_day": [{"date": d, "usd": round(by_day.get(d, 0.0), 4)} for d in days_list]}
