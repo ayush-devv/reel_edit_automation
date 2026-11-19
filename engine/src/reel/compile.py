@@ -124,7 +124,7 @@ def split_on_silence(start_us: int, end_us: int, group: list[Word], speech: list
 
 
 JUMP_CUT_ZOOM = 1.08  # alternate shots inside a tightened line
-VAD_MARGIN_US = 150_000  # extra silence required before a voice-activity gap (not a word gap) becomes a cut
+VAD_MARGIN_US = 50_000  # a little extra silence before a voice-activity gap (not a word gap) becomes a cut (jump cuts are hidden by the alternating punch)
 SNAP_US = 160_000  # a source camera cut this close to a shot edge would flash a few frames of the other angle
 MIN_ANGLE_US = 250_000  # … unless the other angle is shown at least this long
 
