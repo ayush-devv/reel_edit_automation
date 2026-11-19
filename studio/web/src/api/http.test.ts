@@ -8,10 +8,12 @@ function json(status: number, body: unknown) {
 }
 
 describe("token", () => {
-  it("captures ?token= into sessionStorage and strips it from the URL", () => {
+  it("remembers ?token= for this browser (new tabs stay signed in) and strips it from the URL", () => {
     const replace = vi.fn();
     captureUrlParams({ href: "http://127.0.0.1:8765/p/x/live?token=abc123&tab=1#top" } as Location, { state: null, replaceState: replace } as unknown as History);
     expect(getToken()).toBe("abc123");
+    expect(localStorage.getItem("reel.token")).toBe("abc123");
+    expect(sessionStorage.getItem("reel.token")).toBeNull();
     expect(replace).toHaveBeenCalledWith(null, "", "/p/x/live?tab=1#top");
   });
 });

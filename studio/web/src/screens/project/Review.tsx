@@ -12,7 +12,7 @@ import { useQuery } from "../../hooks/useQuery";
 import { gateLabel, tcToSeconds } from "../../lib/format";
 import { isJobTerminal } from "../../lib/status";
 import { useReelPlayer, type ReelPlayer } from "../../lib/reelPlayer";
-import { useProject } from "./ProjectLayout";
+import { NotYet, useProject } from "./ProjectLayout";
 
 function VerdictCard({ p }: { p: Project }) {
   const v = p.verdict_detail;
@@ -231,11 +231,7 @@ export default function Review() {
   }, [proofJob, jobState, wordGone]);
 
   if (p.status !== "sendable" && p.status !== "hold") {
-    return (
-      <Notice tone="info" title="Nothing to review yet">
-        The edit is {p.status === "failed" ? "stopped" : "still running"}. <Link to="../live" relative="path" className="text-info underline">Watch it live</Link>
-      </Notice>
-    );
+    return <NotYet what="review" icon="phone" opens="The verdict and the reel appear here once the edit has rendered and checked itself." />;
   }
 
   const seek = (t: number) => {

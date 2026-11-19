@@ -5,6 +5,7 @@ import { afterEach, vi } from "vitest";
 afterEach(() => {
   cleanup();
   sessionStorage.clear();
+  localStorage.clear();
 });
 
 // jsdom gaps: matchMedia, EventSource, ResizeObserver, canvas 2D/WebGL, <dialog>, scrolling.

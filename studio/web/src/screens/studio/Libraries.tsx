@@ -139,6 +139,7 @@ export default function Libraries() {
               {tab === "sfx" && (
                 <Table<SfxItem>
                   caption="Sound effects"
+                  empty={cat ? `No sounds in “${cat}”.` : "No sound effects yet. Add a folder on the right, or run `reel assets fetch` for the built-in set."}
                   rows={d.sfx.filter((s) => !cat || s.category === cat)}
                   rowKey={(r) => r.id}
                   columns={[
@@ -153,6 +154,7 @@ export default function Libraries() {
               {tab === "music" && (
                 <Table<MusicItem>
                   caption="Music"
+                  empty="No music yet. Add a folder on the right, or run `reel assets fetch` for the licensed starter tracks."
                   rows={d.music}
                   rowKey={(r) => r.id}
                   columns={[
@@ -168,6 +170,7 @@ export default function Libraries() {
               {tab === "broll" && (
                 <Table<BrollItem>
                   caption="B-roll"
+                  empty="No b-roll clips yet. Add a Pexels key in Settings to let the Editor search stock footage."
                   rows={d.broll}
                   rowKey={(r) => r.id}
                   columns={[
@@ -182,6 +185,7 @@ export default function Libraries() {
               {tab === "captions" && (
                 <Table<CaptionFamily>
                   caption="Caption styles"
+                  empty="No caption styles found — the engine’s knowledge files may be missing. Check Settings → Health."
                   rows={d.caption_families}
                   rowKey={(r) => r.id}
                   columns={[

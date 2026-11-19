@@ -87,6 +87,7 @@ function Usage() {
         ))}
       </div>
       <h3 className="mb-2 mt-5 text-meta text-fg-muted">Per project</h3>
+      {c.by_project.length === 0 && <p className="text-meta text-fg-muted">No AI use in the last 30 days.</p>}
       <ul className="divide-y divide-line-subtle">
         {c.by_project.map((p) => (
           <li key={p.id} className="flex items-center justify-between py-2">

@@ -9,7 +9,7 @@ import { Button, cx, Loading, Notice, Panel, Select, TextInput, Toggle } from ".
 import { useQuery } from "../../hooks/useQuery";
 import { LOOKS, validateAdjust } from "../../lib/adjust";
 import { prettyId } from "../../lib/format";
-import { useProject } from "./ProjectLayout";
+import { NotYet, useProject } from "./ProjectLayout";
 
 export function IssueList({ issues }: { issues: ValidatorIssue[] }) {
   if (!issues.length) return null;
@@ -286,7 +286,7 @@ export default function Adjust() {
   const api = useApi();
   const tl = useQuery(() => api.timeline(p.id), [api, p.id]);
   const lib = useQuery(() => api.libraries(), [api]);
-  if (!p.versions.length) return <Notice title="Nothing to adjust yet">Adjustments open once the first edit has finished.</Notice>;
+  if (!p.versions.length) return <NotYet what="adjust" icon="sliders" opens="Captions, look, sound and pacing can be adjusted once the first edit has finished." />;
   if (tl.error || lib.error) return <Notice tone="error">{friendlyError(tl.error ?? lib.error)}</Notice>;
   if (!tl.data || !lib.data) return <Loading />;
   return <AdjustForm tl={tl.data} lib={lib.data} />;

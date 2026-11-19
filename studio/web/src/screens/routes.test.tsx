@@ -51,6 +51,16 @@ describe("screens", () => {
     expect(screen.queryByRole("button", { name: "New edit" })).toBeNull();
   });
 
+  it.each([
+    ["review", "Nothing to review yet"],
+    ["layers", "Nothing to show yet"],
+    ["deliver", "Nothing to deliver yet"],
+  ])("a running edit's %s tab explains why it's empty and links to Live", async (tab, title) => {
+    render(<TestApp api={createMockApi()} path={`/p/cafe-opening-reel/${tab}`} />);
+    expect(await screen.findByRole("heading", { name: title }, T)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Watch it live" })).toBeInTheDocument();
+  });
+
   it("project screens dock the story strip with the reel's beats", async () => {
     render(<TestApp api={createMockApi()} path={`/p/${HOLD}/review`} />);
     const strip = await screen.findByRole("region", { name: "Story strip" }, T);

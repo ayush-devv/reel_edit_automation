@@ -9,7 +9,7 @@ import { use3D } from "../../hooks/useMedia";
 import { useQuery } from "../../hooks/useQuery";
 import { buildLayers, storyBlocks, type Layer, type LayerBlock } from "../../lib/layers";
 import { color } from "../../theme/tokens";
-import { useProject } from "./ProjectLayout";
+import { NotYet, useProject } from "./ProjectLayout";
 
 const LayersScene = lazy(() => import("../../three/LayersScene"));
 
@@ -64,7 +64,8 @@ export default function Layers() {
   const [time, setTime] = useState(0);
   const [sel, setSel] = useState<{ layer: Layer; block: LayerBlock } | null>(null);
 
-  if (tl.error) return <Notice tone="error" title="Couldn't load the timeline">{friendlyError(tl.error)}</Notice>;
+  if (!p.versions.length) return <NotYet what="show" icon="layers" opens="Every layer of the reel, and the Editor’s reason for each piece, appears here once the first edit has finished." />;
+  if (tl.error) return <Notice tone="error" title="Couldn’t load the timeline">{friendlyError(tl.error)}</Notice>;
   if (!model || !tl.data) return <Loading label="Loading layers…" />;
   const show3D = can3D && mode === "3d";
   const selKey = sel ? `${sel.layer.id}:${sel.block.id}:${sel.block.start}` : null;

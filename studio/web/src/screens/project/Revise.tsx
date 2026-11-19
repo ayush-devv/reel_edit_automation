@@ -8,7 +8,7 @@ import { Button, cx, IconButton, Mono, Notice, Panel, TextArea, TextInput } from
 import { ago, usd } from "../../lib/format";
 import { parseNotes } from "../../lib/notes";
 import { isJobTerminal } from "../../lib/status";
-import { useProject } from "./ProjectLayout";
+import { NotYet, useProject } from "./ProjectLayout";
 
 interface Msg {
   who: "owner" | "editor";
@@ -338,7 +338,7 @@ export function ClientNotes({ p }: { p: Project }) {
 export default function Revise() {
   const { project: p } = useProject();
   if (!p.versions.length) {
-    return <Notice title="Nothing to revise yet">Revisions open once the first edit has finished.</Notice>;
+    return <NotYet what="revise" icon="chat" opens="Ask the Editor for changes or paste client notes once the first edit has finished." />;
   }
   return (
     <div className="grid grid-cols-12 gap-x-10 gap-y-6">

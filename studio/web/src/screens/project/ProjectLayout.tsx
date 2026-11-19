@@ -3,7 +3,7 @@ import { friendlyError } from "../../api/errors";
 import { useApi } from "../../api/context";
 import { Icon, type IconName } from "../../components/icons";
 import { StoryStrip } from "../../components/StoryStrip";
-import { cx, Loading, Mono, Notice, StatusBadge } from "../../components/ui";
+import { cx, Empty, Loading, Mono, Notice, StatusBadge } from "../../components/ui";
 import { useLiveProject, type LiveProject } from "../../hooks/useLiveProject";
 import { useStatus } from "../../hooks/status";
 import { useQuery } from "../../hooks/useQuery";
@@ -13,6 +13,26 @@ import type { Project } from "../../api/types";
 
 export type ProjectCtx = LiveProject & { project: Project };
 export const useProject = () => useOutletContext<ProjectCtx>();
+
+/** Empty state for a project tab whose content needs a finished edit (Review, Layers, Revise, Adjust, Deliver).
+ *  Says why it's empty and gives the one way forward: watch the edit, or see what stopped it. */
+export function NotYet({ what, icon, opens }: { what: string; icon: IconName; opens: string }) {
+  const { project: p } = useProject();
+  const failed = p.status === "failed";
+  return (
+    <Empty
+      icon={icon}
+      title={`Nothing to ${what} yet`}
+      action={
+        <Link to="../live" relative="path" className="inline-flex h-9 items-center gap-2 rounded-control border border-line-strong bg-bg-overlay px-4 text-ui text-fg-primary hover:bg-bg-high">
+          {failed ? "See what stopped it" : "Watch it live"}
+        </Link>
+      }
+    >
+      {opens} {failed ? "This edit stopped before it finished." : p.status === "queued" ? "This edit is queued." : "The edit is still running."}
+    </Empty>
+  );
+}
 
 const TABS: { to: string; label: string; icon: IconName }[] = [
   { to: "live", label: "Live", icon: "sparkle" },

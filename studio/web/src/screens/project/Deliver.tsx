@@ -8,7 +8,7 @@ import { Icon, type IconName } from "../../components/icons";
 import { Button, cx, IconButton, Loading, Mono, Notice, Panel } from "../../components/ui";
 import { useQuery } from "../../hooks/useQuery";
 import { ago, bytes } from "../../lib/format";
-import { useProject } from "./ProjectLayout";
+import { NotYet, useProject } from "./ProjectLayout";
 
 const KIND_ICON: Record<PackageFile["kind"], IconName> = {
   final: "film",
@@ -41,7 +41,7 @@ export default function Deliver() {
   const [busy, setBusy] = useState<"variants" | "delivered" | null>(null);
   const [msg, setMsg] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
-  if (p.verdict !== "sendable" && p.verdict !== "hold") return <Notice title="Nothing to deliver yet">Delivery opens when the edit has finished.</Notice>;
+  if (p.verdict !== "sendable" && p.verdict !== "hold") return <NotYet what="deliver" icon="download" opens="The package (reel, versions, captions, timeline) appears here when the edit has finished." />;
 
   const root = settings.data ? `${settings.data.projects_dir.replace(/\/$/, "")}/${p.id}` : null;
   const fullPath = (f: PackageFile) => (root ? `${root}/${f.path}` : f.path);
@@ -109,6 +109,9 @@ export default function Deliver() {
           ) : pkg.error ? (
             <Notice tone="error">{friendlyError(pkg.error)}</Notice>
           ) : (
+            pictures.length === 0 ? (
+              <p className="py-6 text-fg-secondary">No rendered files in the package yet. If the edit just finished, they appear in a moment; otherwise run the edit again from Live.</p>
+            ) : (
             <ul className="grid grid-cols-3 gap-6">
               {pictures.map((f) => (
                 <li key={f.path} className="flex flex-col gap-2">
@@ -132,6 +135,7 @@ export default function Deliver() {
                 </li>
               ))}
             </ul>
+            )
           )}
         </Panel>
         <Panel title="For editing software" actions={<span className="text-meta text-fg-muted">Final Cut Pro · OpenTimelineIO · captions · stems</span>}>
