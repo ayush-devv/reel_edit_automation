@@ -38,6 +38,9 @@ bakeoff = [
 goldset = [
     "yt-dlp>=2026.10.26",
 ]
+music = [
+    "beat-this==1.1.0",
+]
 
 [project.scripts]
 reel = "reel.cli:main"

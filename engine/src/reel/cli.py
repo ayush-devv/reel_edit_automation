@@ -103,6 +103,16 @@ def _cmd_licences(args: argparse.Namespace) -> int:
     return 1 if c["unresolved"] else 0
 
 
+def _cmd_remeasure_music(args: argparse.Namespace) -> int:
+    from reel import library
+
+    r = library.remeasure_music()
+    print(f"re-measured {r['remeasured']} track(s) with {r['tracker']}; {r['with_drop']} have a drop")
+    if r["missing"]:
+        print(f"not on this machine (run `reel assets fetch`): {', '.join(r['missing'])}")
+    return 0
+
+
 def _cmd_library(args: argparse.Namespace) -> int:
     from reel import library
 
@@ -552,6 +562,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--sonniss-pattern", help="regex on member paths to take (default: every categorised sound)")
     p.add_argument("--sonniss-per-category", type=int, default=12)
     p.set_defaults(func=_cmd_assets_fetch)
+
+    p = asub.add_parser("remeasure-music", help="re-measure beats, downbeats and the drop of the music library (Beat This! if installed)")
+    p.set_defaults(func=_cmd_remeasure_music)
 
     p = sub.add_parser("bakeoff", help="Hinglish ASR bake-off on samples/hinglish (ADR-0007)")
     p.add_argument("--samples", default="samples/hinglish")

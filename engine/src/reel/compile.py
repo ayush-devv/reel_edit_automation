@@ -326,14 +326,19 @@ def ramp_factor(r0: float, r1: float) -> float:
     return math.log(r1 / r0) / (r1 - r0)
 
 
-def music_offset_us(meta: dict, cut_us: int, total_us: int, cuts_us: list[int] | None = None) -> int:
-    """Where to start the track: a downbeat (a beat if none known) lands on the first cut, keeping
-    enough track to cover the reel when possible. With all the cut times given, among the offsets
-    that do that, pick the one that puts the most other cuts on a beat (cut-to-beat without ever
-    moving a speech cut)."""
+def music_offset_us(meta: dict, cut_us: int, total_us: int, cuts_us: list[int] | None = None, hook_end_us: int | None = None) -> int:
+    """Where to start the track. When the track has a drop (music_structure.find_drop, on a downbeat) and the reel has
+    a hook that ends before the reel does, the drop lands exactly on the hook's end cut: a cold open into the body.
+    Otherwise a downbeat (a beat if none known) lands on the first cut, keeping enough track to cover the reel when
+    possible; with all the cut times given, among those offsets, pick the one that puts the most other cuts on a beat
+    (cut-to-beat without ever moving a speech cut)."""
     beats = [int(b) * 1000 for b in (meta.get("downbeats_ms") or meta.get("beats_ms") or [])]
     every = sorted(int(b) * 1000 for b in (meta.get("beats_ms") or meta.get("downbeats_ms") or []))
     dur = int(meta.get("duration_ms", 0)) * 1000
+    if meta.get("drop_ms") and hook_end_us and 0 < hook_end_us < total_us:
+        off = int(meta["drop_ms"]) * 1000 - hook_end_us
+        if off >= 0 and (not dur or dur - off >= total_us):
+            return off
     fits = [b - cut_us for b in beats if b >= cut_us and (not dur or dur - (b - cut_us) >= total_us)]
     if not fits:
         later = [b - cut_us for b in beats if b >= cut_us]
@@ -611,7 +616,9 @@ def compile_timeline(
                                                     duration_us=int(meta.get("duration_ms", 0)) * 1000, **_licence(meta)))
         first_cut_us = tb.frame_to_us(segments[0].out_end, fps) if len(segments) > 1 else 0
         cuts_us = [tb.frame_to_us(sg.out_end, fps) for sg in segments[:-1]]
-        offset_us = music_offset_us(meta, first_cut_us, tb.frame_to_us(total, fps), cuts_us)
+        hook_shots = item_seg.get(story.items[0].id) if story.items else None
+        hook_end_us = tb.frame_to_us(hook_shots[-1][0] + hook_shots[-1][1], fps) if hook_shots else None
+        offset_us = music_offset_us(meta, first_cut_us, tb.frame_to_us(total, fps), cuts_us, hook_end_us)
         audio.append(AudioClip(id="music", asset=finish.music.track, at_f=0, dur_f=total, src_in_us=offset_us, gain_db=finish.music.gain_db, role="music"))
         ducking.append(Ducking(depth_db=finish.music.duck_db, regions_f=speech_regions(story, by, word_out_frame, fps)))
         if finish.beat_pulse > 0:

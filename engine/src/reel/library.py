@@ -104,6 +104,14 @@ def index_sfx(folder: Path, *, source: str, license_: str, rel_to: Path | None =
 
 
 def beats(y: np.ndarray, rate: int) -> tuple[float, list[int], list[int]]:
+    """(bpm, beat times ms, downbeat times ms): Beat This! when installed (real downbeats), else librosa."""
+    from reel import music_structure
+
+    bpm, beat_ms, down_ms, _tracker = music_structure.beats(y, rate)
+    return bpm, beat_ms, down_ms
+
+
+def librosa_beats(y: np.ndarray, rate: int) -> tuple[float, list[int], list[int]]:
     """(bpm, beat times ms, downbeat times ms). Downbeats: every 4th beat, phase with the strongest onsets."""
     import librosa
 
@@ -130,7 +138,10 @@ def index_music(folder: Path, *, source: str, license_: str, rel_to: Path | None
         except Exception as exc:  # noqa: BLE001 — skipped and reported
             SKIPPED.append((str(f), f"{type(exc).__name__}: {str(exc).splitlines()[0][:120] if str(exc) else ''}"))
             continue
-        bpm, beat_ms, down_ms = beats(y, rate)
+        from reel import music_structure
+
+        bpm, beat_ms, down_ms, tracker = music_structure.beats(y, rate)
+        drop = music_structure.find_drop(y, rate, down_ms) or {}
         side = f.with_suffix(".json")
         meta = json.loads(side.read_text()) if side.exists() else {}
         if FORBIDDEN_LICENCE.search(str(meta.get("license", ""))):
@@ -138,9 +149,39 @@ def index_music(folder: Path, *, source: str, license_: str, rel_to: Path | None
         stored = _stored_path(f, rel_to)
         out.append({"id": _id("music", stored if rel_to is not None else f), "file": stored, "title": meta.get("title", f.stem),
                     "duration_ms": int(round(y.size / rate * 1000)), "bpm": bpm, "beats_ms": beat_ms, "downbeats_ms": down_ms,
+                    "beats_by": tracker, **drop,
                     "mood": meta.get("mood") or f.parent.name.replace("_", " "), "energy": meta.get("energy"),
                     "source": meta.get("source", source), "license": meta.get("license", license_)})
     return out
+
+
+def remeasure_music(root: Path = assets_mod.ASSETS_DIR) -> dict:
+    """Re-measure beats, downbeats and the drop of every indexed track that is on this machine (the music
+    index is committed; the audio is fetched). Other fields — title, mood, licence — are kept."""
+    import librosa
+
+    from reel import music_structure
+
+    path = root / "music" / "music_index.json"
+    data = json.loads(path.read_text())
+    done, missing, drops = 0, [], 0
+    for e in data.get("tracks", []):
+        f = Path(e["file"]) if Path(e["file"]).is_absolute() else root / e["file"]
+        if not f.is_file():
+            missing.append(e["id"])
+            continue
+        y, rate = librosa.load(str(f), sr=22050, mono=True)
+        bpm, beat_ms, down_ms, tracker = music_structure.beats(y, rate)
+        drop = music_structure.find_drop(y, rate, down_ms)
+        e.update(bpm=bpm, beats_ms=beat_ms, downbeats_ms=down_ms, beats_by=tracker)
+        e.pop("drop_ms", None)
+        e.pop("rise_db", None)
+        if drop:
+            e.update(drop)
+            drops += 1
+        done += 1
+    atomic_write_json(path, data)
+    return {"remeasured": done, "missing": missing, "with_drop": drops, "tracker": music_structure.tracker_name()}
 
 
 def write_index(kind: str, entries: list[dict], *, replace: bool = False, root: Path = assets_mod.ASSETS_DIR) -> Path:

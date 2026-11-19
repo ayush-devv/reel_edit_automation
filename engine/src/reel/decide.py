@@ -183,8 +183,9 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
     for cat, items in menu.items():
         lines.append(f"- **{cat}**: " + ", ".join(f"`{e['id']}` {e.get('name', '')} ({e['duration_ms']} ms, peak at {e['peak_ms']} ms)" for e in items))
     lines.append("")
-    lines += _library("Music library (bed starts so a beat lands on the first cut; ducked under speech)", _allowed(inp.idx, inp.idx.music),
-                      ("title", "mood", "energy", "bpm", "feel", "duration_ms"))
+    lines += _library("Music library (bed starts so a beat lands on the first cut; ducked under speech; a track with drop_ms "
+                      "is started so its drop lands exactly as the hook ends — a lift into the body of the reel)",
+                      _allowed(inp.idx, inp.idx.music), ("title", "mood", "energy", "bpm", "feel", "duration_ms", "drop_ms"))
     lines += ["## Lottie library (graphic kind `lottie`; our pack is recoloured to the brand accent)", ""]
     lottie = _allowed(inp.idx, inp.idx.lottie)
     if not lottie:
