@@ -116,7 +116,7 @@ function JobsIndicator() {
             return (
               <Link
                 key={j.id}
-                to={j.project.startsWith("_") ? (j.project === "_lab" ? "/studio/quality" : "/studio/libraries") : `/p/${j.project}/live`}
+                to={j.project === "_lab" ? "/studio/quality" : j.project === "_library" ? "/studio/libraries" : `/p/${j.project}/live`}
                 onClick={() => setOpen(false)}
                 className="flex items-center justify-between gap-3 rounded-input px-3 py-2 hover:bg-bg-raised"
               >

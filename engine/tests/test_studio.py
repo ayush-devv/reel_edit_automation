@@ -623,3 +623,11 @@ def test_cost_days_cover_the_whole_window(tmp_path):
     make_project(tmp_path, "a", runs=[{"time": 86400 * 9.5, "label": "story", "cost_usd": 0.2}])
     days = costs.summary(tmp_path, days=3, now=86400 * 10)["by_day"]
     assert len(days) == 3 and days[-1]["date"] == time.strftime("%Y-%m-%d", time.localtime(86400 * 10)) and sum(d["usd"] for d in days) == pytest.approx(0.2)
+
+
+def test_underscore_project_ids_are_projects_not_job_slots(env):
+    make_project(env["root"], "_real")  # e.g. projects/_real_doac
+    c = env["c"]
+    assert c.post("/api/projects/_real/adjust", json={"kind": "look", "value": "warm"}).status_code == 200
+    env["launcher"].finish("adjust")
+    assert [v["label"] for v in c.get("/api/projects/_real/versions").json()] == ["Original edit", "Manual"]

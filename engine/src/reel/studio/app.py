@@ -32,6 +32,7 @@ VIDEO_EXT = {".mp4", ".mov", ".m4v", ".mkv", ".webm"}  # FR-2
 ADJUST_KINDS = ("caption_family", "caption_token", "look", "look_strength", "music_track", "music_gain_db", "sfx_off",
                 "punch_ins_off", "grain", "vignette", "max_pause_ms")
 PROJECT_JOBS = ("run", "retry", "revise", "notes", "proof", "adjust", "restore", "deliver")
+GLOBAL_SLOTS = ("_lab", "_library")  # job slots that are not projects
 
 
 class ApiError(Exception):
@@ -614,7 +615,7 @@ def _after_job(s: Settings, job) -> None:
     """A successful revision / notes / proof fix / adjustment / restore becomes a new version (FR-6 history), with the
     Editor's one-line reply (revise / notes) or what changed, and the AI cost of the job."""
     label = job.after.get("snapshot")
-    if label and not job.project.startswith("_"):
+    if label and job.project not in GLOBAL_SLOTS:  # project ids may start with "_" too (e.g. _real_doac)
         ws = projects.project_dir(s.projects_root, job.project)
         if ws is not None:
             reply = job.after.get("reply", "")
