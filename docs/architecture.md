@@ -225,6 +225,7 @@ brands/<client>.json         brand kit; briefs/<project>.json structured brief
 | [0032](adr/0032-hinglish-asr-answer-key.md) | Hinglish ASR answer key: MUCS 2021 now (in-domain discount), creator human subtitles later (overrides) | Accepted |
 | [0033](adr/0033-calibration-known-good-known-bad-plus-pro-labels.md) | Calibration: pro finals = known-good, injected defects = known-bad (now); pro-editor labels for κ at release; owner labels optional | Accepted |
 | [0034](adr/0034-release-judgement-two-independent-editors.md) | Release judged by an independent pro editor, separate from the gold-set editor; blind, standalone, ≥ 5/6 and no false sendable | Accepted |
+| [0035](adr/0035-commercial-safe-asset-sourcing.md) | Commercial-safe assets: procedural + Kenney CC0 SFX, Incompetech CC BY music with automatic credits, Sonniss opt-in only, Noto emoji SVGs, no GSAP | Accepted (owner to confirm) |
 | [0014](adr/0014-gold-set-evaluation.md) | Gold-set evaluation is the quality instrument | Accepted |
 | [0015](adr/0015-ingest-mezzanine-canonical-clock.md) | S0 mezzanine, one canonical clock | Accepted |
 | [0016](adr/0016-selects-stage-two-pass-plan.md) | Selects stage, two-pass plan, patch ops, quote check, playbook split | Accepted |
