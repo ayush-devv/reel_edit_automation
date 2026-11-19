@@ -200,6 +200,40 @@ def test_overlay_face_spans_follow_speaker_crops(tmp_path, monkeypatch):
     assert overlay.build_props(tl, tmp_path, faces, None, None, None)["faces"][0]["end_f"] == 200  # one fill span
 
 
+@pytest.mark.integration
+def test_speaker_crops_render_frame_exact(tmp_path):
+    """crop (left) → fill (uncertain) → crop (right) inside one clip renders every frame."""
+    import numpy as np
+
+    from reel import render, tools
+    from reel.schemas.timeline import Asset, AssetKind, AudioClip, Timeline
+
+    src = tmp_path / "mezz" / "c01.mov"
+    src.parent.mkdir()
+    tools.ffmpeg(["-y", "-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=25:duration=6", "-f", "lavfi", "-i", "sine=f=440:d=6:r=48000",
+                  "-c:v", "prores_ks", "-profile:v", "2", "-c:a", "pcm_s16le", "-ac", "2", str(src)])
+    prov = Provenance(item="k0", words=[0, 0])
+    tl = Timeline(fps="25/1", width=1080, height=1920, duration_f=150, assets={"c01": Asset(id="c01", kind=AssetKind.video, uri="mezz/c01.mov")},
+                  video=[VideoClip(id="v_k0", asset="c01", at_f=0, dur_f=150, src_in_us=0, src_out_us=6_000_000, src=prov)],
+                  audio=[AudioClip(id="a_k0", asset="c01", at_f=0, dur_f=150, role="voice", src=prov)])
+    samples = [{"t_us": t, "faces": [LEFT, RIGHT]} for t in range(0, 6_000_000, 250_000)]
+    faces = {"c01": {"samples": samples, "median_box": LEFT}}
+    sp = {"c01": _speakers([(0, 2_000_000, 0), (2_000_000, 4_000_000, None), (4_000_000, 6_000_000, 1)])}
+    out = tmp_path / "base.mp4"
+    meta = render.render_base(tl, tmp_path, out, faces=faces, speakers=sp, finish_audio=False)
+    assert meta["frames"] == 150 and meta["size"] == "1080x1920"
+
+    def frame(t):
+        raw = tools.run([str(render.ffmpeg_path()), "-v", "error", "-ss", str(t), "-i", str(out), "-frames:v", "1",
+                         "-f", "rawvideo", "-pix_fmt", "gray", "-"]).stdout
+        return np.frombuffer(raw, dtype=np.uint8).reshape(1920, 1080).astype(float)
+
+    crop_left, fill, crop_right = frame(1), frame(3), frame(5)
+    detail = lambda f: np.abs(np.diff(f, axis=1)).mean()  # noqa: E731
+    assert detail(fill[100:500]) < 0.5 * detail(fill[800:1100])  # fill: blurred band above the sharp whole frame
+    assert np.abs(crop_left - crop_right).mean() > 5 and np.abs(crop_left - fill).mean() > 5  # three different pictures
+
+
 # ------------------------------------------------------------------ integration (landmarker, local footage)
 
 
