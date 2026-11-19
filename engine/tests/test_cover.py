@@ -125,3 +125,23 @@ def test_cover_build_writes_1080x1920_cover_and_candidates(tmp_path, monkeypatch
     assert (pkg / "cover.jpg").exists() and (pkg / "covers" / "cover_1.jpg").exists()
     md = package.cover_section(got)
     assert f"frame **{rep['frame']}**" in md and rep["tc"] in md and md.count("| covers/cover_") == len(rep["top"])
+
+
+def test_cover_without_drawtext_ships_the_clean_frame(tmp_path, monkeypatch):
+    tl = compile_timeline(_story(), _finish(), WORDS, CLIPS, FPS, IDX)
+    ws = Workspace.create(tmp_path / "p")
+    tools.ffmpeg(["-y", "-f", "lavfi", "-i", f"testsrc2=s=1080x1920:r=30:d={tl.duration_f / 30 + 0.2:.2f}", "-frames:v", str(tl.duration_f),
+                  "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(ws.path("render", "base.mov"))])
+    monkeypatch.setattr(cover, "detect_faces", lambda frames: {f: {"box": dict(LARGE), "blend": OPEN} for f in frames})
+    real = cover.write_jpeg
+
+    def no_drawtext(rgb, out, *, text="", font=None, face_box=None):
+        if text:
+            raise tools.ToolError(["ffmpeg"], 8, "No such filter: 'drawtext'")
+        return real(rgb, out)
+
+    monkeypatch.setattr(cover, "write_jpeg", no_drawtext)
+    cover.build(ws, tl, _story(), _finish(hook_title=HookTitle(text="One trick", style="card", reason="r")), WORDS)
+    out = ws.path("render", "cover")
+    assert (out / "cover.jpg").read_bytes() == (out / "cover_clean.jpg").read_bytes()
+    assert "skipped" in json.loads((out / "cover.json").read_text())["text"]

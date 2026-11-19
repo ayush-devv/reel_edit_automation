@@ -26,6 +26,7 @@ import hashlib
 import io
 import os
 import ssl
+import shutil
 import tempfile
 import urllib.request
 import zipfile
@@ -427,7 +428,12 @@ def build(ws, tl: Timeline, story: StoryPlan, finish: FinishPlan, words: WordTab
         write_jpeg(full[c["frame"]], out / c["file"])
     best = top[0]
     write_jpeg(full[best["frame"]], out / "cover_clean.jpg")
-    text_meta = write_jpeg(full[best["frame"]], out / "cover.jpg", text=title, font=font, face_box=best.get("box"))
+    try:
+        text_meta = write_jpeg(full[best["frame"]], out / "cover.jpg", text=title, font=font, face_box=best.get("box"))
+    except tools.ToolError as exc:  # an ffmpeg build without drawtext (libfreetype): ship the clean frame, say why
+        shutil.copyfile(out / "cover_clean.jpg", out / "cover.jpg")
+        text_meta = {"skipped": f"title not drawn: ffmpeg cannot draw text ({str(exc).splitlines()[0][:120]})"}
+        font_note = f"{font_note}; title skipped (no drawtext in this ffmpeg build)"
     report = {"frame": best["frame"], "tc": best["tc"], "t": round(float(Fraction(best["frame"]) / fps), 3), "score": best["score"],
               "title": title, "font": font_note, "text": text_meta, "faces": face_note, "top": top,
               "candidates": sorted(scored, key=lambda c: c["frame"]), "rules": {
