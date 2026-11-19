@@ -259,6 +259,18 @@ def brief_compliance(tl: Timeline, kept_text: str, brief: Brief | None) -> GateR
                       fixable=bool(problems), fix_hint="Keep every must-keep line and the CTA; remove banned claims.")
 
 
+def numbers_match(fin, story, words) -> GateResult:
+    """Safety net for the plan-time check: on-screen numbers that disagree with the speech (or nobody says)."""
+    from reel.validate import number_checks
+
+    if fin is None:
+        return GateResult("numbers", True, detail="no finish plan")
+    found = number_checks(fin, story, words)
+    return GateResult("numbers", not found, detail="; ".join(f"{p}: “{s}” ({st}) — {', '.join(d)}" for p, s, st, d in found)
+                      or "on-screen numbers match the speech", fixable=bool(found),
+                      fix_hint="Show the number the speaker says, or drop it.", measured={"checks": [list(f[:3]) for f in found]})
+
+
 def proof_words(proof: list[dict], confirmed: dict) -> GateResult:
     open_ = [p for p in proof if str(p["i"]) not in confirmed]
     return GateResult("proof_words", not open_, mode="block",

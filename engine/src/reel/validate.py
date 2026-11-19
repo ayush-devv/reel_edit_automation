@@ -330,6 +330,7 @@ def validate_finish(fin: FinishPlan, story: StoryPlan, words: WordTable, idx: In
                             f"Keep at most {EFFECTS_MAX}: effects lose their punch when they are everywhere.", "warning"))
 
     issues += validate_graphics(fin, items, order, uid, need_item, in_item, idx)
+    issues += number_issues(fin, story, words)
 
     for n, b in enumerate(fin.broll):
         path = f"broll[{n}]"
@@ -396,6 +397,54 @@ def apply_story_patch(plan: StoryPlan, patch: StoryPatch) -> tuple[StoryPlan, li
                 else:
                     items.insert(k + 1, op.item)
     return plan.model_copy(update={"items": items}), issues
+
+
+NUMBER_WINDOW = 8  # words either side of a graphic's window where its number may be said
+NUMBER_KINDS = ("keyword_card", "counter", "text_card", "cta_card", "lower_third", "callout")
+
+
+def number_checks(fin: FinishPlan, story: StoryPlan, words: WordTable) -> list[tuple[str, str, str, list[str]]]:
+    """On-screen numbers against the numbers said around them (reel.numbers): (path, shown text, status, detail)
+    for every title/graphic that is not 'ok'. Used by validate_finish (before render) and the `numbers` QA gate."""
+    from reel import numbers
+
+    items = {it.id: it for it in story.items}
+    by = words.by_index()
+
+    def said(item_id: str, lo: int, hi: int) -> str:
+        it = items.get(item_id)
+        if not it:
+            return ""
+        return " ".join(by[i].text for i in range(max(it.word_start, lo), min(it.word_end, hi) + 1) if i in by)
+
+    checks = []
+    if fin.hook_title.text.strip() and story.items:
+        first = story.items[0]
+        checks.append(("hook_title.text", fin.hook_title.text, said(first.id, first.word_start, first.word_end)))
+    for n, g in enumerate(fin.graphics):
+        if g.kind.value not in NUMBER_KINDS or g.item not in items:
+            continue
+        shown = numbers.counter_text(g.text, g.value) if g.kind.value == "counter" else g.text
+        checks.append((f"graphics[{n}].text", shown, said(g.item, g.from_word - NUMBER_WINDOW, g.to_word + NUMBER_WINDOW)))
+    out = []
+    for path, shown, spoken in checks:
+        status, detail = numbers.compare(shown, spoken)
+        if status != "ok":
+            out.append((path, shown, status, detail))
+    return out
+
+
+def number_issues(fin: FinishPlan, story: StoryPlan, words: WordTable) -> list[Issue]:
+    """A clear mismatch is an error (the Editor fixes it before any render); a number nobody says nearby is a warning."""
+    out = []
+    for path, shown, status, detail in number_checks(fin, story, words):
+        if status == "mismatch":
+            out.append(Issue("number_mismatch", path, f"“{shown}”: {'; '.join(detail)}.",
+                             "Show the number the speaker says (or drop it): on-screen numbers must match the speech."))
+        else:
+            out.append(Issue("number_unspoken", path, f"“{shown}”: {'; '.join(detail)}.",
+                             "Check the number is right; on-screen numbers should echo what is said.", "warning"))
+    return out
 
 
 def validate_graphics(fin, items, order, uid, need_item, in_item, idx, has_logo: bool | None = None) -> list[Issue]:

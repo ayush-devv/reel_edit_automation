@@ -15,7 +15,7 @@ from pathlib import Path
 from reel import claude_call, config, cuts, decide, project, qa, sheets
 from reel import brief as brief_mod
 from reel import timebase as tb
-from reel.schemas.plan import StoryPlan
+from reel.schemas.plan import FinishPlan, StoryPlan
 from reel.schemas.review import FixTarget, Review, Severity
 from reel.schemas.timeline import Timeline
 from reel.workspace import Workspace, atomic_write_bytes, atomic_write_json
@@ -45,7 +45,10 @@ def run_gates(ws: Workspace, tl: Timeline, story: StoryPlan, brief: brief_mod.Br
     dips = [(t.at_f - t.frames, t.at_f + t.frames) for t in tl.transitions if t.type.value in ("dip_to_black", "dip_to_white")]
     proof = json.loads(ws.path("qa", "proof_list.json").read_text()) if ws.path("qa", "proof_list.json").exists() else []
     final, base, ov = ws.path("render", "final.mp4"), ws.path("render", "base.mov"), ws.path("render", "overlay.mov")
+    fin_file = ws.path("plan", "finish.json")
+    fin = FinishPlan.model_validate_json(fin_file.read_text()) if fin_file.exists() else None
     results = [*qa.frame_and_loudness(tl, final), qa.proof_words(proof, confirmed_words(ws)), qa.brief_compliance(tl, kept_text, brief),
+               qa.numbers_match(fin, story, project.word_table(ws)),
                qa.dead_air(tl), qa.reading_speed(tl), qa.face_cut(tl, faces), *qa.caption_pixels(tl, base, ov, faces, safe, flashes),
                *qa.frozen_and_black(tl, final, dips)]
     return qa.apply_modes(results)

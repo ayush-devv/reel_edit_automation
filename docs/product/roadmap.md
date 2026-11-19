@@ -95,7 +95,11 @@ The copy is written in the client's voice and language (English, Hinglish in Lat
 
 ---
 
-### G1.2 Wrong-number check, with Indian numbering (about 0.5 day)
+### G1.2 Wrong-number check, with Indian numbering (about 0.5 day): **built**
+
+Built in `reel/numbers.py`; `validate.number_checks` / `number_issues`; `qa.numbers_match` (gate `numbers`, warn).
+
+Known limit: "4K video" can't be told from "4k" = 4,000 in writing. It only causes a false error when the speaker says "four K" with no digits nearby.
 
 **What it catches:** on-screen text that disagrees with what was said. For example, a counter showing "₹5 lakh" over "fifty thousand", or a keyword card saying "70%" when the speaker said 17.
 
@@ -112,6 +116,7 @@ The copy is written in the client's voice and language (English, Hinglish in Lat
   - **Error only when both sides parse confidently and still disagree.** Anything ambiguous is a warning, because every error buys a paid Editor retry. Ambiguous cases include years, ordinals ("1st"), "24/7", "10x", times ("5:30"), ranges ("3–5"), "Top 3" against "three things", and numbers with no spoken candidate nearby.
   - The Editor fixes errors in its existing repair loop, before any render.
   - **Before turning errors on**, run the parser over the finish plans of every existing project in `projects/` and record the false-positive count here. It must be 0 errors on plans the owner already accepted.
+  - **Result, 2026-11-20:** 3 plans, 4 on-screen texts, **0 errors, 0 warnings**. The sample is small (there is no plan history), so re-run the sweep (`number_checks` over every `projects/*/plan/finish.json`) as projects accumulate. A false error costs one Editor retry, never a wrong reel.
 - **Check at QA time (safety net):** gate `numbers_match` over the compiled timeline's titles and graphics against the kept words, using the same function. It starts in warn mode, like other new gates; calibration can promote it to blocking.
 
 **Tests:**
