@@ -34,7 +34,7 @@ function Mount({ el, className }: { el: HTMLElement | null; className?: string }
 export function FlatPhone({ player, ui, safe, big }: { player: ReelPlayer; ui: HTMLCanvasElement | null; safe: HTMLCanvasElement | null; big?: boolean }) {
   return (
     <div
-      className={cx("relative mx-auto overflow-hidden rounded-phone border-[6px] border-[#1b1f2a] bg-black shadow-[0_0_0_1px_#343B4D]", big ? "h-[86vh] aspect-[9/16]" : "h-[560px] aspect-[9/16]")}
+      className={cx("relative mx-auto overflow-hidden rounded-phone border-[6px] border-bg-high bg-black ring-1 ring-line-strong", big ? "h-[86vh] aspect-[9/16]" : "h-[560px] aspect-[9/16]")}
       data-gl="off"
     >
       <Mount el={player.element} className="absolute inset-0" />
@@ -70,7 +70,8 @@ export function PhonePreview({ player, client }: { player: ReelPlayer; client: s
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="relative h-[600px] overflow-hidden rounded-panel border border-line-subtle bg-[radial-gradient(80%_60%_at_50%_40%,#1a1e2b_0%,#07080C_70%)]">
+      {/* Monitor well: the darkest surface, so the footage is the brightest thing on screen. */}
+      <div className="relative h-[600px] overflow-hidden rounded-surface bg-bg-inset">
         {can3D ? (
           <Suspense fallback={null}>
             <PhoneScene
@@ -89,12 +90,12 @@ export function PhonePreview({ player, client }: { player: ReelPlayer; client: s
             <FlatPhone player={player} ui={overlayUI ? uiCanvas : null} safe={safeZones ? safeCanvas : null} />
           </div>
         ) : null}
-        {can3D && <p className="pointer-events-none absolute bottom-3 left-0 right-0 text-center text-label font-normal text-fg-muted">Drag to rotate · double-click to reset</p>}
+        {can3D && <p className="pointer-events-none absolute bottom-3 left-0 right-0 text-center text-meta text-fg-muted">Drag to rotate · double-click to reset</p>}
       </div>
 
-      <div className="rounded-card border border-line-subtle bg-bg-raised px-4 py-3">
+      <div>
         <div className="flex items-center gap-3">
-          <IconButton icon={playing ? "pause" : "play"} label={playing ? "Pause" : "Play"} onClick={() => (playing ? player.pause() : player.play())} className="h-9 w-9 bg-ai text-white hover:bg-ai hover:brightness-110 hover:text-white" />
+          <IconButton icon={playing ? "pause" : "play"} label={playing ? "Pause" : "Play"} onClick={() => (playing ? player.pause() : player.play())} className="h-9 w-9 border border-line-strong bg-bg-overlay text-fg-primary hover:bg-bg-high" />
           <Mono className="w-12 text-fg-secondary">{fmt(t)}</Mono>
           <input
             type="range"
@@ -104,13 +105,13 @@ export function PhonePreview({ player, client }: { player: ReelPlayer; client: s
             value={t}
             aria-label="Scrub"
             onChange={(e) => player.seek(Number(e.target.value))}
-            className="h-1 flex-1 cursor-pointer accent-[#36D6E7]"
+            className="h-1 flex-1 cursor-pointer accent-[#E8A33D]"
           />
           <Mono className="w-12 text-right text-fg-muted">{fmt(player.duration)}</Mono>
           <IconButton icon={player.isMuted() ? "mute" : "volume"} label={player.isMuted() ? "Unmute" : "Mute"} onClick={() => player.setMuted(!player.isMuted())} />
           <IconButton icon="expand" label="Full-screen flat playback" onClick={() => setFull(true)} />
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-4 border-t border-line-subtle pt-3">
+        <div className="mt-4 grid grid-cols-2 gap-4 border-t border-line-subtle pt-4">
           <Toggle checked={overlayUI} onChange={setOverlayUI} label="Platform UI" description="Generic buttons and caption area" />
           <Toggle checked={safeZones} onChange={setSafeZones} label="Safe zones" description="Where captions must stay" />
         </div>
@@ -119,7 +120,7 @@ export function PhonePreview({ player, client }: { player: ReelPlayer; client: s
       <dialog
         ref={dialogRef}
         onClose={() => setFull(false)}
-        className="m-auto rounded-panel border border-line-strong bg-bg-base p-4 text-fg-primary backdrop:bg-black/80"
+        className="m-auto rounded-surface border border-line-strong bg-bg-base p-4 text-fg-primary shadow-menu backdrop:bg-black/80"
         aria-label="Full-screen playback"
       >
         {full && (
@@ -127,7 +128,7 @@ export function PhonePreview({ player, client }: { player: ReelPlayer; client: s
             <FlatPhone player={player} ui={overlayUI ? uiCanvas : null} safe={safeZones ? safeCanvas : null} big />
             <div className="flex gap-2">
               <IconButton icon={playing ? "pause" : "play"} label={playing ? "Pause" : "Play"} onClick={() => (playing ? player.pause() : player.play())} />
-              <button type="button" className="inline-flex h-8 items-center gap-2 rounded-input px-3 text-fg-secondary hover:bg-bg-overlay" onClick={() => setFull(false)}>
+              <button type="button" className="inline-flex h-8 items-center gap-2 rounded-control px-3 text-fg-secondary hover:bg-bg-overlay" onClick={() => setFull(false)}>
                 <Icon name="x" size={16} /> Close
               </button>
             </div>

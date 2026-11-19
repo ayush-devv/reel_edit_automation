@@ -162,8 +162,9 @@ export default function PhoneScene(props: PhoneProps & { busy: boolean; resetSig
       onDoubleClick={props.onReset}
     >
       <StudioLights intensity={1} shadowSize={4} />
-      <spotLight position={[-4, 5, 4]} angle={0.5} penumbra={1} intensity={30} color={color.accent.glow} />
-      <spotLight position={[4, 3, 3]} angle={0.5} penumbra={1} intensity={18} color={color.accent.cyan} />
+      {/* Neutral key and fill: coloured light would tint the client's footage. */}
+      <spotLight position={[-4, 5, 4]} angle={0.5} penumbra={1} intensity={22} color="#FFFFFF" />
+      <spotLight position={[4, 3, 3]} angle={0.5} penumbra={1} intensity={10} color={color.text.secondary} />
       <group position={[0, 0.2, 0]}>
         <Phone {...props} />
       </group>

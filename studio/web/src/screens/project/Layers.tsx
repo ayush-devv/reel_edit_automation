@@ -25,7 +25,7 @@ function FlatLayers({ layers, duration, time, selected, onSelect }: { layers: La
           <span className="truncate text-label" style={{ color: l.color }}>
             {l.label}
           </span>
-          <div className={cx("relative rounded-input border border-line-subtle bg-bg-overlay/50", l.kind === "audio" ? "h-6" : "h-9")}>
+          <div className={cx("relative rounded-control bg-bg-raised", l.kind === "audio" ? "h-6" : "h-9")}>
             {l.blocks.map((b, i) => {
               const key = `${l.id}:${b.id}:${b.start}`;
               return (
@@ -36,14 +36,14 @@ function FlatLayers({ layers, duration, time, selected, onSelect }: { layers: La
                   aria-pressed={selected === key}
                   aria-label={`${l.label}: ${b.label}, ${fmt(b.start)}–${fmt(b.end)}`}
                   title={b.label}
-                  className={cx("absolute inset-y-1 overflow-hidden rounded-[4px] px-1.5 text-left text-[11px] font-medium text-black/85 transition-[filter] duration-hover hover:brightness-110", selected === key && "ring-2 ring-white")}
+                  className={cx("absolute inset-y-1 overflow-hidden rounded-control px-1.5 text-left text-meta font-medium text-black/85 transition-[filter] duration-hover hover:brightness-110", selected === key && "ring-2 ring-fg-primary")}
                   style={{ left: `${(b.start / duration) * 100}%`, width: `calc(${((b.end - b.start) / duration) * 100}% - 2px)`, background: l.color }}
                 >
                   <span className="block truncate leading-[inherit]">{l.kind === "audio" ? "" : b.label}</span>
                 </button>
               );
             })}
-            <div className="pointer-events-none absolute inset-y-0 w-0.5 bg-cyan" style={{ left: `${(time / duration) * 100}%` }} aria-hidden="true" />
+            <div className="pointer-events-none absolute inset-y-0 w-0.5 bg-signal" style={{ left: `${(time / duration) * 100}%` }} aria-hidden="true" />
           </div>
         </div>
       ))}
@@ -75,10 +75,10 @@ export default function Layers() {
   };
 
   return (
-    <div className="grid grid-cols-12 gap-4">
-      <div className="col-span-12 space-y-4 xl:col-span-8">
-        <section className="overflow-hidden rounded-panel border border-line-subtle bg-bg-inset" aria-label="Layers">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-subtle bg-bg-raised px-4 py-3">
+    <div className="grid grid-cols-12 gap-x-10 gap-y-6">
+      <div className="col-span-12 xl:col-span-8">
+        <section className="mb-6 overflow-hidden rounded-surface bg-bg-inset" aria-label="Layers">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-subtle px-4 py-3">
             <div className="flex items-center gap-2">
               {can3D && (
                 <Segmented
@@ -99,7 +99,7 @@ export default function Layers() {
             </div>
             <div className="flex min-w-[260px] flex-1 items-center gap-3 sm:max-w-md">
               <Mono className="w-12 text-fg-secondary">{fmt(time)}</Mono>
-              <input type="range" min={0} max={model.duration} step={0.05} value={time} onChange={(e) => setTime(Number(e.target.value))} aria-label="Playhead" className="h-1 flex-1 accent-[#36D6E7]" />
+              <input type="range" min={0} max={model.duration} step={0.05} value={time} onChange={(e) => setTime(Number(e.target.value))} aria-label="Playhead" className="h-1 flex-1 accent-[#E8A33D]" />
               <Mono className="w-12 text-right text-fg-muted">{fmt(model.duration)}</Mono>
             </div>
           </div>
@@ -114,7 +114,7 @@ export default function Layers() {
           )}
         </section>
 
-        <Panel title="Story strip" actions={<span className="text-label font-normal text-fg-muted">Kept lines in order · width = duration</span>}>
+        <Panel title="Story strip" actions={<span className="text-meta text-fg-muted">Kept lines in order · width = duration</span>}>
           <ol className="flex h-14 gap-1" aria-label="Kept lines">
             {story.map((b, i) => (
               <li key={b.id} style={{ flexGrow: b.end - b.start, flexBasis: 0 }} className="min-w-0">
@@ -123,11 +123,11 @@ export default function Layers() {
                   onClick={() => select(model.layers[0], b)}
                   title={b.text}
                   aria-label={`Line ${i + 1}: ${b.text}`}
-                  className={cx("group flex h-full w-full flex-col justify-center overflow-hidden rounded-input px-2 text-left text-black/85 transition-[filter] hover:brightness-110", selKey?.includes(`:${b.id}:`) && "ring-2 ring-white")}
+                  className={cx("group flex h-full w-full flex-col justify-center overflow-hidden rounded-control px-2 text-left text-black/85 transition-[filter] hover:brightness-110", selKey?.includes(`:${b.id}:`) && "ring-2 ring-fg-primary")}
                   style={{ background: BEAT_COLORS[i % BEAT_COLORS.length] }}
                 >
-                  <span className="font-mono text-[11px] font-medium">{b.id}</span>
-                  <span className="truncate text-[12px]">{b.text}</span>
+                  <span className="font-mono text-meta font-medium">{b.id}</span>
+                  <span className="truncate text-meta">{b.text}</span>
                 </button>
               </li>
             ))}
@@ -136,11 +136,11 @@ export default function Layers() {
       </div>
 
       <aside className="col-span-12 xl:col-span-4">
-        <Panel title="Why it’s there" className="xl:sticky xl:top-4">
+        <Panel title="Why it’s there" className="xl:sticky xl:top-4 xl:border-t-0">
           {sel ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <span className="h-3 w-3 rounded-sm" style={{ background: sel.layer.color }} aria-hidden="true" />
+                <span className="h-2 w-2 rounded-full" style={{ background: sel.layer.color }} aria-hidden="true" />
                 <span className="text-label" style={{ color: sel.layer.color }}>
                   {sel.layer.label}
                 </span>
@@ -148,7 +148,7 @@ export default function Layers() {
                   {fmt(sel.block.start)}–{fmt(sel.block.end)}
                 </Mono>
               </div>
-              <p className="text-[15px] font-semibold text-fg-primary">{sel.block.label}</p>
+              <p className="text-section text-fg-primary">{sel.block.label}</p>
               <p className="text-fg-secondary">{reason ?? "No reason was recorded for this piece."}</p>
               <Mono className="block text-fg-muted">id {sel.block.id}</Mono>
             </div>

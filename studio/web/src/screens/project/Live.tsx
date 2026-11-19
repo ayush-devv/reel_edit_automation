@@ -24,13 +24,14 @@ function useNow(ms = 1000) {
   return now;
 }
 
+// Done is graphite, running is violet (the AI is working), failed is red, waiting is a hairline. No glow.
 const NODE_STYLE: Record<string, string> = {
-  done: "border-ai-glow/60 bg-ai/[0.14] text-fg-primary",
-  running: "border-ai-glow bg-ai/[0.28] text-white shadow-[0_0_18px_rgba(157,133,255,0.45)]",
-  failed: "border-st-fail bg-st-fail/[0.14] text-st-fail",
+  done: "border-line-strong bg-bg-overlay text-fg-secondary",
+  running: "border-ai bg-ai/[0.12] text-fg-primary",
+  failed: "border-st-fail bg-transparent text-st-fail",
   skipped: "border-line-subtle bg-transparent text-fg-muted line-through decoration-fg-muted/50",
-  pending: "border-line-subtle bg-bg-overlay text-fg-muted",
-  queued: "border-line-subtle bg-bg-overlay text-fg-muted",
+  pending: "border-line-subtle bg-transparent text-fg-muted",
+  queued: "border-line-subtle bg-transparent text-fg-muted",
 };
 
 const STATUS_WORD: Record<string, string> = { done: "done", running: "running", failed: "failed", skipped: "skipped", pending: "waiting", queued: "queued" };
@@ -41,7 +42,7 @@ export function FlatPipeline({ stages, selected, onSelect, large }: { stages: St
     <ol aria-label="Pipeline stages" className={cx("flex flex-wrap gap-x-4 gap-y-3", large && "py-2")}>
       {STAGE_GROUPS.map((g) => (
         <li key={g.name} className="flex flex-col gap-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-fg-muted">{g.name}</span>
+          <span className="text-meta text-fg-muted">{g.name}</span>
           <ol className="flex gap-1.5">
             {g.stages.map((name) => {
               const s = stages.find((x) => x.name === name);
@@ -54,15 +55,15 @@ export function FlatPipeline({ stages, selected, onSelect, large }: { stages: St
                     aria-pressed={selected === name}
                     aria-label={`${STAGE_LABEL[name]}: ${STATUS_WORD[s.status] ?? s.status}`}
                     className={cx(
-                      "flex items-center gap-1.5 rounded-full border px-2.5 font-medium transition-colors duration-hover",
-                      large ? "h-8 text-[13px]" : "h-7 text-[12px]",
+                      "flex items-center gap-1.5 rounded-control border px-2.5 transition-colors duration-hover",
+                      large ? "h-8 text-ui" : "h-7 text-label",
                       NODE_STYLE[s.status] ?? NODE_STYLE.pending,
-                      selected === name && "ring-2 ring-cyan ring-offset-2 ring-offset-bg-raised",
+                      selected === name && "ring-2 ring-signal ring-offset-2 ring-offset-bg-base",
                     )}
                   >
                     {s.status === "done" && <Icon name="check" size={12} />}
                     {s.status === "failed" && <Icon name="alert" size={12} />}
-                    {s.status === "running" && <span className="h-1.5 w-1.5 rounded-full bg-white pulse-dot" aria-hidden="true" />}
+                    {s.status === "running" && <span className="h-1.5 w-1.5 rounded-full bg-ai pulse-dot" aria-hidden="true" />}
                     {STAGE_LABEL[name]}
                   </button>
                 </li>
@@ -94,36 +95,31 @@ function DecisionFeed({ decisions, cost }: { decisions: Decision[]; cost: number
     <Panel
       title="The Editor’s decisions"
       actions={
-        <span className="text-label font-normal text-fg-muted">
-          AI cost so far <Mono className="text-fg-primary">{usd(cost)}</Mono>
+        <span className="text-meta text-fg-muted">
+          AI cost so far <Mono className="text-fg-secondary">{usd(cost)}</Mono>
         </span>
       }
-      bodyClass="max-h-[520px] overflow-y-auto"
+      bodyClass="max-h-[560px] overflow-y-auto"
     >
       {list.length === 0 ? (
         <p className="py-6 text-fg-secondary">Decisions appear here as soon as the Editor makes them — the hook, the kept lines, captions, look and punch-ins, each with its reason.</p>
       ) : (
-        <ol className="space-y-3" aria-live="polite" aria-label="Decisions, newest first">
+        <ol className="divide-y divide-line-subtle" aria-live="polite" aria-label="Decisions, newest first">
           {list.map((d) => (
-            <li key={`${d.at}-${d.title}`} className="fade-in flex gap-3 rounded-card border border-line-subtle bg-bg-overlay/60 p-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-input bg-ai/[0.14] text-ai-glow">
-                <Icon name={decisionIcon(d)} size={16} />
-              </div>
+            // Each decision is the Editor's (AI) output: a 2 px violet rule, then what and why.
+            <li key={`${d.at}-${d.title}`} className="fade-in flex gap-4 py-4">
+              <span className="w-0.5 shrink-0 rounded-full bg-ai" aria-hidden="true" />
+              <Icon name={decisionIcon(d)} size={16} className="mt-0.5 shrink-0 text-fg-muted" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-3">
-                  <p className="font-medium text-fg-primary">{d.title}</p>
-                  {typeof d.cost_usd === "number" && <Mono className="shrink-0 text-fg-muted">{usd(d.cost_usd)}</Mono>}
+                  <p className="text-ui text-fg-primary">{d.title}</p>
+                  <span className="shrink-0 text-meta text-fg-muted">
+                    {d.kind}
+                    {typeof d.cost_usd === "number" && <> · <Mono className="text-meta">{usd(d.cost_usd)}</Mono></>}
+                  </span>
                 </div>
-                <p className="mt-1 text-fg-secondary">{d.detail}</p>
-                {d.knowledge.length > 0 && (
-                  <p className="mt-2 flex flex-wrap gap-1.5">
-                    {d.knowledge.map((k) => (
-                      <span key={k} className="rounded bg-bg-raised px-1.5 py-0.5 font-mono text-[11px] text-fg-muted">
-                        {k}
-                      </span>
-                    ))}
-                  </p>
-                )}
+                <p className="mt-1 text-meta text-fg-secondary">{d.detail}</p>
+                {d.knowledge.length > 0 && <p className="mt-2 font-mono text-meta text-fg-muted">{d.knowledge.join(" · ")}</p>}
               </div>
             </li>
           ))}
@@ -163,8 +159,8 @@ export default function Live() {
   }
 
   return (
-    <div className="space-y-4">
-      <section className="overflow-hidden rounded-panel border border-line-subtle bg-bg-inset" aria-label="Pipeline">
+    <div className="space-y-6">
+      <section className="overflow-hidden rounded-surface bg-bg-inset" aria-label="Pipeline">
         {can3D ? (
           <div className="h-[340px]">
             <Suspense fallback={<div className="h-full" />}>
@@ -172,7 +168,7 @@ export default function Live() {
             </Suspense>
           </div>
         ) : null}
-        <div className={cx("border-line-subtle bg-bg-raised px-6", can3D ? "border-t py-3" : "py-6")}>
+        <div className={cx("border-line-subtle px-6", can3D ? "border-t py-4" : "py-6")}>
           <FlatPipeline stages={p.stages} selected={sel?.name ?? null} onSelect={setSelected} large={!can3D} />
         </div>
       </section>
@@ -183,12 +179,12 @@ export default function Live() {
         </Notice>
       )}
 
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-12 space-y-4 lg:col-span-5">
+      <div className="grid grid-cols-12 gap-x-10 gap-y-6">
+        <div className="col-span-12 lg:col-span-5">
           {failed ? (
             <Panel title={<span className="text-st-fail">Stopped at {STAGE_LABEL[failed.name]}</span>}>
-              <p className="text-fg-primary">{failed.error ?? "This stage failed."}</p>
-              <p className="mt-2 text-label font-normal text-fg-muted">Earlier stages stay done. Retry runs again from {STAGE_LABEL[failed.name]}.</p>
+              <pre className="whitespace-pre-wrap rounded-control bg-bg-inset px-4 py-3 font-mono text-mono text-fg-secondary">{failed.error ?? "This stage failed."}</pre>
+              <p className="mt-3 text-meta text-fg-muted">Earlier stages stay done, so nothing is lost. Retry runs again from {STAGE_LABEL[failed.name]}.</p>
               <div className="mt-4 flex gap-2">
                 <Button variant="primary" icon="retry" busy={acting === "retry"} onClick={() => act("retry")}>
                   Retry from {STAGE_LABEL[failed.name]}
@@ -198,22 +194,26 @@ export default function Live() {
           ) : running ? (
             <Panel title="Now">
               <p className="text-title text-fg-primary">{STAGE_PLAIN[running.name] ?? running.name}</p>
-              <dl className="mt-4 grid grid-cols-2 gap-4">
+              <dl className="mt-4 grid grid-cols-3 gap-4">
                 <div>
-                  <dt className="text-label text-fg-muted">Elapsed in this stage</dt>
-                  <dd className="mt-1 font-mono text-[15px] tabular text-fg-primary">{running.started ? elapsed(now - running.started) : "—"}</dd>
+                  <dt className="text-meta text-fg-muted">Progress</dt>
+                  <dd className="mt-1 font-mono text-timecode-lg tabular text-fg-primary">{Math.round(p.progress * 100)}%</dd>
                 </div>
                 <div>
-                  <dt className="text-label text-fg-muted">Estimated time left</dt>
-                  <dd className="mt-1 font-mono text-[15px] tabular text-fg-primary">{left !== null ? `≈ ${elapsed(left)}` : "—"}</dd>
+                  <dt className="text-meta text-fg-muted">In this stage</dt>
+                  <dd className="mt-1 font-mono text-timecode-lg tabular text-fg-primary">{running.started ? elapsed(now - running.started) : "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-meta text-fg-muted">Time left</dt>
+                  <dd className="mt-1 font-mono text-timecode-lg tabular text-fg-primary">{left !== null ? `≈ ${elapsed(left)}` : "—"}</dd>
                 </div>
               </dl>
               <div className="mt-4">
                 <ProgressBar value={p.progress} label="Edit progress" />
               </div>
               <div className="mt-4 flex items-center justify-between">
-                <span className="flex items-center gap-2 text-label font-normal text-fg-muted">
-                  <span className={cx("h-1.5 w-1.5 rounded-full", connected ? "bg-st-sendable" : "bg-st-hold")} aria-hidden="true" />
+                <span className="flex items-center gap-2 text-meta text-fg-muted">
+                  <span className={cx("h-2 w-2 rounded-full", connected ? "bg-st-sendable" : "bg-st-hold")} aria-hidden="true" />
                   {connected ? "Live" : "Reconnecting…"} · closing this tab doesn’t stop the edit
                 </span>
                 <Button variant="danger" icon="stop" busy={acting === "cancel"} onClick={() => act("cancel")}>
@@ -224,8 +224,8 @@ export default function Live() {
           ) : finished ? (
             <Panel title="Edit finished">
               <p className="text-fg-secondary">The reel is rendered and checked. The verdict is ready.</p>
-              <Link to="../review" relative="path" className="mt-4 inline-flex h-10 items-center gap-2 rounded-input bg-ai px-4 font-medium text-white hover:brightness-110">
-                <Icon name="phone" size={18} /> Review the reel
+              <Link to="../review" relative="path" className="mt-4 inline-flex h-9 items-center gap-2 rounded-control bg-signal px-4 text-ui text-signal-on hover:bg-signal-hover">
+                <Icon name="phone" size={16} /> Review the reel
               </Link>
             </Panel>
           ) : (
@@ -237,18 +237,18 @@ export default function Live() {
           {sel && sel.name !== running?.name && sel.name !== failed?.name && (
             <Panel title={STAGE_LABEL[sel.name]}>
               <p className="text-fg-secondary">{STAGE_PLAIN[sel.name]}</p>
-              <p className="mt-2 text-label font-normal text-fg-muted">
+              <p className="mt-2 text-meta text-fg-muted">
                 Status: {STATUS_WORD[sel.status] ?? sel.status}
                 {sel.started && sel.finished ? ` · took ${elapsed(sel.finished - sel.started)}` : ""}
               </p>
             </Panel>
           )}
-          <details className="group rounded-panel border border-line-subtle bg-bg-raised">
-            <summary className="flex cursor-pointer list-none items-center justify-between px-6 py-4 text-fg-secondary hover:text-fg-primary">
-              <span className="font-medium">Technical log</span>
+          <details className="group border-t border-line-subtle">
+            <summary className="flex cursor-pointer list-none items-center justify-between py-5 text-fg-secondary hover:text-fg-primary">
+              <span className="text-section">Technical log</span>
               <Icon name="chevronDown" size={16} className="transition-transform group-open:rotate-180" />
             </summary>
-            <pre className="max-h-64 overflow-auto border-t border-line-subtle bg-bg-inset px-6 py-4 font-mono text-[12px] leading-5 text-fg-secondary">
+            <pre className="mb-6 max-h-64 overflow-auto rounded-control bg-bg-inset px-4 py-3 font-mono text-meta leading-5 text-fg-secondary">
               {logs.length ? logs.join("\n") : "No log lines yet."}
             </pre>
           </details>

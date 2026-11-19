@@ -130,7 +130,7 @@ export default function NewEdit() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] px-8 py-8">
+    <div className="w-full px-8 py-8">
       <PageHeader
         title="New edit"
         subtitle="Add the raw footage and the client’s brief. Only the project name is required."
@@ -155,8 +155,8 @@ export default function NewEdit() {
         }
       />
 
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-12 space-y-4 xl:col-span-5">
+      <div className="grid grid-cols-12 gap-x-10 gap-y-2">
+        <div className="col-span-12 xl:col-span-5">
           <Panel title="Footage">
             <div
               onDragOver={(e) => {
@@ -166,13 +166,13 @@ export default function NewEdit() {
               onDragLeave={() => setDragOver(false)}
               onDrop={onDrop}
               className={cx(
-                "flex flex-col items-center justify-center gap-2 rounded-card border-2 border-dashed px-6 py-10 text-center transition-colors duration-hover",
-                dragOver ? "border-ai-glow bg-ai/[0.08]" : "border-line-strong bg-bg-inset",
+                "flex flex-col items-center justify-center gap-2 rounded-surface border border-dashed px-6 py-12 text-center transition-colors duration-hover",
+                dragOver ? "border-signal bg-bg-overlay" : "border-line-control bg-bg-raised",
               )}
             >
-              <Icon name="upload" size={26} className="text-ai-glow" />
-              <p className="font-medium">Drop video files here</p>
-              <p className="text-label font-normal text-fg-muted">mp4, mov, m4v, mkv or webm · up to 4 GB each</p>
+              <Icon name="upload" size={24} className="text-fg-secondary" />
+              <p className="text-section">Drop video files here</p>
+              <p className="text-meta text-fg-muted">mp4, mov, m4v, mkv or webm · up to 4 GB each</p>
               <Button className="mt-2" icon="folder" onClick={() => fileInput.current?.click()}>
                 Choose files
               </Button>
@@ -200,9 +200,9 @@ export default function NewEdit() {
               </div>
             )}
             {files.length > 0 && (
-              <ul className="mt-4 space-y-3" aria-label="Files to upload">
+              <ul className="mt-4 divide-y divide-line-subtle border-b border-line-subtle" aria-label="Files to upload">
                 {files.map((f, i) => (
-                  <li key={f.name + f.size} className="rounded-card border border-line-subtle bg-bg-overlay px-3 py-2.5">
+                  <li key={f.name + f.size} className="py-3">
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <span className="flex min-w-0 items-center gap-2">
                         <Icon name="film" size={16} className="shrink-0 text-fg-muted" />
@@ -240,10 +240,24 @@ export default function NewEdit() {
         </div>
 
         <div className="col-span-12 xl:col-span-7">
-          <Panel title="Brief">
+          {/* The brief in three groups (Basics · Format · Content), each a hairline section. */}
+          <Panel title="Basics">
             <div className="grid grid-cols-2 gap-x-4 gap-y-5">
               <TF label="Project name" required value={form.name} onChange={(v) => set("name", v)} error={touched ? errors.name : undefined} placeholder="e.g. Glow serum testimonial" />
               <TF label="Client" value={form.client} onChange={(v) => set("client", v)} placeholder="e.g. DearMa Skincare" />
+              <SF label="Goal" value={form.goal} onChange={(v) => set("goal", v)}>
+                <option value="">Let the Editor decide</option>
+                {GOALS.map((g) => (
+                  <option key={g} value={g}>
+                    {prettyId(g)}
+                  </option>
+                ))}
+              </SF>
+              <TF label="Audience" value={form.audience} onChange={(v) => set("audience", v)} placeholder="e.g. women 22–35 with sensitive skin" />
+            </div>
+          </Panel>
+          <Panel title="Format">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-5">
               <Field label="Language">
                 <Segmented
                   label="Language"
@@ -276,14 +290,33 @@ export default function NewEdit() {
                   </option>
                 ))}
               </SF>
-              <SF label="Goal" value={form.goal} onChange={(v) => set("goal", v)}>
-                <option value="">Let the Editor decide</option>
-                {GOALS.map((g) => (
-                  <option key={g} value={g}>
-                    {prettyId(g)}
-                  </option>
-                ))}
-              </SF>
+              <Field label="Target length (seconds)" error={touched ? errors.maxLen : undefined}>
+                <div className="flex items-center gap-2">
+                  <TextInput aria-label="Minimum seconds" inputMode="numeric" value={form.minLen} onChange={(e) => set("minLen", e.target.value)} />
+                  <span className="text-fg-muted">to</span>
+                  <TextInput aria-label="Maximum seconds" inputMode="numeric" value={form.maxLen} onChange={(e) => set("maxLen", e.target.value)} />
+                </div>
+              </Field>
+              <fieldset className="col-span-2">
+                <legend className="mb-2 text-meta text-fg-secondary">Extra deliverables (the 9:16 master is always made)</legend>
+                <div className="flex gap-6">
+                  {(
+                    [
+                      ["feed45", "4:5 feed"],
+                      ["square", "Square 1:1"],
+                    ] as const
+                  ).map(([k, l]) => (
+                    <label key={k} className="flex cursor-pointer items-center gap-2 text-body">
+                      <input type="checkbox" className="h-4 w-4 accent-[#E8A33D]" checked={form[k]} onChange={(e) => set(k, e.target.checked)} />
+                      {l}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
+          </Panel>
+          <Panel title="Content">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-5">
               <SF label="Genre" value={form.genre} onChange={(v) => set("genre", v)}>
                 <option value="">Detect from footage</option>
                 {GENRES.map((g) => (
@@ -292,14 +325,6 @@ export default function NewEdit() {
                   </option>
                 ))}
               </SF>
-              <TF label="Audience" value={form.audience} onChange={(v) => set("audience", v)} placeholder="e.g. women 22–35 with sensitive skin" />
-              <Field label="Target length (seconds)" error={touched ? errors.maxLen : undefined}>
-                <div className="flex items-center gap-2">
-                  <TextInput aria-label="Minimum seconds" inputMode="numeric" value={form.minLen} onChange={(e) => set("minLen", e.target.value)} />
-                  <span className="text-fg-muted">to</span>
-                  <TextInput aria-label="Maximum seconds" inputMode="numeric" value={form.maxLen} onChange={(e) => set("maxLen", e.target.value)} />
-                </div>
-              </Field>
               <TF label="Tone" value={form.tone} onChange={(v) => set("tone", v)} placeholder="e.g. warm, honest" />
               <TF label="Call to action" value={form.cta} onChange={(v) => set("cta", v)} placeholder="e.g. Link in bio" />
               <TF label="Product names" value={form.products} onChange={(v) => set("products", v)} hint="Comma-separated." placeholder="DearMa, Glow Serum" />
@@ -311,29 +336,14 @@ export default function NewEdit() {
               <div className="col-span-2">
                 <TA label="Notes for the Editor" value={form.notes} onChange={(v) => set("notes", v)} rows={2} />
               </div>
-              <fieldset className="col-span-2">
-                <legend className="mb-2 text-label text-fg-secondary">Extra deliverables (the 9:16 master is always made)</legend>
-                <div className="flex gap-6">
-                  {(
-                    [
-                      ["feed45", "4:5 feed"],
-                      ["square", "Square 1:1"],
-                    ] as const
-                  ).map(([k, l]) => (
-                    <label key={k} className="flex cursor-pointer items-center gap-2">
-                      <input type="checkbox" className="h-4 w-4 accent-[#6A4BF0]" checked={form[k]} onChange={(e) => set(k, e.target.checked)} />
-                      {l}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
             </div>
           </Panel>
 
-          <div className="sticky bottom-0 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-panel border border-line-subtle bg-bg-raised/95 px-6 py-4 backdrop-blur">
-            <div className="min-w-[260px] flex-1 text-fg-secondary">
+          {/* Docked action bar: a hairline above, the app background behind. No blur, no card. */}
+          <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-line-subtle bg-bg-base py-4">
+            <div className="min-w-[260px] flex-1 text-meta text-fg-secondary">
               {willQueue ? (
-                <span className="flex items-center gap-2 text-st-hold">
+                <span className="flex items-center gap-2 text-fg-secondary">
                   <Icon name="clock" size={16} /> {running} of {limit} edits running — this one will be queued and starts when a slot frees up.
                 </span>
               ) : (
@@ -360,7 +370,7 @@ export default function NewEdit() {
               >
                 Save as template
               </Button>
-              <Button variant="primary" size={40} icon="play" busy={busy} onClick={start}>
+              <Button variant="primary" icon="play" busy={busy} onClick={start}>
                 {busy ? "Uploading…" : willQueue ? "Queue edit" : "Start edit"}
               </Button>
             </div>

@@ -39,19 +39,19 @@ function CompareDialog({ p, v, onClose }: { p: Project; v: Version; onClose: () 
   }, []);
   const src = which === "old" ? prev?.final : v.final;
   return (
-    <dialog ref={ref} onClose={onClose} className="m-auto w-[min(92vw,520px)] rounded-panel border border-line-strong bg-bg-raised p-6 text-fg-primary backdrop:bg-black/80" aria-label="Compare versions">
+    <dialog ref={ref} onClose={onClose} className="m-auto w-[min(92vw,520px)] rounded-surface border border-line-strong bg-bg-raised p-6 text-fg-primary shadow-menu backdrop:bg-black/80" aria-label="Compare versions">
       <h2 className="text-title">
         Compare v{prev?.n ?? "?"} → v{v.n}
       </h2>
       <p className="mt-1 text-fg-secondary">Plays the old version, then the new one.</p>
       <div className="mt-4 flex items-center gap-2">
-        <span className={cx("rounded-full px-2.5 py-1 text-label", which === "old" ? "bg-ai/[0.2] text-ai-glow" : "text-fg-muted")}>Old · v{prev?.n}</span>
+        <span className={cx("rounded-control px-2 py-1 text-label", which === "old" ? "bg-bg-high text-fg-primary" : "text-fg-muted")}>Old · v{prev?.n}</span>
         <Icon name="chevron" size={14} className="text-fg-muted" />
-        <span className={cx("rounded-full px-2.5 py-1 text-label", which === "new" ? "bg-ai/[0.2] text-ai-glow" : "text-fg-muted")}>New · v{v.n}</span>
+        <span className={cx("rounded-control px-2 py-1 text-label", which === "new" ? "bg-bg-high text-fg-primary" : "text-fg-muted")}>New · v{v.n}</span>
       </div>
-      <div className="mt-4 flex justify-center rounded-card bg-bg-inset p-3">
+      <div className="mt-4 flex justify-center rounded-surface bg-bg-inset p-3">
         {src ? (
-          <video key={src} src={api.mediaUrl(p.id, src, which === "old" ? prev?.n : v.n)} autoPlay controls className="max-h-[60vh] rounded-card" onEnded={() => setWhich((w) => (w === "old" ? "new" : w))} />
+          <video key={src} src={api.mediaUrl(p.id, src, which === "old" ? prev?.n : v.n)} autoPlay controls className="max-h-[60vh] rounded-control" onEnded={() => setWhich((w) => (w === "old" ? "new" : w))} />
         ) : (
           <p className="px-4 py-10 text-center text-fg-secondary">The rendered files for these versions aren’t available here{api.mode === "mock" ? " (sample data)" : ""}.</p>
         )}
@@ -113,16 +113,24 @@ function Chat({ p }: { p: Project }) {
 
   return (
     <Panel title="Ask for changes" bodyClass="flex flex-col gap-4">
-      <div className="max-h-[440px] min-h-[200px] space-y-3 overflow-y-auto pr-1" aria-live="polite">
+      <div className="max-h-[520px] min-h-[200px] divide-y divide-line-subtle overflow-y-auto pr-1" aria-live="polite">
         {msgs.length === 0 && <p className="text-fg-secondary">Type what you want changed, like “make the hook faster” or “warmer look”. The Editor replies in one line, then the reel re-renders only what changed.</p>}
         {msgs.map((m, i) => (
-          <div key={i} className={cx("flex", m.who === "owner" ? "justify-end" : "justify-start")}>
-            <div className={cx("max-w-[85%] rounded-card px-4 py-3", m.who === "owner" ? "bg-bg-overlay text-fg-primary" : "border border-ai/30 bg-ai/[0.12]")}>
-              {m.who === "editor" && <p className="mb-1 text-label text-ai-glow">Editor</p>}
-              <p className={cx(m.pending && "text-fg-secondary")}>{m.text}</p>
+          // A transcript, not bubbles: who, then what. The Editor is the AI, so its name carries the violet dot.
+          <div key={i} className="py-4">
+            <div>
+              {m.who === "editor" ? (
+                <p className="mb-1 flex items-center gap-2 text-label text-ai">
+                  <span className={cx("h-2 w-2 rounded-full bg-ai", m.pending && "pulse-dot")} aria-hidden="true" />
+                  Editor
+                </p>
+              ) : (
+                <p className="mb-1 text-label text-fg-secondary">You</p>
+              )}
+              <p className={cx("text-body", m.pending && "text-fg-secondary")}>{m.text}</p>
               {m.version && (
-                <div className="mt-2 flex items-center gap-3 border-t border-line-subtle pt-2">
-                  <span className="text-label font-normal text-fg-muted">changed: v{m.version.n}</span>
+                <div className="mt-2 flex items-center gap-3">
+                  <span className="text-meta text-fg-muted">changed: v{m.version.n}</span>
                   {typeof m.version.cost_usd === "number" && <Mono className="text-fg-muted">{usd(m.version.cost_usd)}</Mono>}
                   <Button variant="ghost" icon="play" className="ml-auto h-7" onClick={() => setCompare(m.version!)}>
                     Compare
@@ -143,7 +151,7 @@ function Chat({ p }: { p: Project }) {
         }}
       >
         <TextInput aria-label="Your request" placeholder="e.g. make the hook shorter" value={text} onChange={(e) => setText(e.target.value)} disabled={!!pending} />
-        <Button type="submit" variant="primary" size={40} icon="send" busy={!!pending} disabled={!text.trim()}>
+        <Button type="submit" variant="primary" icon="send" busy={!!pending} disabled={!text.trim()}>
           Send
         </Button>
       </form>
@@ -164,16 +172,16 @@ function History({ p }: { p: Project }) {
           <Notice tone="error">{err}</Notice>
         </div>
       )}
-      <ol className="space-y-2">
+      <ol className="space-y-1">
         {[...p.versions].reverse().map((v) => (
-          <li key={v.n} className="flex items-center gap-3 rounded-card border border-line-subtle bg-bg-overlay/50 px-3 py-2.5">
-            <Mono className={cx("rounded px-1.5 py-0.5", v.n === current ? "bg-ai/[0.2] text-ai-glow" : "bg-bg-raised text-fg-secondary")}>v{v.n}</Mono>
+          <li key={v.n} className={cx("flex items-center gap-3 rounded-control px-3 py-2.5", v.n === current && "bg-bg-overlay")} aria-current={v.n === current ? "true" : undefined}>
+            <Mono className={cx("w-7", v.n === current ? "text-fg-primary" : "text-fg-secondary")}>v{v.n}</Mono>
             <div className="min-w-0 flex-1">
               <p className="truncate text-fg-primary">
-                {v.label === "Manual" ? <span className="mr-1.5 rounded bg-bg-raised px-1.5 py-0.5 text-label text-cyan">Manual</span> : null}
+                {v.label === "Manual" ? <span className="mr-1.5 text-label text-info">Manual ·</span> : null}
                 {v.label === "Manual" ? v.reply : v.label}
               </p>
-              <p className="text-label font-normal text-fg-muted">
+              <p className="text-meta text-fg-muted">
                 {ago(v.created)}
                 {typeof v.cost_usd === "number" && <> · {usd(v.cost_usd)}</>}
               </p>
@@ -258,10 +266,10 @@ export function ClientNotes({ p }: { p: Project }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder={"Paste the client’s notes, one per line:\n0:12 make this faster\n[0:04] cut this\nlove the colours"}
-            className="font-mono text-[13px]"
+            className="font-mono text-mono"
           />
           <div className="flex items-center gap-3">
-            <Button variant="primary" icon="eye" busy={busy === "preview"} disabled={!text.trim()} onClick={() => preview(text)}>
+            <Button icon="eye" busy={busy === "preview"} disabled={!text.trim()} onClick={() => preview(text)}>
               Preview notes
             </Button>
             {done && <span className="text-label text-st-sendable">Sent as one revision — see the chat.</span>}
@@ -270,28 +278,28 @@ export function ClientNotes({ p }: { p: Project }) {
       ) : (
         <div className="space-y-4">
           <p className="text-fg-secondary">Each note shows the line and caption on screen at its time. Edit or remove any note before sending.</p>
-          <ul className="space-y-2" aria-label="Notes to send">
+          <ul className="divide-y divide-line-subtle border-y border-line-subtle" aria-label="Notes to send">
             {notes.map((n, i) => (
-              <li key={i} className="rounded-card border border-line-subtle bg-bg-overlay/60 p-3">
+              <li key={i} className="py-3">
                 <div className="flex items-center gap-2">
                   <TextInput
                     aria-label={`Note ${i + 1}`}
                     value={n.line}
                     onChange={(e) => setNotes((list) => list!.map((x, j) => (j === i ? { ...x, line: e.target.value, anchor: "" } : x)))}
-                    className="h-8 font-mono text-[13px]"
+                    className="h-8 font-mono text-mono"
                   />
                   <IconButton icon="trash" label={`Remove note ${i + 1}`} onClick={() => setNotes((list) => list!.filter((_, j) => j !== i))} />
                 </div>
-                <p className="mt-1.5 text-label font-normal text-fg-secondary">{n.anchor || "Edited — refresh the preview to re-anchor."}</p>
+                <p className="mt-1.5 text-meta text-fg-secondary">{n.anchor || "Edited — refresh the preview to re-anchor."}</p>
               </li>
             ))}
           </ul>
           {unreadable.length > 0 && (
-            <div className="rounded-card border border-st-hold/40 bg-st-hold/[0.06] p-3">
+            <div className="rounded-control border-l-2 border-st-hold bg-bg-raised px-4 py-3">
               <p className="text-label text-st-hold">Couldn’t read — not sent</p>
               <ul className="mt-1 space-y-0.5">
                 {unreadable.map((u) => (
-                  <li key={u} className="font-mono text-[13px] text-fg-secondary">
+                  <li key={u} className="font-mono text-mono text-fg-secondary">
                     {u}
                   </li>
                 ))}
@@ -300,7 +308,7 @@ export function ClientNotes({ p }: { p: Project }) {
           )}
           {err && <Notice tone="error">{err}</Notice>}
           <div className="flex flex-wrap gap-2">
-            <Button variant="primary" icon="send" busy={busy === "apply"} disabled={!notes.length} onClick={apply}>
+            <Button icon="send" busy={busy === "apply"} disabled={!notes.length} onClick={apply}>
               Apply {notes.length} note{notes.length === 1 ? "" : "s"}
             </Button>
             <Button icon="retry" busy={busy === "preview"} onClick={() => preview(notes.map((n) => n.line).join("\n"))}>
@@ -333,11 +341,11 @@ export default function Revise() {
     return <Notice title="Nothing to revise yet">Revisions open once the first edit has finished.</Notice>;
   }
   return (
-    <div className="grid grid-cols-12 gap-4">
+    <div className="grid grid-cols-12 gap-x-10 gap-y-6">
       <div className="col-span-12 lg:col-span-7">
         <Chat p={p} />
       </div>
-      <div className="col-span-12 space-y-4 lg:col-span-5">
+      <div className="col-span-12 lg:col-span-5">
         <ClientNotes p={p} />
         <History p={p} />
       </div>

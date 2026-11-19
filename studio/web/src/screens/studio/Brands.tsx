@@ -28,7 +28,7 @@ function CaptionPreview({ b }: { b: Brand }) {
   const accent = isHex(b.colors.accent) ? b.colors.accent! : isHex(b.colors.primary) ? b.colors.primary! : "#FFD400";
   const font = b.fonts.heading || "Inter";
   return (
-    <div className="mx-auto aspect-[9/16] w-full max-w-[260px] overflow-hidden rounded-[22px] border-4 border-[#1b1f2a] bg-[radial-gradient(90%_60%_at_70%_25%,rgba(255,200,160,0.3),transparent_60%),linear-gradient(160deg,#3a2a2f,#141018)] shadow-[0_0_0_1px_#343B4D]">
+    <div className="mx-auto aspect-[9/16] w-full max-w-[260px] overflow-hidden rounded-[22px] border-4 border-bg-high bg-[linear-gradient(160deg,#3a2a2f,#141018)] ring-1 ring-line-strong">
       <div className="relative h-full">
         <div className="absolute left-1/2 top-[22%] h-[30%] w-[46%] -translate-x-1/2 rounded-[45%] bg-[#c99a86]/80" aria-hidden="true" />
         <div className="absolute bottom-0 left-1/2 h-[28%] w-[86%] -translate-x-1/2 rounded-t-[50%] bg-[#6b4a52]" aria-hidden="true" />
@@ -56,7 +56,7 @@ function Editor({ entry, isNew, onSaved }: { entry: BrandEntry; isNew: boolean; 
   const id = isNew ? slug(b.client) : entry.id;
 
   return (
-    <div className="grid grid-cols-12 gap-4">
+    <div className="grid grid-cols-12 gap-x-10 gap-y-6">
       <Panel title={isNew ? "New brand kit" : b.client} className="col-span-12 lg:col-span-7">
         <form
           className="grid grid-cols-2 gap-x-4 gap-y-5"
@@ -88,9 +88,9 @@ function Editor({ entry, isNew, onSaved }: { entry: BrandEntry; isNew: boolean; 
                   aria-label={`${label} picker`}
                   value={isHex(b.colors[k]) ? b.colors[k]! : "#000000"}
                   onChange={(e) => setB({ ...b, colors: { ...b.colors, [k]: e.target.value.toUpperCase() } })}
-                  className="h-10 w-12 shrink-0 cursor-pointer rounded-input border border-line-subtle bg-bg-overlay p-1"
+                  className="h-10 w-12 shrink-0 cursor-pointer rounded-control border border-line-control bg-bg-overlay p-1"
                 />
-                <TextInput id={`b-${k}`} value={b.colors[k] ?? ""} placeholder="#RRGGBB" onChange={(e) => setB({ ...b, colors: { ...b.colors, [k]: e.target.value || null } })} className={cx("font-mono text-[13px]", b.colors[k] && !isHex(b.colors[k]) && "border-st-fail")} />
+                <TextInput id={`b-${k}`} value={b.colors[k] ?? ""} placeholder="#RRGGBB" onChange={(e) => setB({ ...b, colors: { ...b.colors, [k]: e.target.value || null } })} className={cx("font-mono text-mono", b.colors[k] && !isHex(b.colors[k]) && "border-st-fail")} />
               </div>
             </Field>
           ))}
@@ -149,13 +149,13 @@ export default function Brands() {
   const isNew = sel === "new" || (!list.length && !!q.data);
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] px-8 py-8">
-      <PageHeader eyebrow="Studio" title="Brand kits" subtitle="Lock a client’s colours, font, caption style and look." actions={<Button variant="primary" icon="plus" onClick={() => setSel("new")}>New brand kit</Button>} />
+    <div className="w-full px-8 py-8">
+      <PageHeader title="Brand kits" subtitle="Lock a client’s colours, font, caption style and look." actions={<Button icon="plus" onClick={() => setSel("new")}>New brand kit</Button>} />
       {q.error ? <Notice tone="error">{friendlyError(q.error)}</Notice> : null}
       {!q.data ? (
         <Loading />
       ) : (
-        <div className="grid grid-cols-12 gap-4">
+        <div className="grid grid-cols-12 gap-x-10 gap-y-6">
           <nav aria-label="Brand kits" className="col-span-12 lg:col-span-3">
             <ul className="space-y-1">
               {list.map((b) => (
@@ -164,14 +164,14 @@ export default function Brands() {
                     type="button"
                     onClick={() => setSel(b.id)}
                     aria-current={current?.id === b.id && !isNew ? "true" : undefined}
-                    className={cx("flex w-full items-center gap-3 rounded-card border px-3 py-2.5 text-left transition-colors", current?.id === b.id && !isNew ? "border-ai bg-ai/[0.1]" : "border-transparent hover:bg-bg-raised")}
+                    className={cx("flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-left text-ui transition-colors", current?.id === b.id && !isNew ? "bg-bg-overlay text-fg-primary" : "text-fg-secondary hover:bg-bg-raised")}
                   >
                     <span className="flex -space-x-1" aria-hidden="true">
                       {[b.brand.colors.primary, b.brand.colors.accent, b.brand.colors.text].filter(Boolean).map((c, i) => (
                         <span key={i} className="h-4 w-4 rounded-full border border-bg-base" style={{ background: c! }} />
                       ))}
                     </span>
-                    <span className="truncate text-fg-primary">{b.brand.client}</span>
+                    <span className="truncate">{b.brand.client}</span>
                   </button>
                 </li>
               ))}

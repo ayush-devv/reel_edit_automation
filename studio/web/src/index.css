@@ -24,18 +24,18 @@ body {
   font-feature-settings: "cv11", "ss01";
 }
 
-/* Focus: 2 px accent.ai ring (design system). Only for keyboard focus. */
+/* Focus: 2 px amber ring (Cutting Room: amber = you are here). Only for keyboard focus. */
 :focus-visible {
-  outline: 2px solid theme("colors.ai.DEFAULT");
+  outline: 2px solid theme("colors.signal.DEFAULT");
   outline-offset: 2px;
-  border-radius: 6px;
+  border-radius: 4px;
 }
 :focus:not(:focus-visible) {
   outline: none;
 }
 
 ::selection {
-  background: rgba(106, 75, 240, 0.45);
+  background: rgba(232, 163, 61, 0.32);
 }
 
 * {

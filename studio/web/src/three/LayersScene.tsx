@@ -134,7 +134,8 @@ function Stack({ layers, duration, time, exploded, selected, onSelect }: Omit<Pr
       ))}
       <mesh ref={playhead} position={[toX(time), -0.35, 0]}>
         <boxGeometry args={[0.02, 1, 1]} />
-        <meshBasicMaterial color={color.accent.cyan} transparent opacity={0.28} toneMapped={false} depthWrite={false} />
+        {/* Playhead: amber (you are here). */}
+        <meshBasicMaterial color={color.signal.DEFAULT} transparent opacity={0.3} toneMapped={false} depthWrite={false} />
       </mesh>
     </group>
   );

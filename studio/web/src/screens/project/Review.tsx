@@ -19,38 +19,31 @@ function VerdictCard({ p }: { p: Project }) {
   const sendable = (v?.verdict ?? p.verdict) === "sendable";
   const fixable = p.proof.length > 0;
   return (
-    <section
-      aria-label="Verdict"
-      className={cx("rounded-panel border p-6", sendable ? "border-st-sendable/40 bg-st-sendable/[0.06]" : "border-st-hold/40 bg-st-hold/[0.06]")}
-    >
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className={cx("flex h-11 w-11 items-center justify-center rounded-card", sendable ? "bg-st-sendable/[0.16] text-st-sendable" : "bg-st-hold/[0.16] text-st-hold")}>
-            <Icon name={sendable ? "check" : "alert"} size={24} />
-          </div>
-          <div>
-            <p className={cx("text-[28px] font-bold leading-8 tracking-tight", sendable ? "text-st-sendable" : "text-st-hold")}>{sendable ? "Sendable" : "Hold"}</p>
-            <p className="text-fg-secondary">{sendable ? "Safe to send to the client." : fixable ? "Fix the items below, then it re-checks." : "Needs you — see the reasons."}</p>
-          </div>
+    // The verdict is the hero: big status word + one sentence + (when sendable) the one amber action. No card.
+    <section aria-label="Verdict" className="pb-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className={cx("text-display", sendable ? "text-st-sendable" : "text-st-hold")}>{sendable ? "Sendable" : "Hold"}</p>
+          <p className="mt-1 text-body text-fg-secondary">{sendable ? "Safe to send to the client." : fixable ? "Fix the items below, then it re-checks." : "Needs you — see the reasons."}</p>
         </div>
         {sendable && (
-          <Link to="../deliver" relative="path" className="inline-flex h-10 items-center gap-2 rounded-input bg-ai px-4 font-medium text-white hover:brightness-110">
-            <Icon name="download" size={18} /> Deliver
+          <Link to="../deliver" relative="path" className="inline-flex h-9 items-center gap-2 rounded-control bg-signal px-4 text-ui text-signal-on hover:bg-signal-hover">
+            <Icon name="download" size={16} /> Deliver
           </Link>
         )}
       </div>
       {v && v.warnings.length > 0 && (
-        <ul className="mt-3 space-y-1 text-label font-normal text-fg-secondary" aria-label="Warnings">
+        <ul className="mt-3 space-y-1 text-meta text-fg-secondary" aria-label="Warnings">
           {v.warnings.map((w) => (
             <li key={w}>Warning · {w}</li>
           ))}
         </ul>
       )}
       {v && v.reasons.length > 0 && (
-        <ul className="mt-4 space-y-2 border-t border-line-subtle pt-4">
+        <ul className="mt-4 space-y-2">
           {v.reasons.map((r) => (
-            <li key={r} className="flex gap-2 text-fg-primary">
-              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-st-hold" aria-hidden="true" />
+            <li key={r} className="flex gap-3 text-fg-primary">
+              <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-st-hold" aria-hidden="true" />
               {r}
             </li>
           ))}
@@ -60,24 +53,21 @@ function VerdictCard({ p }: { p: Project }) {
   );
 }
 
-function ProofItem({ w, onSeek, onSubmit, busy }: { w: ProofWord; onSeek: () => void; onSubmit: (text: string) => void; busy: boolean }) {
+function ProofItem({ w, onSeek, onSubmit, busy, first }: { w: ProofWord; onSeek: () => void; onSubmit: (text: string) => void; busy: boolean; first: boolean }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(w.suggestion ?? w.text);
   return (
-    <li className="rounded-card border border-line-subtle bg-bg-overlay/60 p-3">
+    <li className="rounded-surface bg-bg-raised px-4 py-3">
       <div className="flex items-center justify-between gap-3">
-        <button type="button" onClick={onSeek} className="group flex min-w-0 items-center gap-3 text-left" aria-label={`Jump to “${w.text}” at ${w.at}`}>
-          <Mono className="rounded bg-bg-raised px-1.5 py-0.5 text-cyan group-hover:underline">{w.at.replace(/^00:/, "")}</Mono>
-          <span className="truncate text-[15px] font-semibold text-fg-primary">“{w.text}”</span>
-          {w.suggestion && (
-            <span className="truncate text-fg-secondary">
-              → <span className="text-ai-glow">{w.suggestion}</span>?
-            </span>
-          )}
+        <button type="button" onClick={onSeek} className="group flex min-w-0 items-center gap-4 text-left" aria-label={`Jump to “${w.text}” at ${w.at}`}>
+          <Mono className="text-info group-hover:underline">{w.at.replace(/^00:/, "")}</Mono>
+          <span className="truncate text-section text-fg-primary">“{w.text}”</span>
+          {w.suggestion && <span className="truncate text-fg-secondary">→ {w.suggestion}?</span>}
         </button>
         {!editing && (
-          <div className="flex shrink-0 gap-1">
-            <Button icon="check" onClick={() => onSubmit(w.text)} disabled={busy} title="The word is right as it is">
+          <div className="flex shrink-0 gap-2">
+            {/* The first open word is the owner's next move: the screen's one amber action. */}
+            <Button variant={first ? "primary" : "secondary"} icon="check" onClick={() => onSubmit(w.text)} disabled={busy} title="The word is right as it is">
               Correct
             </Button>
             <Button icon="edit" onClick={() => setEditing(true)} disabled={busy}>
@@ -86,7 +76,7 @@ function ProofItem({ w, onSeek, onSubmit, busy }: { w: ProofWord; onSeek: () => 
           </div>
         )}
       </div>
-      <p className="mt-1.5 text-label font-normal text-fg-muted">{w.why}</p>
+      <p className="mt-1 text-meta text-fg-muted">{w.why}</p>
       {editing && (
         <form
           className="mt-3 flex gap-2"
@@ -108,32 +98,35 @@ function ProofItem({ w, onSeek, onSubmit, busy }: { w: ProofWord; onSeek: () => 
   );
 }
 
-const SEV: Record<string, string> = { blocker: "bg-st-fail", major: "bg-st-hold", minor: "bg-fg-muted" };
+// Severity is a 2 px rule on the left plus a word (never colour alone).
+const SEV: Record<string, string> = { blocker: "bg-st-fail", major: "bg-st-hold", minor: "bg-line-control" };
+const SEV_TEXT: Record<string, string> = { blocker: "text-st-fail", major: "text-st-hold", minor: "text-fg-secondary" };
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 function ReviewerNotes({ issues, summary, onSeek }: { issues: ReviewIssue[]; summary: string; onSeek: (t: number) => void }) {
   return (
-    <Panel title="Reviewer notes">
+    <Panel title={issues.length ? <span className="flex items-baseline gap-3">Reviewer notes <Mono className="text-fg-muted">{issues.length}</Mono></span> : "Reviewer notes"}>
       <p className="text-fg-secondary">{summary}</p>
       {issues.length > 0 && (
-        <ul className="mt-4 space-y-2">
+        <ul className="mt-2 divide-y divide-line-subtle">
           {issues.map((i, k) => (
-            <li key={k} className="flex overflow-hidden rounded-card border border-line-subtle bg-bg-overlay/60">
-              <span className={cx("w-1 shrink-0", SEV[i.severity ?? "minor"])} aria-hidden="true" />
-              <div className="min-w-0 flex-1 p-3">
+            <li key={k} className="flex gap-4 py-4">
+              <span className={cx("w-0.5 shrink-0 rounded-full", SEV[i.severity ?? "minor"])} aria-hidden="true" />
+              <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2 text-label">
-                  <span className={cx("uppercase tracking-[0.06em]", i.severity === "blocker" ? "text-st-fail" : i.severity === "major" ? "text-st-hold" : "text-fg-secondary")}>{i.severity ?? "note"}</span>
+                  <span className={SEV_TEXT[i.severity ?? "minor"]}>{cap(i.severity ?? "note")}</span>
                   <span className="text-fg-muted">·</span>
                   <span className="text-fg-secondary">{i.category}</span>
                   {i.at ? (
-                    <button type="button" onClick={() => onSeek(tcToSeconds(i.at))} className="ml-auto max-w-[50%] truncate font-mono text-mono text-cyan hover:underline" title={i.at} aria-label={`Jump to ${i.at}`}>
+                    <button type="button" onClick={() => onSeek(tcToSeconds(i.at))} className="ml-auto max-w-[50%] truncate font-mono text-mono text-info hover:underline" title={i.at} aria-label={`Jump to ${i.at}`}>
                       {i.at.replace(/^00:/, "")}
                     </button>
                   ) : (
-                    <span className="ml-auto text-fg-muted">whole reel</span>
+                    <span className="ml-auto text-meta text-fg-muted">whole reel</span>
                   )}
                 </div>
                 <p className="mt-1 text-fg-primary">{i.text}</p>
-                {i.fix && <p className="mt-1 text-fg-secondary">Suggested fix: {i.fix}</p>}
+                {i.fix && <p className="mt-1 text-meta text-fg-secondary">Suggested fix: {i.fix}</p>}
               </div>
             </li>
           ))}
@@ -148,9 +141,9 @@ function Gates({ p }: { p: Project }) {
   const fails = gates.filter((g) => g.status === "fail").length;
   const warns = gates.filter((g) => g.status === "warn").length;
   return (
-    <details className="group rounded-panel border border-line-subtle bg-bg-raised" open={fails > 0}>
-      <summary className="flex cursor-pointer list-none items-center justify-between px-6 py-4">
-        <span className="text-title">Quality checks</span>
+    <details className="group border-t border-line-subtle" open={fails > 0}>
+      <summary className="flex cursor-pointer list-none items-center justify-between py-5">
+        <span className="text-section">Quality checks</span>
         <span className="flex items-center gap-3 text-label">
           <span className="text-st-sendable">{gates.length - fails - warns} pass</span>
           {warns > 0 && <span className="text-st-hold">{warns} warn</span>}
@@ -158,21 +151,19 @@ function Gates({ p }: { p: Project }) {
           <Icon name="chevronDown" size={16} className="text-fg-muted transition-transform group-open:rotate-180" />
         </span>
       </summary>
-      <ul className="border-t border-line-subtle px-6 py-3">
+      <ul className="grid grid-cols-1 gap-x-8 pb-6 xl:grid-cols-2">
         {gates.map((g) => (
           <li key={g.name} className="flex items-start gap-3 py-2">
+            {/* Dot + word: status is never colour alone. */}
             <span
-              className={cx(
-                "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
-                g.status === "pass" ? "bg-st-sendable/[0.16] text-st-sendable" : g.status === "warn" ? "bg-st-hold/[0.16] text-st-hold" : "bg-st-fail/[0.16] text-st-fail",
-              )}
-              aria-label={g.status}
+              className={cx("flex w-14 shrink-0 items-center gap-2 text-label", g.status === "pass" ? "text-st-sendable" : g.status === "warn" ? "text-st-hold" : "text-st-fail")}
             >
-              <Icon name={g.status === "pass" ? "check" : g.status === "warn" ? "alert" : "x"} size={12} />
+              <span className={cx("h-2 w-2 rounded-full", g.status === "pass" ? "bg-st-sendable" : g.status === "warn" ? "bg-st-hold" : "bg-st-fail")} aria-hidden="true" />
+              {cap(g.status)}
             </span>
             <div className="min-w-0">
-              <p className="text-fg-primary">{gateLabel(g.name)}</p>
-              <p className="font-mono text-mono text-fg-muted">{g.detail}</p>
+              <p className="text-ui text-fg-primary">{gateLabel(g.name)}</p>
+              <p className="font-mono text-meta text-fg-muted">{g.detail}</p>
             </div>
           </li>
         ))}
@@ -202,14 +193,15 @@ function LabelControl({ p }: { p: Project }) {
       <p className="mb-3 text-fg-secondary">Your answer trains the Reviewer’s calibration (Quality lab).</p>
       <TextInput aria-label="Why (optional)" placeholder="Why? (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />
       <div className="mt-3 flex items-center gap-2">
-        <Button variant={answer === true ? "primary" : "secondary"} icon="check" onClick={() => save(true)} aria-pressed={answer === true}>
+        {/* A chosen answer is selection, not an action: graphite with a stronger edge, not amber. */}
+        <Button icon="check" onClick={() => save(true)} aria-pressed={answer === true} className={answer === true ? "border-fg-secondary bg-bg-high" : undefined}>
           Yes
         </Button>
-        <Button variant={answer === false ? "primary" : "secondary"} icon="x" onClick={() => save(false)} aria-pressed={answer === false}>
+        <Button icon="x" onClick={() => save(false)} aria-pressed={answer === false} className={answer === false ? "border-fg-secondary bg-bg-high" : undefined}>
           No
         </Button>
         {saved && <span className="text-label text-st-sendable">Saved</span>}
-        {err && <span className="text-label text-st-fail">{err}</span>}
+        {err && <span className="text-meta text-st-fail">{err}</span>}
       </div>
     </Panel>
   );
@@ -241,7 +233,7 @@ export default function Review() {
   if (p.status !== "sendable" && p.status !== "hold") {
     return (
       <Notice tone="info" title="Nothing to review yet">
-        The edit is {p.status === "failed" ? "stopped" : "still running"}. <Link to="../live" relative="path" className="text-ai-glow underline">Watch it live</Link>
+        The edit is {p.status === "failed" ? "stopped" : "still running"}. <Link to="../live" relative="path" className="text-info underline">Watch it live</Link>
       </Notice>
     );
   }
@@ -262,12 +254,12 @@ export default function Review() {
   }
 
   return (
-    <div className="grid grid-cols-12 gap-4">
+    <div className="grid grid-cols-12 gap-x-10 gap-y-6">
       <div className="col-span-12 lg:col-span-5">{player ? <PhonePreview player={player} client={p.client ?? "client"} /> : <Loading label="Loading the reel…" />}</div>
-      <div className="col-span-12 space-y-4 lg:col-span-7">
+      <div className="col-span-12 lg:col-span-7">
         <VerdictCard p={p} />
         {(p.proof.length > 0 || proofBusy) && (
-          <Panel title="Proof words" actions={<span className="text-label font-normal text-fg-muted">Click a word to jump to it</span>}>
+          <Panel title="Proof words" actions={<span className="text-meta text-fg-muted">Click a word to jump to it</span>}>
             {proofBusy && (
               <div className="mb-3">
                 <Notice tone="info" title="Re-rendering captions…">
@@ -281,15 +273,15 @@ export default function Review() {
               </div>
             )}
             <ul className="space-y-2">
-              {p.proof.map((w) => (
-                <ProofItem key={w.i} w={w} busy={proofBusy} onSeek={() => seek(tcToSeconds(w.at))} onSubmit={(t) => fix(w, t)} />
+              {p.proof.map((w, k) => (
+                <ProofItem key={w.i} w={w} first={k === 0} busy={proofBusy} onSeek={() => seek(tcToSeconds(w.at))} onSubmit={(t) => fix(w, t)} />
               ))}
             </ul>
           </Panel>
         )}
         {p.review && <ReviewerNotes issues={p.review.issues} summary={p.review.summary} onSeek={seek} />}
         <Gates p={p} />
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-10 xl:grid-cols-2">
           <LabelControl p={p} />
           <Panel title="Cover image">
             {p.media.cover ? (

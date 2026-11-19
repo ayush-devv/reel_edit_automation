@@ -78,7 +78,7 @@ export default function Deliver() {
   const rest = (pkg.data?.files ?? []).filter((f) => f.kind !== "final" && f.kind !== "variant");
 
   return (
-    <div className="grid grid-cols-12 gap-4">
+    <div className="grid grid-cols-12 gap-x-10 gap-y-6">
       <div className="col-span-12 space-y-4 xl:col-span-8">
         {p.verdict === "hold" && (
           <Notice tone="warn" title="This reel is on Hold">
@@ -94,7 +94,7 @@ export default function Deliver() {
           title="The reel"
           actions={
             zip ? (
-              <a href={zip} download className="inline-flex h-8 items-center gap-2 rounded-input bg-ai px-3 text-[13px] font-medium text-white hover:brightness-110">
+              <a href={zip} download className="inline-flex h-9 items-center gap-2 rounded-control bg-signal px-4 text-ui text-signal-on hover:bg-signal-hover">
                 <Icon name="download" size={16} /> Download all (.zip)
               </a>
             ) : (
@@ -109,21 +109,21 @@ export default function Deliver() {
           ) : pkg.error ? (
             <Notice tone="error">{friendlyError(pkg.error)}</Notice>
           ) : (
-            <ul className="grid grid-cols-3 gap-4">
+            <ul className="grid grid-cols-3 gap-6">
               {pictures.map((f) => (
                 <li key={f.path} className="flex flex-col gap-2">
-                  <div className="flex h-56 items-end justify-center rounded-card bg-bg-inset p-3">
-                    <div className={cx("h-full max-w-full overflow-hidden rounded-[6px] border border-line-strong bg-[linear-gradient(160deg,#3a2a2f,#141018)]", aspectOf(f))}>
+                  <div className="flex h-56 items-end justify-center rounded-surface bg-bg-inset p-3">
+                    <div className={cx("h-full max-w-full overflow-hidden rounded-control bg-bg-high ring-1 ring-line-strong", aspectOf(f))}>
                       {f.thumb && <img src={api.mediaUrl(p.id, f.thumb, p.updated)} alt="" className="h-full w-full object-cover" />}
                     </div>
                   </div>
-                  <p className="font-medium text-fg-primary">{f.label}</p>
+                  <p className="text-ui text-fg-primary">{f.label}</p>
                   <div className="flex items-center gap-1">
                     <Mono className="text-fg-muted">{bytes(f.bytes)}</Mono>
                     <span className="ml-auto flex gap-1">
                       <IconButton icon={copied === f.path ? "check" : "copy"} label={`Copy path of ${f.label}`} onClick={() => copy(f)} />
                       {api.mediaUrl(p.id, f.path, p.updated) && (
-                        <a href={api.mediaUrl(p.id, f.path, p.updated)} download aria-label={`Download ${f.label}`} title="Download" className="inline-flex h-8 w-8 items-center justify-center rounded-input text-fg-secondary hover:bg-bg-overlay hover:text-fg-primary">
+                        <a href={api.mediaUrl(p.id, f.path, p.updated)} download aria-label={`Download ${f.label}`} title="Download" className="inline-flex h-8 w-8 items-center justify-center rounded-control text-fg-secondary hover:bg-bg-overlay hover:text-fg-primary">
                           <Icon name="download" size={16} />
                         </a>
                       )}
@@ -134,7 +134,7 @@ export default function Deliver() {
             </ul>
           )}
         </Panel>
-        <Panel title="For editing software" actions={<span className="text-label font-normal text-fg-muted">Final Cut Pro · OpenTimelineIO · captions · stems</span>}>
+        <Panel title="For editing software" actions={<span className="text-meta text-fg-muted">Final Cut Pro · OpenTimelineIO · captions · stems</span>}>
           <ul className="divide-y divide-line-subtle">
             {rest.map((f) => (
               <li key={f.path} className="flex items-center gap-3 py-2.5">
@@ -149,14 +149,14 @@ export default function Deliver() {
             ))}
           </ul>
           {root && (
-            <p className="mt-3 text-label font-normal text-fg-muted">
+            <p className="mt-3 text-meta text-fg-muted">
               Package folder: <Mono className="text-fg-secondary">{root}/export/package</Mono>
             </p>
           )}
         </Panel>
       </div>
 
-      <div className="col-span-12 space-y-4 xl:col-span-4">
+      <div className="col-span-12 xl:col-span-4">
         <Panel title="Extra versions">
           <p className="mb-3 text-fg-secondary">The 9:16 master is always made. Add feed and square versions for other placements.</p>
           {(
@@ -166,7 +166,7 @@ export default function Deliver() {
             ] as const
           ).map(([id, label]) => (
             <label key={id} className="flex cursor-pointer items-center gap-2 py-1">
-              <input type="checkbox" className="h-4 w-4 accent-[#6A4BF0]" checked={variants.includes(id)} onChange={(e) => setVariants((v) => (e.target.checked ? [...v, id] : v.filter((x) => x !== id)))} />
+              <input type="checkbox" className="h-4 w-4 accent-[#E8A33D]" checked={variants.includes(id)} onChange={(e) => setVariants((v) => (e.target.checked ? [...v, id] : v.filter((x) => x !== id)))} />
               {label}
             </label>
           ))}
@@ -182,7 +182,7 @@ export default function Deliver() {
           ) : (
             <>
               <p className="mb-3 text-fg-secondary">Once you’ve sent the files, mark it delivered. It records the date and moves the project down the home list.</p>
-              <Button variant="primary" icon="check" busy={busy === "delivered"} onClick={() => run("delivered")}>
+              <Button icon="check" busy={busy === "delivered"} onClick={() => run("delivered")}>
                 Mark delivered
               </Button>
             </>
@@ -190,7 +190,7 @@ export default function Deliver() {
         </Panel>
         <Panel title="Review link">
           <p className="text-fg-secondary">A private page with the review copy and a notes box for the client, expiring after a time you choose.</p>
-          <p className="mt-2 text-label font-normal text-fg-muted">It’s only reachable from outside this Mac if you expose it on purpose (for example with a tunnel). Not available in this version yet.</p>
+          <p className="mt-2 text-meta text-fg-muted">It’s only reachable from outside this Mac if you expose it on purpose (for example with a tunnel). Not available in this version yet.</p>
           <Button className="mt-3" icon="link" disabled>
             Create review link
           </Button>

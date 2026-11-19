@@ -23,12 +23,13 @@ function makeCurve(n: number) {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  done: color.accent.glow,
-  running: color.accent.glow,
+  // Done is graphite, running is violet (the AI is working), failed is red; the rest is a hairline.
+  done: color.text.muted,
+  running: color.accent.ai,
   failed: color.status.fail,
-  skipped: "#3a4050",
-  pending: "#2a3040",
-  queued: "#2a3040",
+  skipped: color.line.strong,
+  pending: color.line.strong,
+  queued: color.line.strong,
 };
 
 function Node({ stage, pos, selected, onSelect }: { stage: Stage; pos: THREE.Vector3; selected: boolean; onSelect: (n: string) => void }) {
@@ -69,7 +70,7 @@ function Node({ stage, pos, selected, onSelect }: { stage: Stage; pos: THREE.Vec
       </mesh>
       <mesh position={[0, 0.135, 0]} rotation-x={-Math.PI / 2}>
         <ringGeometry args={[0.36, 0.4, 48]} />
-        <meshBasicMaterial color={selected ? color.accent.cyan : c} transparent opacity={lit || selected ? 0.9 : 0.35} />
+        <meshBasicMaterial color={selected ? color.signal.DEFAULT : c} transparent opacity={lit || selected ? 0.9 : 0.35} />
       </mesh>
       <mesh ref={core} position={[0, 0.34, 0]} castShadow>
         <sphereGeometry args={[st === "running" ? 0.17 : 0.13, 32, 32]} />
@@ -157,7 +158,7 @@ function Particles({ curve, upTo, active }: { curve: THREE.CatmullRomCurve3; upT
   return (
     <instancedMesh ref={ref} args={[undefined, undefined, N_PARTICLES]}>
       <sphereGeometry args={[0.03, 8, 8]} />
-      <meshBasicMaterial color={color.accent.cyan} transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} />
+      <meshBasicMaterial color={color.accent.ai} transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} />
     </instancedMesh>
   );
 }
@@ -218,7 +219,7 @@ export default function PipelineScene({ stages, selected, onSelect, busy }: { st
       ))}
       {groups.map((g) => (
         <Html key={g.name} position={g.pos} center zIndexRange={[5, 0]} style={{ pointerEvents: "none" }}>
-          <div style={{ font: "600 11px/14px Inter, sans-serif", letterSpacing: "0.1em", textTransform: "uppercase", color: color.text.muted, whiteSpace: "nowrap" }}>{g.name}</div>
+          <div style={{ font: "400 12px/16px Inter, sans-serif", color: color.text.muted, whiteSpace: "nowrap" }}>{g.name}</div>
         </Html>
       ))}
     </Scene3D>

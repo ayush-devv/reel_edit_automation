@@ -19,34 +19,34 @@ function Health() {
       <ul className="divide-y divide-line-subtle">
         {health.tools.map((t) => (
           <li key={t.name} className="flex items-start gap-3 py-3">
-            <span className={cx("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full", t.ok ? "bg-st-sendable/[0.16] text-st-sendable" : "bg-st-fail/[0.16] text-st-fail")} aria-label={t.ok ? "OK" : "Problem"}>
-              <Icon name={t.ok ? "check" : "x"} size={12} />
+            <span className={cx("mt-0.5 shrink-0", t.ok ? "text-st-sendable" : t.required ? "text-st-fail" : "text-fg-muted")} aria-label={t.ok ? "OK" : "Problem"}>
+              <Icon name={t.ok ? "check" : "x"} size={16} />
             </span>
             <div className="min-w-0">
-              <p className="font-medium text-fg-primary">
+              <p className="text-ui text-fg-primary">
                 {t.name}
-                {!t.ok && !t.required && <span className="ml-2 text-label font-normal text-fg-muted">optional</span>}
+                {!t.ok && !t.required && <span className="ml-2 text-meta text-fg-muted">optional</span>}
               </p>
-              <p className={cx(t.ok ? "text-fg-secondary" : "text-st-fail")}>{t.detail}</p>
+              <p className={cx("text-meta", t.ok || !t.required ? "text-fg-secondary" : "text-st-fail")}>{t.detail}</p>
             </div>
           </li>
         ))}
       </ul>
-      <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-line-subtle pt-4">
+      <dl className="mt-2 grid grid-cols-3 gap-3 border-t border-line-subtle pt-4">
         <div>
-          <dt className="text-label text-fg-muted">Disk free</dt>
-          <dd className="font-mono text-[15px] tabular">{health.disk_free_gb} GB</dd>
+          <dt className="text-meta text-fg-muted">Disk free</dt>
+          <dd className="font-mono text-mono tabular">{health.disk_free_gb} GB</dd>
         </div>
         <div>
-          <dt className="text-label text-fg-muted">Memory in use</dt>
-          <dd className="font-mono text-[15px] tabular">
+          <dt className="text-meta text-fg-muted">Memory in use</dt>
+          <dd className="font-mono text-mono tabular">
             {health.memory_gb.used.toFixed(1)} / {health.memory_gb.budget} GB
-            {typeof health.memory_gb.system?.available === "number" && <span className="block text-label font-normal text-fg-muted">{health.memory_gb.system.available.toFixed(1)} GB free on this Mac</span>}
+            {typeof health.memory_gb.system?.available === "number" && <span className="block text-meta text-fg-muted">{health.memory_gb.system.available.toFixed(1)} GB free on this Mac</span>}
           </dd>
         </div>
         <div>
-          <dt className="text-label text-fg-muted">Jobs</dt>
-          <dd className="font-mono text-[15px] tabular">
+          <dt className="text-meta text-fg-muted">Jobs</dt>
+          <dd className="font-mono text-mono tabular">
             {health.jobs.running}/{health.jobs.limit} · {health.jobs.queued} queued
           </dd>
         </div>
@@ -66,26 +66,27 @@ function Usage() {
   const max = Math.max(0.01, ...c.by_day.map((d) => d.usd));
   const today = c.by_day.at(-1);
   return (
-    <Panel title="AI usage" actions={<span className="text-label font-normal text-fg-muted">last 30 days · estimated</span>}>
+    <Panel title="AI usage" actions={<span className="text-meta text-fg-muted">last 30 days · estimated</span>}>
       <div className="flex items-end gap-8">
         <div>
-          <p className="text-label text-fg-muted">Total</p>
-          <p className="font-mono text-[28px] font-medium leading-8 tabular">{usd(c.total_usd)}</p>
+          <p className="text-meta text-fg-muted">Total</p>
+          <p className="font-mono text-timecode-lg tabular">{usd(c.total_usd)}</p>
         </div>
         <div>
-          <p className="text-label text-fg-muted">Today</p>
-          <p className="font-mono text-[20px] leading-7 tabular">{usd(today?.usd ?? 0)}</p>
+          <p className="text-meta text-fg-muted">Today</p>
+          <p className="font-mono text-timecode-lg tabular">{usd(today?.usd ?? 0)}</p>
         </div>
       </div>
-      <div className="mt-4 flex h-24 items-end gap-1" role="img" aria-label={`Cost per day: ${c.by_day.map((d) => `${d.date} ${usd(d.usd)}`).join(", ")}`}>
-        {c.by_day.map((d) => (
+      <div className="mt-4 flex h-24 items-end gap-1 border-b border-line-subtle" role="img" aria-label={`Cost per day: ${c.by_day.map((d) => `${d.date} ${usd(d.usd)}`).join(", ")}`}>
+        {c.by_day.map((d, i) => (
           <div key={d.date} className="group relative flex-1">
-            <div className="rounded-t-[3px] bg-ai-glow/70 transition-colors group-hover:bg-ai-glow" style={{ height: `${Math.max(2, (d.usd / max) * 88)}px` }} />
-            <span className="pointer-events-none absolute -top-6 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-bg-overlay px-1.5 py-0.5 font-mono text-[11px] text-fg-primary group-hover:block">{usd(d.usd)}</span>
+            {/* Cost is data, not AI activity: graphite bars, today in primary. */}
+            <div className={cx("transition-colors group-hover:bg-fg-primary", i === c.by_day.length - 1 ? "bg-fg-primary" : "bg-fg-muted")} style={{ height: `${Math.max(2, (d.usd / max) * 88)}px` }} />
+            <span className="pointer-events-none absolute -top-6 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-control bg-bg-overlay px-1.5 py-0.5 font-mono text-meta text-fg-primary shadow-menu group-hover:block">{usd(d.usd)}</span>
           </div>
         ))}
       </div>
-      <h3 className="mb-2 mt-5 text-label text-fg-muted">Per project</h3>
+      <h3 className="mb-2 mt-5 text-meta text-fg-muted">Per project</h3>
       <ul className="divide-y divide-line-subtle">
         {c.by_project.map((p) => (
           <li key={p.id} className="flex items-center justify-between py-2">
@@ -165,7 +166,7 @@ function SettingsForm() {
               ] as const
             ).map(([k, l]) => (
               <label key={k} className="flex cursor-pointer items-center gap-2">
-                <input type="checkbox" className="h-4 w-4 accent-[#6A4BF0]" checked={s.default_deliverables.includes(k)} onChange={() => toggleDel(k)} />
+                <input type="checkbox" className="h-4 w-4 accent-[#E8A33D]" checked={s.default_deliverables.includes(k)} onChange={() => toggleDel(k)} />
                 {l}
               </label>
             ))}
@@ -175,7 +176,7 @@ function SettingsForm() {
           <TextInput id="pexels" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={s.pexels_key_set ? "••••••••••••" : "Paste your key"} />
         </Field>
         <Field label="Projects folder" htmlFor="pdir" hint="Where footage, renders and packages are stored. To use another folder, restart with: reel studio --projects <folder>">
-          <TextInput id="pdir" value={s.projects_dir} readOnly className="font-mono text-[13px] text-fg-secondary" />
+          <TextInput id="pdir" value={s.projects_dir} readOnly className="font-mono text-mono text-fg-secondary" />
         </Field>
         <div className="flex items-center gap-3">
           <Button type="submit" variant="primary" busy={busy}>
@@ -241,14 +242,14 @@ function ProjectActions() {
 
 export default function Settings() {
   return (
-    <div className="mx-auto w-full max-w-[1440px] px-8 py-8">
-      <PageHeader eyebrow="Studio" title="Settings" subtitle="Health, AI costs and how the studio runs." />
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-12 space-y-4 xl:col-span-7">
+    <div className="w-full px-8 py-8">
+      <PageHeader title="Settings" subtitle="Health, AI costs and how the studio runs." />
+      <div className="grid grid-cols-12 gap-x-10 gap-y-6">
+        <div className="col-span-12 xl:col-span-7">
           <Health />
           <Usage />
         </div>
-        <div className="col-span-12 space-y-4 xl:col-span-5">
+        <div className="col-span-12 xl:col-span-5">
           <SettingsForm />
           <ProjectActions />
         </div>

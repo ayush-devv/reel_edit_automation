@@ -1,5 +1,6 @@
-// FR-1 Projects home: attention first, filters, search, ambient 3D backdrop, drop files to start an edit.
-import { lazy, Suspense, useMemo, useState, type DragEvent } from "react";
+// FR-1 Projects home: "Needs you" first, filters, search, drop files to start an edit.
+// Cutting Room: no ambient backdrop (decoration without information was removed in the redesign).
+import { useMemo, useState, type DragEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useApi } from "../api/context";
 import { friendlyError } from "../api/errors";
@@ -7,15 +8,11 @@ import type { ProjectSummary } from "../api/types";
 import { Icon } from "../components/icons";
 import { PageHeader } from "../components/Shell";
 import { Thumb } from "../components/Thumb";
-import { Button, cx, Empty, Loading, Notice, ProgressBar, Segmented, Select, StatusBadge, TextInput } from "../components/ui";
-import { useStatus } from "../hooks/status";
-import { use3D } from "../hooks/useMedia";
+import { Button, Loading, Notice, ProgressBar, Segmented, Select, StatusBadge, TextInput } from "../components/ui";
 import { useQuery } from "../hooks/useQuery";
 import { ago, duration } from "../lib/format";
 import { setPendingFiles } from "../lib/pendingFiles";
 import { badgeOf, sortByAttention, STAGE_LABEL, type Badge } from "../lib/status";
-
-const AmbientScene = lazy(() => import("../three/AmbientScene"));
 
 type Filter = "all" | "attention" | "editing" | "sendable" | "delivered";
 const FILTER_MATCH: Record<Filter, (b: Badge) => boolean> = {
@@ -30,61 +27,62 @@ export function projectHref(p: Pick<ProjectSummary, "id" | "status">): string {
   return p.status === "running" || p.status === "queued" || p.status === "failed" || p.status === "draft" ? `/p/${p.id}/live` : `/p/${p.id}/review`;
 }
 
+// A poster, not a card: the frame is the object; status and text sit under it.
 function ProjectCard({ p }: { p: ProjectSummary }) {
   const api = useApi();
   const b = badgeOf(p);
   const holdCount = p.needs_attention.length || undefined;
   return (
     <li>
-      <Link
-        to={projectHref(p)}
-        className="group block overflow-hidden rounded-card border border-line-subtle bg-bg-raised transition-[transform,border-color] duration-hover ease-std hover:-translate-y-0.5 hover:border-ai focus-visible:border-ai"
-      >
-        <Thumb id={p.id} src={p.thumb ? api.mediaUrl(p.id, p.thumb, p.updated) : null} label={p.name}>
-          <div className="absolute left-2 top-2">
-            <StatusBadge badge={b} stage={p.stage} count={b === "hold" ? holdCount : undefined} />
-          </div>
-          {p.duration_s !== null && (
-            <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 font-mono text-mono text-white">{duration(p.duration_s)}</span>
-          )}
-          {b === "editing" && (
-            <div className="absolute inset-x-2 bottom-2">
-              <ProgressBar value={p.progress} label={`${p.name} progress`} />
-            </div>
-          )}
-        </Thumb>
-        <div className="space-y-1 p-3">
-          <h3 className="truncate font-semibold text-fg-primary" title={p.name}>
+      <Link to={projectHref(p)} className="group block rounded-surface focus-visible:outline-offset-4">
+        <div className="overflow-hidden rounded-surface ring-1 ring-line-subtle transition-shadow duration-hover group-hover:ring-line-control">
+          <Thumb id={p.id} src={p.thumb ? api.mediaUrl(p.id, p.thumb, p.updated) : null} label={p.name}>
+            {p.duration_s !== null && (
+              <span className="absolute bottom-2 right-2 rounded-control bg-black/70 px-1.5 py-0.5 font-mono text-meta text-white">{duration(p.duration_s)}</span>
+            )}
+            {b === "editing" && (
+              <div className="absolute inset-x-2 bottom-2">
+                <ProgressBar value={p.progress} label={`${p.name} progress`} />
+              </div>
+            )}
+          </Thumb>
+        </div>
+        <div className="space-y-0.5 pt-3">
+          <StatusBadge badge={b} stage={p.stage} count={b === "hold" ? holdCount : undefined} />
+          <h3 className="truncate text-ui text-fg-primary" title={p.name}>
             {p.name}
           </h3>
-          <p className="truncate text-fg-secondary">{p.client ?? "No client"}</p>
-          <p className="flex items-center justify-between gap-2 text-label font-normal text-fg-muted">
-            <span>{p.delivered_at ? `Delivered ${ago(p.delivered_at)}` : `Updated ${ago(p.updated)}`}</span>
+          <p className="truncate text-meta text-fg-secondary">
+            {p.client ?? "No client"} · {p.delivered_at ? `delivered ${ago(p.delivered_at)}` : `updated ${ago(p.updated)}`}
           </p>
-          {p.needs_attention.length > 0 && (
-            <p className={cx("truncate text-label", b === "failed" ? "text-st-fail" : "text-st-hold")}>{p.needs_attention.join(" · ")}</p>
-          )}
         </div>
       </Link>
     </li>
   );
 }
 
+/** "Needs you": hairline rows, each with its reason and one way in. Graphite buttons: the header owns the amber. */
 function AttentionStrip({ list }: { list: ProjectSummary[] }) {
   const need = list.filter((p) => ["hold", "failed"].includes(badgeOf(p)));
   if (!need.length) return null;
   return (
-    <section aria-label="Needs you" className="mb-6 rounded-panel border border-st-hold/30 bg-st-hold/[0.05] px-5 py-4">
-      <h2 className="mb-2 flex items-center gap-2 text-label text-st-hold">
-        <Icon name="alert" size={14} /> {need.length} {need.length === 1 ? "reel needs" : "reels need"} you
+    <section aria-label="Needs you" className="mb-10">
+      <h2 className="flex items-baseline gap-3 text-section">
+        Needs you <span className="font-mono text-mono text-fg-muted">{need.length}</span>
       </h2>
-      <ul className="flex flex-wrap gap-2">
+      <ul className="mt-3 divide-y divide-line-subtle border-y border-line-subtle">
         {need.map((p) => (
-          <li key={p.id}>
-            <Link to={projectHref(p)} className="flex items-center gap-2 rounded-input border border-line-subtle bg-bg-raised px-3 py-1.5 hover:border-line-strong">
+          <li key={p.id} className="flex items-center gap-6 py-3">
+            <span className="w-24 shrink-0">
               <StatusBadge badge={badgeOf(p)} />
-              <span className="text-fg-primary">{p.name}</span>
-              <span className="text-fg-muted">— {p.needs_attention.join(", ") || (p.stage ? `stopped at ${STAGE_LABEL[p.stage]}` : "")}</span>
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-ui text-fg-primary">{p.name}</span>
+              <span className="block truncate text-meta text-fg-secondary">{p.needs_attention.join(" · ") || (p.stage ? `Stopped at ${STAGE_LABEL[p.stage]}` : "")}</span>
+            </span>
+            <span className="hidden shrink-0 text-meta text-fg-muted md:block">{p.client ?? ""}</span>
+            <Link to={projectHref(p)} className="inline-flex h-9 shrink-0 items-center rounded-control border border-line-strong bg-bg-overlay px-4 text-ui text-fg-primary hover:bg-bg-high">
+              {badgeOf(p) === "failed" ? "See what failed" : "Review"}
             </Link>
           </li>
         ))}
@@ -93,12 +91,41 @@ function AttentionStrip({ list }: { list: ProjectSummary[] }) {
   );
 }
 
+/** First run (11 · States → Home empty): one amber action, three steps that explain the product. */
+function FirstRun({ onStart }: { onStart: () => void }) {
+  return (
+    <div className="mx-auto max-w-[480px] py-24">
+      <Icon name="film" size={24} className="text-fg-muted" />
+      <h2 className="mt-5 text-title">No edits yet</h2>
+      <p className="mt-2 text-fg-secondary">Drop raw footage and a short brief. The Editor cuts a vertical reel, checks it, and tells you what needs you before it goes to the client.</p>
+      <div className="mt-8">
+        <Button variant="primary" icon="plus" onClick={onStart}>
+          Start your first edit
+        </Button>
+      </div>
+      <ol className="mt-10 space-y-4 border-t border-line-subtle pt-6">
+        {[
+          ["Drop clips", "Video files of up to 4 GB each, anywhere on this page"],
+          ["Watch it edit", "Every decision with its reason and cost"],
+          ["Review and deliver", "Confirm flagged words, then send"],
+        ].map(([a, b], i) => (
+          <li key={a} className="flex gap-5">
+            <span className="font-mono text-mono text-fg-muted">{i + 1}</span>
+            <span>
+              <span className="block text-ui text-fg-primary">{a}</span>
+              <span className="block text-meta text-fg-muted">{b}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 export default function Home() {
   const api = useApi();
   const nav = useNavigate();
-  const { busy } = useStatus();
-  const can3D = use3D();
-  const q = useQuery(() => api.projects(), [api], { intervalMs: 4000 });
+  const q =useQuery(() => api.projects(), [api], { intervalMs: 4000 });
   const [filter, setFilter] = useState<Filter>("all");
   const [client, setClient] = useState("");
   const [search, setSearch] = useState("");
@@ -133,51 +160,30 @@ export default function Home() {
       }}
       onDrop={onDrop}
     >
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        {can3D ? (
-          <Suspense fallback={null}>
-            <AmbientScene busy={busy} />
-          </Suspense>
-        ) : (
-          <StaticBackdrop />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-bg-base/40 to-bg-base/90" />
-      </div>
-
-      <div className="relative mx-auto w-full max-w-[1440px] px-8 py-8">
+      <div className="relative w-full px-8 py-8">
         <PageHeader
           title="Projects"
           subtitle="Reels that need you come first."
           actions={
-            <Button variant="primary" size={40} icon="plus" onClick={() => nav("/new")}>
-              New edit
-            </Button>
+            // On first run the empty state owns the one amber action.
+            q.data && q.data.length === 0 ? undefined : (
+              <Button variant="primary" icon="plus" onClick={() => nav("/new")}>
+                New edit
+              </Button>
+            )
           }
         />
 
-        {q.error && !q.data ? <Notice tone="error" title="Couldn't load projects">{friendlyError(q.error)}</Notice> : null}
+        {q.error && !q.data ? <Notice tone="error" title="Couldn’t load projects">{friendlyError(q.error)}</Notice> : null}
         {q.loading && !q.data ? <Loading label="Loading projects…" /> : null}
 
-        {q.data && q.data.length === 0 && (
-          <div className="rounded-panel border border-line-subtle bg-bg-raised/80">
-            <Empty
-              icon="film"
-              title="Welcome to Reel Studio"
-              action={
-                <Button variant="primary" size={40} icon="plus" onClick={() => nav("/new")}>
-                  New edit
-                </Button>
-              }
-            >
-              Drop a client’s raw footage anywhere on this page, or start a new edit. The Editor cuts it, checks it and tells you if it’s safe to send.
-            </Empty>
-          </div>
-        )}
+        {q.data && q.data.length === 0 && <FirstRun onStart={() => nav("/new")} />}
 
         {q.data && q.data.length > 0 && (
           <>
             <AttentionStrip list={sorted} />
-            <div className="mb-5 flex flex-wrap items-center gap-3">
+            <h2 className="mb-3 text-section">All projects</h2>
+            <div className="mb-6 flex flex-wrap items-center gap-3">
               <Segmented
                 label="Filter by status"
                 value={filter}
@@ -202,12 +208,12 @@ export default function Home() {
                 <Icon name="search" size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted" />
                 <TextInput aria-label="Search projects" placeholder="Search by name" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
               </div>
-              <span className="ml-auto text-label font-normal text-fg-muted">Tip: drop video files anywhere here to start an edit.</span>
+              <span className="ml-auto text-meta text-fg-muted">Tip: drop video files anywhere here to start an edit.</span>
             </div>
             {shown.length === 0 ? (
-              <p className="py-10 text-center text-fg-secondary">No projects match these filters.</p>
+              <p className="py-10 text-fg-secondary">No projects match these filters.</p>
             ) : (
-              <ul className="grid grid-cols-[repeat(auto-fill,minmax(184px,1fr))] gap-4" aria-label="Projects, needs-you first">
+              <ul className="grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-x-6 gap-y-8" aria-label="Projects, needs-you first">
                 {shown.map((p) => (
                   <ProjectCard key={p.id} p={p} />
                 ))}
@@ -218,39 +224,14 @@ export default function Home() {
       </div>
 
       {dragging && (
-        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-bg-base/80 backdrop-blur-sm">
-          <div className="rounded-panel border-2 border-dashed border-ai-glow px-16 py-12 text-center">
-            <Icon name="upload" size={32} className="mx-auto mb-3 text-ai-glow" />
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-bg-base/90">
+          <div className="rounded-surface border-2 border-dashed border-signal px-16 py-12 text-center">
+            <Icon name="upload" size={32} className="mx-auto mb-3 text-fg-primary" />
             <p className="text-title">Drop to start a new edit</p>
             <p className="mt-1 text-fg-secondary">mp4, mov, m4v, mkv or webm · up to 4 GB each</p>
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-/** Static stand-in for the ambient scene (reduced motion / no WebGL). */
-function StaticBackdrop() {
-  return (
-    <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid slice" viewBox="0 0 1440 900">
-      <defs>
-        <radialGradient id="amb" cx="70%" cy="10%" r="70%">
-          <stop offset="0" stopColor="#6A4BF0" stopOpacity="0.16" />
-          <stop offset="1" stopColor="#0B0D12" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-      <rect width="1440" height="900" fill="url(#amb)" />
-      {[
-        [1080, 120, -8, "#9D85FF"],
-        [1250, 260, 6, "#36D6E7"],
-        [960, 330, 12, "#8a90a6"],
-        [180, 520, -5, "#8a90a6"],
-        [1320, 560, -12, "#9D85FF"],
-        [640, 90, 4, "#8a90a6"],
-      ].map(([x, y, r, c], i) => (
-        <rect key={i} x={x as number} y={y as number} width="90" height="160" rx="12" fill="none" stroke={c as string} strokeOpacity="0.22" strokeWidth="3" transform={`rotate(${r} ${x} ${y})`} />
-      ))}
-    </svg>
   );
 }

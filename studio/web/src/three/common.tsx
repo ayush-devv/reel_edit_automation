@@ -72,8 +72,8 @@ export function StudioLights({ intensity = 1, shadowSize = 6 }: { intensity?: nu
       <Environment resolution={256} frames={1}>
         <color attach="background" args={["#05060a"]} />
         <Lightformer form="rect" intensity={2.2} color="#ffffff" position={[0, 5, -6]} scale={[10, 2, 1]} />
-        <Lightformer form="rect" intensity={1.4} color="#9D85FF" position={[-6, 1, 0]} rotation-y={Math.PI / 2} scale={[8, 3, 1]} />
-        <Lightformer form="rect" intensity={1.0} color="#36D6E7" position={[6, 1, 0]} rotation-y={-Math.PI / 2} scale={[8, 3, 1]} />
+        <Lightformer form="rect" intensity={1.2} color="#A9ACB2" position={[-6, 1, 0]} rotation-y={Math.PI / 2} scale={[8, 3, 1]} />
+        <Lightformer form="rect" intensity={0.8} color="#90949C" position={[6, 1, 0]} rotation-y={-Math.PI / 2} scale={[8, 3, 1]} />
         <Lightformer form="ring" intensity={1.5} color="#ffffff" position={[0, 3, 6]} scale={3} />
       </Environment>
     </>

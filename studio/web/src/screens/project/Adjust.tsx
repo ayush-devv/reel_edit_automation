@@ -16,11 +16,11 @@ export function IssueList({ issues }: { issues: ValidatorIssue[] }) {
   return (
     <ul className="mt-2 space-y-1.5" role="alert" aria-label="Validator issues">
       {issues.map((i, k) => (
-        <li key={k} className="flex gap-2 rounded-input border border-st-fail/40 bg-st-fail/[0.08] px-3 py-2">
+        <li key={k} className="flex gap-2 rounded-control border-l-2 border-st-fail bg-bg-raised px-3 py-2">
           <Icon name="alert" size={16} className="mt-0.5 shrink-0 text-st-fail" />
           <div>
             <p className="text-fg-primary">{i.message}</p>
-            {i.fix && <p className="text-label font-normal text-fg-secondary">{i.fix}</p>}
+            {i.fix && <p className="text-meta text-fg-secondary">{i.fix}</p>}
           </div>
         </li>
       ))}
@@ -96,8 +96,8 @@ function Row({
     <div className="border-b border-line-subtle py-5 first:pt-0 last:border-0 last:pb-0">
       <div className="mb-3 flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="font-medium text-fg-primary">{title}</p>
-          {hint && <p className="text-label font-normal text-fg-muted">{hint}</p>}
+          <p className="text-ui text-fg-primary">{title}</p>
+          {hint && <p className="text-meta text-fg-muted">{hint}</p>}
         </div>
         <Button variant={dirty && !local.length ? "primary" : "secondary"} disabled={!dirty || local.length > 0} busy={busy} onClick={apply} aria-label={`Apply ${title.toLowerCase()}`}>
           Apply
@@ -118,9 +118,9 @@ function Row({
 function Num({ label, value, onChange, step = 0.05, min, max, suffix }: { label: string; value: string; onChange: (v: string) => void; step?: number; min: number; max: number; suffix?: string }) {
   return (
     <div className="flex items-center gap-3">
-      <input type="range" aria-label={`${label} slider`} min={min} max={max} step={step} value={Number(value) || 0} onChange={(e) => onChange(e.target.value)} className="h-1 flex-1 accent-[#9D85FF]" />
+      <input type="range" aria-label={`${label} slider`} min={min} max={max} step={step} value={Number(value) || 0} onChange={(e) => onChange(e.target.value)} className="h-1 flex-1 accent-[#A9ACB2]" />
       <div className="relative w-28 shrink-0">
-        <TextInput aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} inputMode="decimal" className="h-8 pr-9 font-mono text-[13px]" />
+        <TextInput aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} inputMode="decimal" className="h-8 pr-9 font-mono text-mono" />
         {suffix && <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-label text-fg-muted">{suffix}</span>}
       </div>
     </div>
@@ -166,8 +166,8 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
   const done = (keys: (keyof typeof initial)[]) => () => setBase((b) => ({ ...b, ...Object.fromEntries(keys.map((k) => [k, v[k]])) }));
 
   return (
-    <div className="grid grid-cols-12 gap-4">
-      <div className="col-span-12 space-y-4 xl:col-span-7">
+    <div className="grid grid-cols-12 gap-x-10 gap-y-6">
+      <div className="col-span-12 xl:col-span-7">
         <Panel title="Captions">
           <Row title="Caption style" hint="The family sets font, case, animation and zone." kind="caption_family" value={v.family} dirty={v.family !== base.family} ctx={ctx} onApplied={done(["family"])}>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5" role="radiogroup" aria-label="Caption style">
@@ -180,15 +180,15 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
                     role="radio"
                     aria-checked={v.family === f.id}
                     onClick={() => set("family", f.id)}
-                    className={cx("rounded-card border p-2 text-left transition-colors duration-hover", v.family === f.id ? "border-ai bg-ai/[0.1]" : "border-line-subtle hover:border-line-strong")}
+                    className={cx("rounded-surface border p-2 text-left transition-colors duration-hover", v.family === f.id ? "border-fg-secondary bg-bg-high" : "border-line-subtle hover:border-line-control")}
                   >
-                    <div className="flex h-12 items-center justify-center rounded-input bg-[linear-gradient(135deg,#3a2a2f,#141018)]">
+                    <div className="flex h-12 items-center justify-center rounded-control bg-bg-inset">
                       <span className={cx("text-[15px]", s.cls)} style={s.style}>
                         {s.text}
                       </span>
                     </div>
                     <p className="mt-1.5 truncate text-label text-fg-primary">{prettyId(f.id)}</p>
-                    <p className="truncate text-[11px] text-fg-muted">{f.mood}</p>
+                    <p className="truncate text-meta text-fg-muted">{f.mood}</p>
                   </button>
                 );
               })}
@@ -213,8 +213,8 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
                   ))}
                 </Select>
               </div>
-              <input type="color" aria-label="Pick colour" value={/^#[0-9a-fA-F]{6}$/.test(v.tokenValue) ? v.tokenValue : "#000000"} onChange={(e) => set("tokenValue", e.target.value.toUpperCase())} className="h-10 w-12 cursor-pointer rounded-input border border-line-subtle bg-bg-overlay p-1" />
-              <TextInput aria-label="Hex colour" value={v.tokenValue} onChange={(e) => set("tokenValue", e.target.value)} className="w-28 font-mono text-[13px]" />
+              <input type="color" aria-label="Pick colour" value={/^#[0-9a-fA-F]{6}$/.test(v.tokenValue) ? v.tokenValue : "#000000"} onChange={(e) => set("tokenValue", e.target.value.toUpperCase())} className="h-9 w-12 cursor-pointer rounded-control border border-line-control bg-bg-overlay p-1" />
+              <TextInput aria-label="Hex colour" value={v.tokenValue} onChange={(e) => set("tokenValue", e.target.value)} className="w-28 font-mono text-mono" />
             </div>
           </Row>
         </Panel>
@@ -224,8 +224,8 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
             <div className="grid grid-cols-4 gap-2 sm:grid-cols-7" role="radiogroup" aria-label="Colour look">
               {LOOKS.map((l) => (
                 <button key={l.id} type="button" role="radio" aria-checked={v.look === l.id} title={l.note} onClick={() => set("look", l.id)} className="group text-center">
-                  <span className={cx("block h-10 rounded-input border-2 transition-colors", v.look === l.id ? "border-ai-glow" : "border-transparent group-hover:border-line-strong")} style={{ background: LOOK_SWATCH[l.id] }} />
-                  <span className={cx("mt-1 block truncate text-[11px]", v.look === l.id ? "text-fg-primary" : "text-fg-muted")}>{prettyId(l.id)}</span>
+                  <span className={cx("block h-10 rounded-control border-2 transition-colors", v.look === l.id ? "border-fg-primary" : "border-transparent group-hover:border-line-control")} style={{ background: LOOK_SWATCH[l.id] }} />
+                  <span className={cx("mt-1 block truncate text-meta", v.look === l.id ? "text-fg-primary" : "text-fg-muted")}>{prettyId(l.id)}</span>
                 </button>
               ))}
             </div>
@@ -242,7 +242,7 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
         </Panel>
       </div>
 
-      <div className="col-span-12 space-y-4 xl:col-span-5">
+      <div className="col-span-12 xl:col-span-5">
         <Panel title="Sound">
           <Row title="Music track" hint={`Now: ${currentTrack}`} kind="music_track" value={v.track} dirty={v.track !== base.track && v.track !== ""} ctx={ctx} onApplied={done(["track"])}>
             <Select aria-label="Music track" value={v.track} onChange={(e) => set("track", e.target.value)}>
@@ -268,12 +268,12 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
           </Row>
           <Row title="Longest pause kept" hint="Longer pauses are cut (jump cut). 0 keeps every pause." kind="max_pause_ms" value={num(v.pause)} dirty={v.pause !== base.pause} ctx={ctx} onApplied={done(["pause"])}>
             <div className="relative w-36">
-              <TextInput aria-label="Longest pause kept" value={v.pause} onChange={(e) => set("pause", e.target.value)} inputMode="numeric" className="h-8 pr-10 font-mono text-[13px]" />
+              <TextInput aria-label="Longest pause kept" value={v.pause} onChange={(e) => set("pause", e.target.value)} inputMode="numeric" className="h-8 pr-10 font-mono text-mono" />
               <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-label text-fg-muted">ms</span>
             </div>
           </Row>
         </Panel>
-        <p className="px-1 text-label font-normal text-fg-muted">
+        <p className="border-t border-line-subtle pt-4 text-meta text-fg-muted">
           Every change is checked by the engine’s validator first. For frame-level trims use the export package in Final Cut or Resolve (Deliver).
         </p>
       </div>

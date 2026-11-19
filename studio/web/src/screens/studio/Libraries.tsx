@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useApi } from "../../api/context";
 import { friendlyError } from "../../api/errors";
 import type { BrollItem, CaptionFamily, MusicItem, SfxItem } from "../../api/types";
+import { Icon } from "../../components/icons";
 import { PageHeader } from "../../components/Shell";
 import { Table } from "../../components/Table";
 import { Button, Field, IconButton, Loading, Mono, Notice, Panel, Segmented, Select, TextInput } from "../../components/ui";
@@ -95,13 +96,13 @@ export default function Libraries() {
   const cats = [...new Set((d?.sfx ?? []).map((s) => s.category))].sort();
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] px-8 py-8">
-      <PageHeader eyebrow="Studio" title="Libraries" subtitle="Sounds, music and b-roll the Editor may use — each with its licence." />
+    <div className="w-full px-8 py-8">
+      <PageHeader title="Libraries" subtitle="Sounds, music and b-roll the Editor may use — each with its licence." />
       {lib.error ? <Notice tone="error">{friendlyError(lib.error)}</Notice> : null}
       {!d ? (
         <Loading />
       ) : (
-        <div className="grid grid-cols-12 gap-4">
+        <div className="grid grid-cols-12 gap-x-10 gap-y-6">
           <div className="col-span-12 xl:col-span-8">
             <Panel
               title={
@@ -119,13 +120,18 @@ export default function Libraries() {
               }
               actions={
                 tab === "sfx" ? (
-                  <div className="w-44">
-                    <Select aria-label="Category" value={cat} onChange={(e) => setCat(e.target.value)}>
+                  <div className="flex items-center gap-3">
+                    <label htmlFor="lib-cat" className="text-meta text-fg-secondary">
+                      Category
+                    </label>
+                    <div className="w-44">
+                    <Select id="lib-cat" value={cat} onChange={(e) => setCat(e.target.value)}>
                       <option value="">All categories</option>
                       {cats.map((c) => (
                         <option key={c}>{c}</option>
                       ))}
                     </Select>
+                    </div>
                   </div>
                 ) : null
               }
@@ -187,15 +193,18 @@ export default function Libraries() {
               )}
             </Panel>
           </div>
-          <div className="col-span-12 space-y-4 xl:col-span-4">
+          <div className="col-span-12 xl:col-span-4">
             <IndexForm onDone={lib.reload} />
             {(d.unreadable?.length ?? 0) > 0 && (
               <Panel title="Couldn’t read">
-                <ul className="space-y-2">
+                <ul className="divide-y divide-line-subtle">
                   {d.unreadable!.map((u) => (
-                    <li key={u.file} className="rounded-card border border-st-hold/40 bg-st-hold/[0.06] px-3 py-2">
-                      <Mono className="block truncate text-fg-primary">{u.file}</Mono>
-                      <p className="text-label font-normal text-fg-secondary">{u.reason}</p>
+                    <li key={u.file} className="flex gap-3 py-3">
+                      <Icon name="alert" size={16} className="mt-0.5 shrink-0 text-st-hold" />
+                      <div className="min-w-0">
+                        <Mono className="block truncate text-fg-primary">{u.file}</Mono>
+                        <p className="text-meta text-fg-secondary">{u.reason}</p>
+                      </div>
                     </li>
                   ))}
                 </ul>
