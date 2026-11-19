@@ -143,7 +143,7 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
              "  - `keyword_card` (1–4 words; style pill | under | marker | box | plain; upper | center) — the one idea of a beat, not a caption copy;",
              "  - `lower_third` (\"Name · Role\"; bar | tag) — first time a person is introduced;",
              "  - `callout` (circle | box | underline | arrow; position face, or point with x,y = fractions (0–1) of the SOURCE frame as seen on the contact sheet — the engine maps them through the crop; optional ≤ 3-word label);",
-             "  - `counter` (value + text with {n}, e.g. \"₹{n} crore\", \"{n}%\") — when a number is the story;",
+             "  - `counter` (value + text with {n}, e.g. \"₹{n} crore\", \"{n}%\") — when a number is the story; it appears on from_word and reaches the value exactly on to_word, so put to_word on the word that SAYS the number. Never use it to mirror a count the speaker does out loud (\"five, six, seven\");",
              "  - `text_card` (full screen, ≤ 8 words; dark | light | color) — a chapter or list beat; it hides the speaker, so use 0–2;",
              "  - `cta_card` (last item only; bar | card) — the brief's call to action;",
              "  - `progress_bar` and `logo_watermark` (whole reel; the logo needs a brand logo; top_right | top_left).",

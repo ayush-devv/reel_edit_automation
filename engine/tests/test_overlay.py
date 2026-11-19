@@ -285,3 +285,15 @@ def test_top_band_graphics_step_off_a_close_up_face(tmp_path):
         face_rows = a[int(0.10 * 192):int(0.40 * 192), 27:81]
         assert (face_rows > 128).mean() < 0.01  # nothing drawn on the face
         assert (a[int(0.40 * 192):int(0.58 * 192)] > 128).mean() > 0.01  # the graphic moved below it, above the captions
+
+
+def test_counter_lands_on_the_word_that_says_the_number():
+    fin = _finish(graphics=[_g("c", "counter", 7, 11, text="{n} teaspoons", value=8)])
+    tl = compile_timeline(_story(), fin, WORDS, CLIPS, FPS, IDX)
+    g = tl.graphics[0]
+    k01 = next(c for c in tl.video if c.id == "v_k01")
+    by = WORDS.by_index()
+    from reel import timebase as tb
+
+    said = k01.at_f + tb.us_to_frame(by[11].start_us, FPS, mode="floor") - tb.us_to_frame(k01.src_in_us, FPS)
+    assert abs(g.count_end_f - said) <= 1 and g.end_f >= g.count_end_f + 30  # reaches 8 on word 11, then holds ≥ 1 s

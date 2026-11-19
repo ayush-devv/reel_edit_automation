@@ -238,7 +238,9 @@ const Counter: React.FC<{ g: Graphic; p: OverlayProps }> = ({ g, p }) => {
   const f = useCurrentFrame();
   const local = f - g.start_f;
   const pop = tween(local, 0, sec(0.35, p.fps), backOut(1.6));
-  const k = tween(local, sec(0.1, p.fps), sec(1.2, p.fps), Easing.out(Easing.cubic));
+  // lands on the spoken number (count_end_f) when the plan anchors it, else a 1.2 s count
+  const countLen = g.count_end_f && g.count_end_f > g.start_f ? Math.max(sec(0.4, p.fps), g.count_end_f - g.start_f - sec(0.1, p.fps)) : sec(1.2, p.fps);
+  const k = tween(local, sec(0.1, p.fps), countLen, Easing.out(Easing.cubic));
   const v = g.value * k;
   const d = 10 ** decimalsOf(g.value);
   const shown = k >= 1 ? g.value : Math.round(v * d) / d;

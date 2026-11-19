@@ -115,9 +115,13 @@ const Captions: React.FC<{ track: CaptionTrack; p: OverlayProps }> = ({ track, p
   const textW = Math.min(p.width - p.safe.left - p.safe.right, chars * size * CHAR_EM(upperHeavy) + size * 0.6);
   const top = clearOf(y0, blockH, span?.text ?? [], p.height, +1, 0.45 * p.height, p.height - p.safe.bottom,
                     (p.width - textW) / 2, (p.width + textW) / 2, p.width);
-  const wordEls = words.map((w) => {
+  const stagger = Math.max(1, Math.round(0.06 * p.fps));
+  const wordEls = words.map((w, idx) => {
     const active = frame >= w.start_f && frame < w.end_f;
     const since = frame - w.start_f;
+    // slide_fade staggers the page's words in at the start of the page (every word readable within ~0.3 s),
+    // not at each word's spoken moment — tying it to speech left frames with one faint word
+    const entry = frame - (page.start_f + idx * stagger);
     let scale = 1;
     let opacity = 1;
     let dy = 0;
@@ -125,7 +129,7 @@ const Captions: React.FC<{ track: CaptionTrack; p: OverlayProps }> = ({ track, p
     if (t.anim === "pop") {
       if (active) scale = 0.85 + 0.2 * spring({ frame: since, fps: p.fps, config: { damping: 12, stiffness: 220 } });
     } else if (t.anim === "slide_fade") {
-      const k = interpolate(since, [0, animF], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+      const k = interpolate(entry, [0, animF], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
       opacity = k;
       dy = (1 - k) * 24;
     }

@@ -95,28 +95,36 @@ def split_on_silence(start_us: int, end_us: int, group: list[Word], speech: list
     range split it; each part keeps the words that start in it (a part with no word joins its neighbour)."""
     if not max_pause_us or not speech:
         return [(start_us, end_us, group)]
+    # voice activity can miss soft speech (a trailing "n", a breathy start): only clearly long silences are cut
+    need = max_pause_us + VAD_MARGIN_US
     silences = [(a[1], b[0]) for a, b in zip(speech, speech[1:])
-                if b[0] - a[1] > max_pause_us and start_us + HEARD_PAD_US < a[1] and b[0] < end_us - HEARD_PAD_US]
+                if b[0] - a[1] > need and start_us + HEARD_PAD_US < a[1] and b[0] < end_us - HEARD_PAD_US]
     parts, cur = [], start_us
     for s0, s1 in silences:
         parts.append((cur, s0 + HEARD_PAD_US))
         cur = s1 - HEARD_PAD_US
     parts.append((cur, end_us))
+    # every word goes to exactly one part, in order: the last part that starts at or before it (a word whose ASR
+    # start falls inside a removed silence is heard after it, so it belongs to the next part)
+    starts = [a for a, _b in parts]
+    buckets: list[list[Word]] = [[] for _ in parts]
+    for w in group:
+        k = max((n for n, a in enumerate(starts) if a <= w.start_us), default=0)
+        if w.start_us >= parts[k][1] and k + 1 < len(parts):
+            k += 1
+        buckets[k].append(w)
     out: list[tuple[int, int, list[Word]]] = []
-    for a, b in parts:
-        ws = [w for w in group if a <= w.start_us < b] if out else [w for w in group if w.start_us < b]
+    for (a, b), ws in zip(parts, buckets):
         if ws:
             out.append((a, b, ws))
         elif out:  # nothing starts here (a smeared word spans it): keep it with the previous part
             pa, _pb, pw = out[-1]
             out[-1] = (pa, b, pw)
-    leftover = [w for w in group if w.start_us >= parts[-1][1]]
-    if leftover and out:
-        a, b, ws = out[-1]
-        out[-1] = (a, b, ws + leftover)
     return out or [(start_us, end_us, group)]
 
 
+JUMP_CUT_ZOOM = 1.08  # alternate shots inside a tightened line
+VAD_MARGIN_US = 150_000  # extra silence required before a voice-activity gap (not a word gap) becomes a cut
 SNAP_US = 160_000  # a source camera cut this close to a shot edge would flash a few frames of the other angle
 MIN_ANGLE_US = 250_000  # … unless the other angle is shown at least this long
 
@@ -498,6 +506,11 @@ def compile_timeline(
         carried = 1.0
         for n, clip in enumerate(shots):
             ps = sorted(by_shot.get((item_id, n), []), key=lambda p: p.at_word)
+            if not ps and carried == 1.0 and n % 2 == 1:
+                # a pause-tightening jump cut on the same framing reads as a mistake; a subtle punch on every other
+                # shot makes it read as intended (the pro way to hide a jump cut). The Editor's own punches win.
+                clip.scale.append(Keyframe(f=0, v=JUMP_CUT_ZOOM, ease=Ease.hold))
+                continue
             if ps or carried != 1.0:
                 clip.scale.append(Keyframe(f=0, v=carried, ease=Ease.hold))
             for p in ps:
@@ -634,13 +647,17 @@ def compile_timeline(
             start = word_out_frame(by[g.from_word], g.item)
             min_us = GRAPHIC_MIN_US_BY_KIND.get(g.kind.value, GRAPHIC_MIN_US)
             end = max(start + tb.us_to_frame(min_us, fps, mode="ceil"), word_out_frame(by[g.to_word], g.item, end=True))
+        count_end = 0
+        if g.kind.value == "counter":  # the count lands on the word that says the number, then holds to be read
+            count_end = max(start + tb.us_to_frame(500_000, fps), word_out_frame(by[g.to_word], g.item))
+            end = max(end, count_end + tb.us_to_frame(1_200_000, fps))
         if g.kind.value == "cta_card":
             end = total  # an end card stays to the last frame
         if g.kind.value == "logo_watermark" and not brand_logo:
             continue  # validated upstream; never draw an empty logo
         graphics.append(GraphicEvent(id=g.id, kind=g.kind.value, start_f=start, end_f=min(end, total), text=g.text.strip(), emoji=g.emoji.strip(),
                                      value=g.value, style=g.style, position=g.position, x=g.x, y=g.y, accent=accent,
-                                     uri=brand_logo if g.kind.value == "logo_watermark" else ""))
+                                     uri=brand_logo if g.kind.value == "logo_watermark" else "", count_end_f=count_end))
 
     return Timeline(
         fps=f"{fps.numerator}/{fps.denominator}", width=width, height=height, duration_f=total,

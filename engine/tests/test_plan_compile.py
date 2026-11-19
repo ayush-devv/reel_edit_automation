@@ -274,10 +274,10 @@ def test_silence_hidden_inside_a_smeared_word_is_cut():
     from reel.compile import split_on_silence
 
     ws = [Word(i=0, clip="c", text="i", start_us=0, end_us=800_000), Word(i=1, clip="c", text="thought", start_us=800_000, end_us=1_000_000)]
-    speech = [[0, 150_000], [700_000, 1_000_000]]  # VAD: "I" ends at 0.15 s; the ASR stretched it to 0.8 s
+    speech = [[0, 150_000], [800_000, 1_000_000]]  # VAD: "I" ends at 0.15 s; the ASR stretched it to 0.8 s
     parts = split_on_silence(0, 1_100_000, ws, speech, 400_000)
     assert len(parts) == 2 and [w.i for w in parts[0][2]] == [0] and [w.i for w in parts[1][2]] == [1]
-    assert parts[0][1] == 150_000 + 100_000 and parts[1][0] == 700_000 - 100_000  # cut inside the silence, breath kept
+    assert parts[0][1] == 150_000 + 100_000 and parts[1][0] == 800_000 - 100_000  # cut inside the silence, breath kept
     assert len(split_on_silence(0, 1_100_000, ws, speech, 0)) == 1  # max_pause 0 keeps every pause
 
 
@@ -301,3 +301,23 @@ def test_captions_do_not_capitalise_a_line_that_continues_a_sentence():
     assert clean_caption_words(w, prev_text="and then")[0].text == "we"
     assert clean_caption_words(w, prev_text="it works.")[0].text == "We"
     assert clean_caption_words(w)[0].text == "We"  # the reel's first line
+
+
+def test_a_word_starting_inside_a_removed_silence_goes_to_the_next_shot():
+    from reel.compile import split_on_silence
+
+    ws = [Word(i=0, clip="c", text="so", start_us=0, end_us=200_000), Word(i=1, clip="c", text="look", start_us=500_000, end_us=1_300_000),
+          Word(i=2, clip="c", text="here", start_us=1_300_000, end_us=1_500_000)]
+    speech = [[0, 200_000], [1_000_000, 1_500_000]]  # "look" is really heard from 1.0 s
+    parts = split_on_silence(0, 1_600_000, ws, speech, 400_000)
+    assert [[w.i for w in p[2]] for p in parts] == [[0], [1, 2]]  # never dropped, never out of order
+
+
+def test_jump_cuts_inside_a_line_alternate_a_subtle_punch():
+    from reel.compile import JUMP_CUT_ZOOM
+
+    words = _paused_words()
+    clips = {**CLIPS, "c01": ClipInfo("c01", "mezz/c01.mov", 12_000_000)}
+    tl = compile_timeline(_story(), _finish(punch_ins=[]), words, clips, FPS, IDX)
+    k01 = [c for c in tl.video if c.src.item == "k01"]
+    assert not k01[0].scale and k01[1].scale and k01[1].scale[0].v == JUMP_CUT_ZOOM

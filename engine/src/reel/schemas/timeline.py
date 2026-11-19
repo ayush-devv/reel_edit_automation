@@ -175,6 +175,7 @@ class GraphicEvent(_Strict):
     y: float = owned("remotion", default=-1.0)
     accent: str = owned("remotion", default="#FFD400")  # brand accent, else the caption emphasis colour
     uri: str = owned("remotion", default="")  # logo file, relative to the workspace
+    count_end_f: int = owned("remotion", default=0)  # counter: frame where it reaches its value (the number is spoken); 0 = default pace
 
 
 class Timeline(_Strict):

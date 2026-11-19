@@ -18,7 +18,7 @@ families:
     for: [genre.testimonial, genre.brand_story, genre.interview]
     mood: premium, conversational
     max_words: 4
-    tokens: {font: "Plus Jakarta Sans", weight: "500", case: title, base_color: "#F2EDE6", emph_color: "#FFFFFF",
+    tokens: {font: "Plus Jakarta Sans", weight: "700", case: title, base_color: "#F2EDE6", emph_color: "#FFFFFF",
              emph_scale: "1.7", highlight: scale, anim: slide_fade, anim_ms: "220", zone: beside_face}
   - id: minimal_calm
     for: [genre.vlog, genre.montage, genre.brand_story]
