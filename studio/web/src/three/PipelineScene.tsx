@@ -66,27 +66,28 @@ function Node({ stage, pos, selected, onSelect }: { stage: Stage; pos: THREE.Vec
         onPointerOut={() => (document.body.style.cursor = "")}
       >
         <cylinderGeometry args={[0.42, 0.48, 0.14, 48]} />
-        <meshStandardMaterial color={selected ? "#2a2f45" : "#151925"} metalness={0.7} roughness={0.32} />
+        <meshStandardMaterial color={selected ? color.bg.high : color.bg.raised} metalness={0.7} roughness={0.32} />
       </mesh>
       <mesh position={[0, 0.135, 0]} rotation-x={-Math.PI / 2}>
         <ringGeometry args={[0.36, 0.4, 48]} />
-        <meshBasicMaterial color={selected ? color.signal.DEFAULT : c} transparent opacity={lit || selected ? 0.9 : 0.35} />
+        <meshBasicMaterial color={selected ? color.text.primary : c} transparent opacity={lit || selected ? 0.9 : 0.35} />
       </mesh>
       <mesh ref={core} position={[0, 0.34, 0]} castShadow>
         <sphereGeometry args={[st === "running" ? 0.17 : 0.13, 32, 32]} />
         <meshStandardMaterial
-          color={lit ? c : "#22283a"}
+          color={lit ? c : color.bg.high}
           emissive={c}
-          emissiveIntensity={st === "done" ? 1.3 : st === "failed" ? 2.4 : st === "running" ? 2.4 : 0.05}
+          emissiveIntensity={st === "done" ? 0.15 : st === "failed" ? 2.4 : st === "running" ? 2.4 : 0.05}
           metalness={0.2}
           roughness={0.3}
           transparent={st === "skipped"}
           opacity={st === "skipped" ? 0.4 : 1}
         />
       </mesh>
-      {lit && (
+      {/* Only a running or failed stage glows; done stages stay quiet graphite. */}
+      {lit && st !== "done" && (
         <sprite ref={halo} position={[0, 0.34, 0]} scale={st === "running" ? 1.6 : 1.05}>
-          <spriteMaterial map={glow} color={c} transparent opacity={st === "done" ? 0.45 : 0.75} blending={THREE.AdditiveBlending} depthWrite={false} />
+          <spriteMaterial map={glow} color={c} transparent opacity={0.75} blending={THREE.AdditiveBlending} depthWrite={false} />
         </sprite>
       )}
       {st === "running" && (
@@ -124,11 +125,11 @@ function Track({ curve, upTo }: { curve: THREE.CatmullRomCurve3; upTo: number })
   return (
     <group position={[0, 0.02, 0]}>
       <mesh geometry={base}>
-        <meshStandardMaterial color="#232836" metalness={0.5} roughness={0.5} />
+        <meshStandardMaterial color={color.line.subtle} metalness={0.5} roughness={0.5} />
       </mesh>
       {lit && (
         <mesh geometry={lit}>
-          <meshStandardMaterial color={color.accent.ai} emissive={color.accent.glow} emissiveIntensity={1.2} />
+          <meshStandardMaterial color={color.text.muted} emissive={color.text.muted} emissiveIntensity={0.25} />
         </mesh>
       )}
     </group>

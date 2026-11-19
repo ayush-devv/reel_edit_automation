@@ -1,7 +1,8 @@
-import { NavLink, Outlet, useOutletContext, useParams, Link } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useOutletContext, useParams, Link } from "react-router-dom";
 import { friendlyError } from "../../api/errors";
 import { useApi } from "../../api/context";
 import { Icon, type IconName } from "../../components/icons";
+import { StoryStrip } from "../../components/StoryStrip";
 import { cx, Loading, Mono, Notice, StatusBadge } from "../../components/ui";
 import { useLiveProject, type LiveProject } from "../../hooks/useLiveProject";
 import { useStatus } from "../../hooks/status";
@@ -55,6 +56,7 @@ export default function ProjectLayout() {
   const { id = "" } = useParams();
   const live = useLiveProject(id);
   const p = live.project;
+  const onLayers = useLocation().pathname.endsWith("/layers");
 
   return (
     <div className="flex flex-1 flex-col">
@@ -109,6 +111,8 @@ export default function ProjectLayout() {
           <div className="w-full flex-1 px-8 py-6">
             <Outlet context={{ ...live, project: p } satisfies ProjectCtx} />
           </div>
+          {/* Layers has its own, more detailed strip; elsewhere the docked strip keeps orientation. */}
+          {p.versions.length > 0 && !onLayers && <StoryStrip projectId={p.id} versionKey={p.versions.length} />}
         </>
       )}
     </div>

@@ -201,7 +201,7 @@ export function Shell({ children }: { children?: ReactNode }) {
         Skip to content
       </a>
       <NavRail />
-      <main id="main" ref={mainRef} tabIndex={-1} className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+      <main id="main" ref={mainRef} tabIndex={-1} className="relative flex min-h-0 min-w-0 flex-1 scroll-pb-24 flex-col overflow-y-auto">
         {engine === "offline" ? <EngineDown /> : engine === "auth" ? <TokenMissing /> : children ?? <Outlet />}
       </main>
     </div>

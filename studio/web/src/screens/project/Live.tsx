@@ -58,7 +58,7 @@ export function FlatPipeline({ stages, selected, onSelect, large }: { stages: St
                       "flex items-center gap-1.5 rounded-control border px-2.5 transition-colors duration-hover",
                       large ? "h-8 text-ui" : "h-7 text-label",
                       NODE_STYLE[s.status] ?? NODE_STYLE.pending,
-                      selected === name && "ring-2 ring-signal ring-offset-2 ring-offset-bg-base",
+                      selected === name && "ring-2 ring-fg-primary ring-offset-2 ring-offset-bg-base",
                     )}
                   >
                     {s.status === "done" && <Icon name="check" size={12} />}

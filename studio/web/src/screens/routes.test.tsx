@@ -42,6 +42,21 @@ describe("screens", () => {
     expect(screen.getAllByText(/Editing · Story/).length).toBeGreaterThan(0);
   });
 
+  it("first run: one amber action and the three steps, no header New edit", async () => {
+    const api = createMockApi();
+    api.projects = async () => [];
+    render(<TestApp api={api} path="/" />);
+    expect(await screen.findByRole("button", { name: "Start your first edit" }, T)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "No edits yet" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New edit" })).toBeNull();
+  });
+
+  it("project screens dock the story strip with the reel's beats", async () => {
+    render(<TestApp api={createMockApi()} path={`/p/${HOLD}/review`} />);
+    const strip = await screen.findByRole("region", { name: "Story strip" }, T);
+    expect(within(strip).getByRole("list", { name: /Beats in order/ }).children.length).toBeGreaterThan(0);
+  });
+
   it("shows how to start the engine when it is down (AC-2)", async () => {
     render(<TestApp api={createMockApi({ engineDown: true })} path="/" />);
     expect(await screen.findByRole("heading", { name: "Engine is not running" }, T)).toBeInTheDocument();
