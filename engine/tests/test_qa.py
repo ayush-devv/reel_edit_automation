@@ -33,8 +33,38 @@ def test_contrast_ratio_matches_wcag():
 def test_reading_speed_and_dead_air():
     tl = _tl([_page(0, 10, "supercalifragilistic", "expialidocious"), _page(100, 140, "ok")])  # 0.4 s for 35 chars; 3.6 s gap
     rs, da = qa.reading_speed(tl), qa.dead_air(tl)
-    assert not rs.ok and rs.at == ["0:00.00"] and rs.measured["max_cps"] > 80
+    assert rs.ok and rs.measured["max_page_cps"] > 80  # one fast page is not a sustained rate: 35 chars over 3 s
     assert not da.ok and da.at == ["0:00.40"]
+
+
+def _speech_pages(start, seconds, words_per_s, fps=25, words=("remember", "every", "month", "save", "a", "little", "first")):
+    """Word-synced pages of 1–3 words following speech at about `words_per_s`, with the uneven word timing of real
+    speech (a quick single word, then slower phrases): single pages run far faster than the sustained rate."""
+    pages, f, k, sizes, pace = [], start, 0, (1, 3, 2), (0.55, 1.15, 1.15)
+    step = fps / words_per_s
+    while f < start + seconds * fps - 1:
+        n = sizes[len(pages) % 3]
+        texts = [words[(k + j) % len(words)] for j in range(n)]
+        end = int(round(f + n * step * pace[len(pages) % 3]))
+        pages.append(_page(int(round(f)), end, *texts))
+        f, k = end, k + n
+    return pages
+
+
+def test_reading_speed_is_a_sustained_rate():
+    # fast 1–3-word pages that follow normal speech (~3 words/s) pass, although single pages run at 20+ chars/s
+    normal = _tl(_speech_pages(0, 10, 3.0), dur=250)
+    rs = qa.reading_speed(normal)
+    assert rs.ok and rs.measured["max_page_cps"] > qa.MAX_CPS and rs.measured["max_cps"] < qa.MAX_CPS, rs.measured
+    # a 3 s stretch with far more text than anyone can read fails, at that stretch only
+    before = _speech_pages(0, 5, 3.0)
+    s0 = before[-1].end_f
+    dense = [_page(s0 + 15 * k, s0 + 15 * (k + 1), "extraordinarily", "complicated", "sentences") for k in range(5)]  # 39 chars/0.6 s
+    tl = _tl(before + dense + _speech_pages(s0 + 75, 5, 3.0), dur=s0 + 75 + 140)
+    rs = qa.reading_speed(tl)
+    assert not rs.ok and rs.measured["max_cps"] > 50
+    worst = qa.tc(s0, qa.tb.parse_rate(tl.fps))
+    assert rs.at == [worst] and rs.measured["worst_at"] == worst  # one stretch, at the window holding all of it
 
 
 def test_brief_compliance():
@@ -172,6 +202,27 @@ def test_frozen_and_black_detection(tmp_path):
     assert not frozen.ok and not black.ok
     _f, black_in_dip = qa.frozen_and_black(tl, final, dips=[(145, 175)])
     assert black_in_dip.ok  # an intended dip-to-black is not a defect
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not READY, reason="needs pinned ffmpeg")
+def test_head_and_tail_fades_are_not_black_defects(tmp_path):
+    def clip(name, parts):
+        out = tmp_path / name
+        args = []
+        for src, d in parts:
+            args += ["-f", "lavfi", "-i", f"{src}{':' if '=' in src else '='}s=270x480:r=25:d={d}"]
+        tools.ffmpeg(["-y", *args, "-filter_complex", "".join(f"[{k}:v]" for k in range(len(parts))) + f"concat=n={len(parts)}:v=1:a=0",
+                      "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out)])
+        return out
+
+    # 0.4 s fade-from-black head and 0.4 s fade-to-black tail on a 3.8 s reel (pro finals do this)
+    edges = clip("edges.mp4", [("color=c=black", 0.4), ("testsrc2", 3.0), ("color=c=black", 0.4)])
+    frozen, black = qa.frozen_and_black(_tl([], dur=95), edges, dips=[])
+    assert black.ok and black.measured["edge_fades"] == 2, black.detail
+    # the same 0.4 s of black in the middle is a defect
+    mid = clip("mid.mp4", [("testsrc2", 1.7), ("color=c=black", 0.4), ("testsrc2", 1.7)])
+    assert not qa.frozen_and_black(_tl([], dur=95), mid, dips=[])[1].ok
 
 
 def test_cli_registers_every_command(capsys):
