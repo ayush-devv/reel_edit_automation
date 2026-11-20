@@ -22,6 +22,7 @@ reference/
 .DS_Store
 .cache/
 eval/cache/
+eval/listening/
 
 # Claude Code agent worktrees
 .claude/worktrees/

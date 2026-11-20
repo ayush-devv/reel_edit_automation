@@ -65,6 +65,16 @@ licences:
     aliases: ["^MIT$"]
     ml_indexing_ok: true
 
+  - id: apache-2.0
+    title: Apache License 2.0
+    family: permissive-code
+    url: https://www.apache.org/licenses/LICENSE-2.0
+    text: voxcpm-LICENSE.txt  # the full Apache-2.0 text as shipped by VoxCPM (only its copyright line is project-specific)
+    text_kind: pack-notice
+    aliases: ["^Apache[- ]2\\.0$", "^apache-2\\.0$"]
+    ml_indexing_ok: true
+    notes: Keep the project's LICENSE and any NOTICE file with redistributed code or weights. Outputs carry no licence terms of their own.
+
   - id: pexels
     title: Pexels License
     family: platform-content
@@ -120,3 +130,10 @@ sources:
   "Pixabay": {licence: pixabay-content}
   "client": {licence: client-supplied}
   "useAnimations": {licence: mit, notice: useanimations-LICENSE.txt}  # assets/lottie/useanimations, commit f7af6f5 (2026-10-30)
+  # Generated voice (listening test only so far). Weights ResembleAI/chatterbox @ 5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18 (MIT
+  # on the model card); code chatterbox-tts 0.1.7. Every output carries Resemble's PerTh watermark; the project is
+  # "retired research, no longer maintained". Built-in voice only: no cloning of anyone but the owner, with written consent.
+  "Chatterbox (Resemble AI)": {licence: mit, notice: chatterbox-LICENSE.txt}
+  # Generated voice (listening test only so far). Weights openbmb/VoxCPM2 @ 7936080b41163874f38610f46f438e2c0757f9fd
+  # (Apache-2.0 on the model card); code voxcpm 2.0.3 (Apache-2.0). No watermark. Built-in voice only: no cloning.
+  "VoxCPM2 (OpenBMB)": {licence: apache-2.0, notice: voxcpm-LICENSE.txt}

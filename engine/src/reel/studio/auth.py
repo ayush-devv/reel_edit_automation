@@ -14,7 +14,9 @@ import secrets
 from pathlib import Path
 from urllib.parse import parse_qs
 
-QUERY_TOKEN_PATHS = re.compile(r"^/api/(projects/[^/]+/(events|media/.+|package\.zip)|libraries/(sfx|music|broll)/[^/]+/media)$")
+QUERY_TOKEN_PATHS = re.compile(
+    r"^/api/(projects/[^/]+/(events|media/.+|package\.zip)|libraries/(sfx|music|broll)/[^/]+/media|listening/(sfx|music|voice)/media/.+)$"
+)
 
 
 def load_or_create_token(path: Path) -> str:

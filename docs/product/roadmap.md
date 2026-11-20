@@ -1079,6 +1079,22 @@ All five items are built and tested with fakes. Each item needs owner input befo
 
 **3c.2–3c.5 (generated SFX, music, voice/dubbing, lip-sync): not built, still gated** on the listening test (G2.5): a model must be downloaded, its licence row added, and the owner's blind votes must clear it. Dubbing also needs the speaker's written consent.
 
+**G2.5 listening test, first results (voice, 2026-11-20)**
+
+| Model | Result | Notes |
+|---|---|---|
+| **Chatterbox Multilingual** (Resemble AI, MIT, weights `5bb1f6ee…`) | **Clears for Hindi (Devanagari) and English.** Blind A/B against macOS `say`: won 3 of 3 and usable 3 of 3 (Hindi numbers, "ढाई करोड़", English CTA); the Hinglish pair has no vote yet | About 55 s per line on this Mac (MPS), most of it model load. **Hinglish in Latin script sounds like an English speaker reading Hindi; the same sentence in Devanagari sounded far better** (owner, not blind). No Tamil. Every output carries Resemble's PerTh watermark, and the project is no longer maintained |
+| VoxCPM2 (OpenBMB, Apache-2.0) | Not testable here | On MPS it runs in float32 (~9 GB) and swapped: 72 s per step, about 12 h per line. Needs a rented GPU |
+| Maya 2 (Apache-2.0 + Mimi CC-BY-4.0) | Not tried | 2.5B parameters, CUDA-only reference engine; expected to behave like VoxCPM2 here |
+| ZONOS3-Mini (Apache-2.0) | Deferred | The Python package does not support ZONOS3 yet, and every voice needs a reference clip (cloning: owner's own voice with written consent only) |
+
+What 3c.4 takes from this:
+- **Voice lines go to the model in Devanagari.** Claude rewrites Hinglish (Latin script) lines into Devanagari before synthesis; captions keep the original script.
+- **Before client use:** check more sentences (brand names, English words inside Hindi); record the watermark on the licence manifest.
+- **Tamil still has no local voice.**
+
+Set-up lives outside the repo, in `~/.cache/reel/generators/<model>/` (`gen.py` runner, offline, network refused); declarations in `~/.config/reel/generators.json`.
+
 ---
 
 ### Group 3c: free generative assets

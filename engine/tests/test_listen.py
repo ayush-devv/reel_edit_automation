@@ -86,6 +86,12 @@ def test_listening_routes(env, root):  # noqa: F811
     assert env["c"].post("/api/listening/music/vote", json={"pair": "x", "choice": "A"}).status_code == 400
     media = env["c"].get(f"/api/listening/music/media/{pair['A']}")
     assert media.status_code == 200 and media.content.startswith(b"RIFF")
+    from fastapi.testclient import TestClient
+
+    bare = TestClient(env["app"])  # an <audio> tag cannot send a header: the token rides in the query
+    assert bare.get(f"/api/listening/music/media/{pair['A']}?token={env['token']}").content.startswith(b"RIFF")
+    assert bare.get(f"/api/listening/music/media/{pair['A']}").status_code == 401
+    assert bare.get(f"/api/listening/music?token={env['token']}").status_code == 401  # only the media files take a query token
     assert env["c"].get("/api/listening/music/media/../../etc/passwd").status_code == 404
     assert env["c"].get("/api/listening/sfx/media/" + pair["A"]).status_code == 404  # another set's folder
     assert env["c"].post("/api/listening/music/prepare").status_code == 200
