@@ -909,6 +909,46 @@ All five items are built and tested with fakes. Each item needs owner input befo
 
 **Group 3a total:** about 4.5–5.5 days.
 
+#### Group 3a as built (2026-11-20)
+
+**3a.1 story check-in:**
+- **Code:**
+  - `reel/checkin.py`: build and answer.
+  - The `CHECKIN` stage and `edit.checkin_pipeline(base)`, working for ordinary and Clip Factory reels.
+  - `story_edit.reorder_story`.
+- **CLI:** `reel run … --story-checkin`, then `reel checkin --project <p> [--yes q1,q2] [--note "…"] [--approve] --continue`.
+- **Studio:**
+  - a "Check the story before the full edit" toggle;
+  - the `awaiting_story` status ("check the story");
+  - the check-in panel in the project header;
+  - `GET/POST /api/projects/{id}/checkin`;
+  - a notification.
+- **Changes from the plan:**
+  - Answers change only `story.json`: no finish plan exists yet at the stop.
+  - The client-facing review-link block and a brand-kit default are **not built**. The toggle is per project.
+
+**3a.2 client style memory:**
+- **Code:**
+  - `reel/client_memory.py`, writing `projects/.clients/<slug>.json`.
+  - Learning on "delivered" and on an owner "sendable" label. Withdrawing the approval forgets the reel, unless it is still delivered.
+  - The story and finish packs get the profile section.
+  - The story and finish hashes include the profile only when one exists.
+  - QA gate `client_style_drift` (warn).
+- **Studio:**
+  - a style card under Client in New edit;
+  - "Edit like <past reel>" (`match_project`, which becomes the reference reel);
+  - `GET /api/clients/{name}`.
+- **Real check:** waits on 3 or more delivered reels for one client.
+
+**3a.3 word-level edits:**
+- **Code:** `story_edit.cut_words` and adjust kind `story_words`; `TimelineView.story[id].words`; a "Cut words" row in Adjust → Story.
+- **Changes from the plan:** removals are whole words by index, so a cut inside a word can't happen, and no edge check was needed.
+
+**Tests:**
+- new `test_checkin.py` and `test_client_memory.py`;
+- additions to `test_studio_controls.py`;
+- web route tests for the check-in, the client card and word cuts.
+
 ---
 
 ### Group 3b: proving quality

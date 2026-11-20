@@ -55,6 +55,8 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
     if (input.broll_folder) form.append("broll_folder", input.broll_folder);
     if (input.preview_first) form.append("preview_first", "1");
     if (input.mode === "long") form.append("mode", "long");
+    if (input.story_checkin) form.append("story_checkin", "1");
+    if (input.match_project) form.append("match_project", input.match_project);
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${base}/api/projects`);
@@ -109,6 +111,9 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
     createReviewLink: (id, hours) => post(`/api/projects/${enc(id)}/review-links`, { hours }),
     revokeReviewLink: (id, linkId) => request("DELETE", `/api/projects/${enc(id)}/review-links/${enc(linkId)}`),
     label: (id, sendable, reason) => post(`/api/projects/${enc(id)}/label`, { sendable, reason }),
+    clientStyle: (client) => get(`/api/clients/${enc(client)}`),
+    checkin: (id) => get(`/api/projects/${enc(id)}/checkin`),
+    answerCheckin: (id, yes, note = "") => post(`/api/projects/${enc(id)}/checkin`, { yes, note }),
     clips: (id) => get(`/api/projects/${enc(id)}/clips`),
     makeClips: (id, ids, run = true) => post(`/api/projects/${enc(id)}/clips/make`, { ids, run }),
     libraries: () => get("/api/libraries"),

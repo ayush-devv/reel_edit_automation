@@ -176,6 +176,22 @@ describe("adjust validation display (FR-8, AC-12)", () => {
     expect((calls[0] as [string, string[]])[1].length).toBeGreaterThan(0);
   });
 
+  it("words can be cut out of a line in Adjust (3a.3)", async () => {
+    const api = createMockApi();
+    const calls: unknown[] = [];
+    const orig = api.adjust.bind(api);
+    api.adjust = async (id, kind, value) => {
+      calls.push([kind, value]);
+      return orig(id, kind, value);
+    };
+    render(<TestApp api={api} path={`/p/${HOLD}/adjust`} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Cut “almost”" }, T));
+    fireEvent.click(screen.getByRole("button", { name: "Cut “gave”" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply cut words" }));
+    await screen.findAllByText(/Applied/, undefined, T);
+    expect(calls[0]).toEqual(["story_words", { item: "k01", remove: [[1, 2]] }]);
+  });
+
   it("a cleared gate can be switched to block in the Quality lab (C3)", async () => {
     const api = createMockApi();
     render(<TestApp api={api} path="/studio/quality" />);
@@ -183,6 +199,38 @@ describe("adjust validation display (FR-8, AC-12)", () => {
     fireEvent.click(frozen);
     expect(await screen.findByRole("button", { name: /Frozen: block, switch to warn/ }, T)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Black: warn" })).toBeDisabled(); // not cleared by calibration
+  });
+
+  it("New edit shows the client's style and can match a past reel (3a.2)", async () => {
+    const api = createMockApi();
+    api.clientStyle = async (client) => ({
+      client, reels: [{ id: "glow-serum-testimonial", name: "Glow serum testimonial", why: "delivered", has_video: true }],
+      profile: { reels: 3, caption_family: "bold_pop", look: "warm", cuts_per_min: 21, length_s: 38, music_mood: "upbeat", hook_title: "card",
+                 recurring_settings: [{ kind: "music_gain_db", value: -20, reels: 2 }] },
+    });
+    render(<TestApp api={api} path="/new" />);
+    fireEvent.change(await screen.findByRole("textbox", { name: "Client" }, T), { target: { value: "DearMa" } });
+    expect(await screen.findByText(/from 3 approved reels/, undefined, T)).toBeInTheDocument();
+    expect(screen.getByText(/always: music gain db -20/)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "Match a past reel" }), { target: { value: "glow-serum-testimonial" } });
+    expect((screen.getByRole("combobox", { name: "Match a past reel" }) as HTMLSelectElement).value).toBe("glow-serum-testimonial");
+  });
+
+  it("a story check-in shows the plan and finishes the edit on approval (3a.1)", async () => {
+    const api = createMockApi();
+    const { id } = await api.createProject({ files: [], name: "Save first", brief: { project: "Save first" } as never, story_checkin: true });
+    let sent: unknown = null;
+    const orig = api.answerCheckin.bind(api);
+    api.answerCheckin = async (pid, yes, note) => {
+      sent = { yes, note };
+      return orig(pid, yes, note);
+    };
+    render(<TestApp api={api} path={`/p/${id}/live`} />);
+    expect(await screen.findByText("Check the story before the full edit", undefined, T)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Open with/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply and finish the edit" }));
+    await screen.findByRole("heading", { name: /Save first/ }, T);
+    expect(sent).toEqual({ yes: ["q1"], note: "" });
   });
 
   it("the listening test renders a set and takes blind votes (G2.5)", async () => {

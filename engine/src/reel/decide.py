@@ -129,6 +129,11 @@ def story_pack(inp: Inputs) -> str:
     lines.append(json.dumps(b.model_dump(exclude_none=True), indent=1, ensure_ascii=False) if b else "No client brief: make the strongest reel the footage allows.")
     if inp.brand:
         lines += ["", "# Brand kit", "", json.dumps(inp.brand.model_dump(exclude_none=True), indent=1, ensure_ascii=False)]
+    from reel import client_memory
+
+    style = client_memory.pack_md(client_memory.profile(inp.ws))
+    if style:
+        lines += ["", style]
     lines += ["", "# Length", "",
               f"Source footage: {inp.source_s:.1f} s in {len(inp.clips)} clip(s). Target for this reel: {lo:.0f}–{hi:.0f} s "
               f"(brief target capped to the footage). Length is a goal, not a rule: a tight reel beats a padded one.", ""]
@@ -228,8 +233,12 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
         lines.append(f"- `{r['id']}` {b.get('duration_ms', 0) / 1000:.1f} s · {b.get('shot', '?')}, {b.get('motion', '?')}, {b.get('mood', '')} — "
                      f"{b.get('description', b.get('name', ''))} ({b.get('source', 'library')})" + (f" — {'; '.join(notes)}" if notes else ""))
     lines.append("")
+    from reel import client_memory
     from reel.clipfactory import batch_style
 
+    client_style = client_memory.pack_md(client_memory.profile(inp.ws))
+    if client_style:
+        lines += [client_style]
     style = batch_style(inp.ws)
     if style and not (inp.brand and inp.brand.caption_family and inp.brand.look):
         lines += ["# This reel is one of a set from the same recording", "",

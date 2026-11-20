@@ -66,6 +66,53 @@ def test_story_lines_adjustment_through_the_api(env):
     assert env["c"].post("/api/projects/p1/adjust", json={"kind": "story_lines", "value": "k02"}).status_code == 400
 
 
+# ------------------------------------------------------------------ 3a.3 word-level edits
+
+
+def _words6():
+    from reel.schemas.perception import WordTable
+
+    return WordTable.model_validate({"language": "en", "words": [
+        {"i": i, "clip": "c01", "text": t, "start_us": i * 400_000, "end_us": i * 400_000 + 300_000}
+        for i, t in enumerate(["How", "much", "sugar", "is", "in", "here"])]})
+
+
+def test_cutting_words_splits_the_line_and_rebinds(tmp_path):
+    story, fin = _plans(make_project(tmp_path))
+    # k02 = words 3–5 ("is in here"), punch-in at word 4; cut word 4 → k02 (3) + k02b (5)
+    fin = fin.model_copy(update={"punch_ins": [fin.punch_ins[0].model_copy(update={"at_word": 5})],
+                                 "captions": fin.captions.model_copy(update={"emphasis_words": [2, 4]})})
+    s2, f2, meta = story_edit.cut_words(story, fin, "k02", [[4, 4]], _words6())
+    assert [(it.id, it.word_start, it.word_end, it.first_word) for it in s2.items[1:]] == [("k02", 3, 3, "is"), ("k02b", 5, 5, "here")]
+    assert f2.punch_ins[0].item == "k02b" and f2.captions.emphasis_words == [2] and meta["parts"] == 2 and meta["words_removed"] == 1
+    assert story_edit.summary(meta) == "Cut 1 word(s), the line is now 2 parts."
+    trimmed, _f, m2 = story_edit.cut_words(story, fin, "k02", [[3, 3]], _words6())  # trim the start: still one part
+    assert (trimmed.items[1].word_start, m2["parts"]) == (4, 1)
+    dropped = fin.model_copy(update={"punch_ins": [fin.punch_ins[0].model_copy(update={"at_word": 4})]})
+    _s3, f3, m3 = story_edit.cut_words(story, dropped, "k02", [[4, 4]], _words6())
+    assert f3.punch_ins == [] and m3["removed"] == {"punch_ins": 1}
+
+
+def test_cutting_words_refuses_bad_ranges(tmp_path):
+    story, fin = _plans(make_project(tmp_path))
+    for item, rng, msg in (("k02", [[0, 1]], "not all in line"), ("k02", [[3, 5]], "whole line"), ("k09", [[3, 3]], "unknown"), ("k02", [[5, 4]], "first word")):
+        with pytest.raises(story_edit.StoryEditError, match=msg):
+            story_edit.cut_words(story, fin, item, rng, _words6())
+
+
+def test_story_words_through_the_api(env):
+    ws = make_project(env["root"])
+    (ws / "source" / "manifest.json").write_text(json.dumps({"project_fps": "30/1", "clips": [{"id": "c01", "probe": {"duration_s": 3.0}}]}))
+    tl = env["c"].get("/api/projects/p1/timeline").json()
+    assert tl["story"]["k02"]["words"] == [[3, "is"], [4, "in"], [5, "here"]]
+    r = env["c"].post("/api/projects/p1/adjust", json={"kind": "story_words", "value": {"item": "k01", "remove": [[1, 1]]}})
+    assert r.status_code == 200, r.text
+    story, _fin = _plans(ws)
+    assert [it.id for it in story.items] == ["k01", "k01b", "k02"]
+    env["launcher"].finish("adjust")
+    assert env["c"].post("/api/projects/p1/adjust", json={"kind": "story_words", "value": {"item": "k02"}}).status_code == 400
+
+
 # ------------------------------------------------------------------ C3 gate switches
 
 

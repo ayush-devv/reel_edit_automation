@@ -28,6 +28,7 @@ PLAIN: dict[str, tuple[str, str]] = {
     "pace": ("Pace", "The cut rhythm is off from the reference reel: {detail}."),
     "static_stretch": ("Long unchanged stretch", "One stretch goes too long with no cut, punch-in or cutaway: {detail}."),
     "broll_repeat": ("Repeated cutaway", "The same (or a near-identical) b-roll clip appears twice: {detail}."),
+    "client_style_drift": ("Unlike this client's reels", "This reel looks different from the ones the client approved: {detail}."),
 }
 
 

@@ -13,6 +13,8 @@ export function badgeOf(p: Pick<ProjectSummary, "status" | "delivered_at">): Bad
       return "failed";
     case "awaiting_choice":
       return "hold"; // needs you: the client picks the hook look before the full render
+    case "awaiting_story":
+      return "hold"; // needs you: check the story before the finish pass and render (3a.1)
     default:
       return p.status;
   }
@@ -36,6 +38,7 @@ export const STAGE_LABEL: Record<string, string> = {
   perception: "Perception",
   tables: "Tables",
   mine: "Find reels",
+  checkin: "Story check-in",
   stock: "Stock b-roll",
   broll: "B-roll",
   reference: "Reference",

@@ -9,7 +9,7 @@ import { Button, cx, Empty, IconButton, Loading, Mono, Notice, StatusBadge, Text
 import { useLiveProject, type LiveProject } from "../../hooks/useLiveProject";
 import { useStatus } from "../../hooks/status";
 import { useQuery } from "../../hooks/useQuery";
-import { usd } from "../../lib/format";
+import { beatLabel, usd } from "../../lib/format";
 import { badgeOf, STAGE_LABEL } from "../../lib/status";
 import type { Project } from "../../api/types";
 
@@ -161,6 +161,71 @@ function HookChooser({ p, onPicked }: { p: Project; onPicked: () => void }) {
   );
 }
 
+/** 3a.1: the story in plain words before the finish pass and render; tick the suggestions you want, or write one. */
+function StoryCheckinPanel({ p, onDone }: { p: Project; onDone: () => void }) {
+  const api = useApi();
+  const q = useQuery(() => api.checkin(p.id), [api, p.id]);
+  const [yes, setYes] = useState<Set<string>>(new Set());
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const c = q.data;
+  if (!c) return null;
+  return (
+    <section aria-label="Check the story" className="border-b border-line-subtle px-8 py-5">
+      <p className="text-section text-fg-primary">Check the story before the full edit</p>
+      <p className="mb-3 text-meta text-fg-muted">
+        {c.summary} · {c.total_s.toFixed(0)} s of speech · nothing has been rendered yet, so changes here cost nothing.
+      </p>
+      <ol className="mb-3 space-y-1" aria-label="Story lines">
+        {c.lines.map((l, i) => (
+          <li key={l.id} className="flex gap-3 text-meta">
+            <span className="w-24 shrink-0 text-fg-muted">{i === 0 ? "Hook" : beatLabel(l.beat)} · {l.seconds.toFixed(1)} s</span>
+            <span className="text-fg-secondary">{l.text}</span>
+          </li>
+        ))}
+      </ol>
+      {c.warnings.map((w) => (
+        <p key={w} className="mb-2 text-meta text-st-hold">{w}</p>
+      ))}
+      {c.questions.length > 0 && (
+        <fieldset className="mb-3 space-y-1.5">
+          <legend className="mb-1 text-label text-fg-muted">Suggestions (tick the ones you want)</legend>
+          {c.questions.map((x) => (
+            <label key={x.id} className="flex items-start gap-2 text-meta text-fg-primary">
+              <input type="checkbox" className="mt-0.5 accent-signal" checked={yes.has(x.id)}
+                     onChange={() => setYes((s) => { const n = new Set(s); if (n.has(x.id)) n.delete(x.id); else n.add(x.id); return n; })} />
+              <span>{x.text} <span className="text-fg-muted">({x.why})</span></span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <TextInput aria-label="Anything else to change in the story" value={note} onChange={(e) => setNote(e.target.value)}
+                   placeholder="Anything else? (optional, e.g. “end on the payoff”)" className="w-96" maxLength={2000} />
+        <Button
+          variant="primary"
+          busy={busy}
+          onClick={async () => {
+            setBusy(true);
+            setErr(null);
+            try {
+              await api.answerCheckin(p.id, [...yes], note);
+              onDone();
+            } catch (e) {
+              setErr(friendlyError(e));
+              setBusy(false);
+            }
+          }}
+        >
+          {yes.size || note.trim() ? "Apply and finish the edit" : "Looks good: finish the edit"}
+        </Button>
+      </div>
+      {err && <p className="mt-2 text-label text-st-fail">{err}</p>}
+    </section>
+  );
+}
+
 export default function ProjectLayout() {
   const [renaming, setRenaming] = useState(false);
   const { id = "" } = useParams();
@@ -227,6 +292,7 @@ export default function ProjectLayout() {
             </div>
           </header>
           {p.status === "awaiting_choice" && p.preview && <HookChooser p={p} onPicked={live.reload} />}
+          {p.status === "awaiting_story" && <StoryCheckinPanel p={p} onDone={live.reload} />}
           <nav aria-label="Project" className="flex h-11 shrink-0 gap-2 border-b border-line-subtle px-6">
             {(p.kind === "source" ? SOURCE_TABS : TABS).map((t) => (
               <NavLink

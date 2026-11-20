@@ -81,6 +81,20 @@ def pace_results(pace: dict) -> list[qa.GateResult]:
     return qa.apply_modes(qa.pace_gates(pace["ours"], pace.get("reference")))
 
 
+def client_style_results(ws: Workspace, cuts_per_min: float | None) -> list[qa.GateResult]:
+    """3a.2: does this reel look like the ones this client approved? Warns on two or more departures."""
+    from reel import client_memory
+
+    p = client_memory.profile(ws)
+    fp = ws.path("plan", "finish.json")
+    if not p or not fp.exists():
+        return qa.apply_modes([qa.GateResult("client_style_drift", True, detail="no approved reels for this client yet")])
+    d = client_memory.drift(p, json.loads(fp.read_text()), cuts_per_min)
+    return qa.apply_modes([qa.GateResult("client_style_drift", len(d) < 2, detail="; ".join(d) or f"consistent with {p['reels']} approved reel(s)",
+                                         fixable=True, fix_hint="Match the client's usual captions, look and pace unless the brief asks for a change.",
+                                         measured={"departures": d, "profile_reels": p["reels"]})])
+
+
 def pace_lines(pace: dict | None, gates: list[qa.GateResult]) -> list[str]:
     if not pace:
         return []
@@ -198,6 +212,7 @@ def run(ws: Workspace, options: dict, caller=claude_call.call) -> dict:
     gates += cut_gates
     pace = pace_numbers(ws, tl, options)
     gates += pace_results(pace)
+    gates += client_style_results(ws, (pace.get("ours") or {}).get("cuts_per_min"))
     atomic_write_json(ws.path("qa", "pace.json"), pace)
     sheet_paths = final_sheets(ws, tl)
     atomic_write_bytes(ws.path("qa", "review_input.md"), review_input(ws, tl, story, brief, gates, sheet_paths, strips, pace).encode())

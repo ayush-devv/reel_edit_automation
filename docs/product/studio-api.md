@@ -127,6 +127,9 @@ type JobRef = { job: Job };   // what every POST that starts work returns; SSE `
 | PUT | /api/lab/gates/{gate} | `{ mode: "warn" \| "block" }` | `{ gate, mode, recomputed }` (C3). Block only when calibration's `promote_to_block` is true (or the code already blocks it), else **409**. Stored in `~/.config/reel/gates.json`; every idle project's verdict is re-decided from its stored `qa/gates.json` + `qa/review.json`, with **no Reviewer call** |
 | GET | /api/projects/{id}/clips | — | Clip Factory board (G2.2): `{ source_s, yield_cap, target_s, score_label: "Editor's estimate", score_rule, candidates: {id, rank, title, hook_text, family, scores, score, duration_s, status, why, reason, standalone_risks, warnings, excerpt, project: {id, status} \| null}[], estimate_per_reel: {low_usd, high_usd, from_edits} \| null }`. 404 before the source is mined |
 | POST | /api/projects/{id}/clips/make | `{ ids: string[], run?: boolean = true }` | `{ made: string[], jobs: Job[] }`: one reel project per candidate (`<source>__<id>`, files shared by hard link), each edit queued when `run`. Picks are logged to `mine/picks.jsonl` |
+| GET | /api/projects/{id}/checkin | — | 3a.1 story check-in `{ status: "open" \| "approved", summary, hook, lines, total_s, left_out, questions: {id, kind: "hook" \| "take" \| "drop", text, why}[], warnings }`; 404 when the edit has none. While open, the project status is `awaiting_story` |
+| POST | /api/projects/{id}/checkin | `{ yes: string[], note?: string }` | `JobRef`: `reel checkin --approve --continue` applies the accepted questions (and the note: 1 Claude call), approves the story and finishes the edit. 409 when no check-in is open, 400 for an unknown question |
+| GET | /api/clients/{name} | — | 3a.2 `{ client, profile \| null, reels: {id, name, why, has_video}[] }`: the client's style from reels marked delivered or labelled sendable (`projects/.clients/<slug>.json`) |
 | GET | /api/listening/{set} | `set` = `sfx \| music \| voice` | `{ set, prompts, pairs: {id, prompt, A, B, done}[], summary }` (G2.5): blind pairs, no model names; `summary` names models only with their votes |
 | POST | /api/listening/{set}/prepare | — | `JobRef` (`reel listen prepare`) |
 | POST | /api/listening/{set}/vote | `{ pair, choice: "A" \| "B" \| "tie", usable_a, usable_b }` | 204 |
@@ -163,11 +166,12 @@ type TimelineView = {
 | `grain` | number 0–0.6 |
 | `vignette` | number 0–0.7 |
 | `max_pause_ms` | integer: 0, or 300–3000 (a **story** setting, `plan/story.json`, validated with `validate_story` too) |
+| `story_words` | `{ item, remove: [[first, last], …] }` (3a.3): cut words out of one kept line; it splits into `k07`, `k07b`… and attached elements follow their words (`TimelineView.story[id].words` lists `[index, text]`) |
 | `story_lines` | the kept item ids in their new order; an id left out is dropped (C4). Finish elements bound to a dropped item go with it (`note` counts them); whole-reel graphics move to the new opener; 422 with `hint` "describe it in Revise" when the finish no longer fits |
 
 Numbers must be JSON numbers (a string is 400). Every applied adjustment is logged to `plan/adjustments.jsonl`; a later chat revision is told to keep the ones still in force and warns (`adjustment_reverted`) when it changes one the request doesn't mention. Not available yet: trimming inside a line (AC-12).
 
-`POST /api/projects` also takes `mode=long`: a long recording that is analysed once and mined (`reel run --mine`); the project's `kind` is `source`, its status `source` once the board is ready. Reel projects made from it have `kind: "clip"` and `parent`.
+`POST /api/projects` also takes `story_checkin=1` (3a.1: stop after the story pass) and `match_project=<id>` (3a.2: that project's finished reel becomes the reference to match; 400 when it has none). It also takes `mode=long`: a long recording that is analysed once and mined (`reel run --mine`); the project's `kind` is `source`, its status `source` once the board is ready. Reel projects made from it have `kind: "clip"` and `parent`.
 
 ### Package (FR-9)
 `PackageFile = { path, label, kind, bytes, thumb }`:

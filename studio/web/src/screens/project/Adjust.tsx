@@ -181,6 +181,49 @@ function StoryLines({ tl, ctx, onApplied }: { tl: TimelineView; ctx: { families:
   );
 }
 
+/** Consecutive word indices → [first, last] ranges. */
+export function toRanges(ids: number[]): [number, number][] {
+  const out: [number, number][] = [];
+  for (const i of [...ids].sort((a, b) => a - b)) {
+    const last = out.at(-1);
+    if (last && i === last[1] + 1) last[1] = i;
+    else out.push([i, i]);
+  }
+  return out;
+}
+
+/** 3a.3: strike words in one kept line; the line splits around them and what was attached follows its words. */
+function WordCut({ tl, ctx, onApplied }: { tl: TimelineView; ctx: { families: string[]; tracks: string[] }; onApplied: () => void }) {
+  const ids = storyBlocks(tl).map((b) => b.id).filter((id) => tl.story[id]?.words?.length);
+  const [item, setItem] = useState(ids[0] ?? "");
+  const [cut, setCut] = useState<Set<number>>(new Set());
+  const words = tl.story[item]?.words ?? [];
+  const value = { item, remove: toRanges([...cut]) };
+  if (!ids.length) return null;
+  return (
+    <Row title="Cut words" hint="Pick a line, click the words to cut (click again to keep). Cutting the whole line isn't allowed here: drop it above."
+         kind="story_words" value={value} dirty={cut.size > 0 && cut.size < words.length} ctx={ctx} onApplied={onApplied}>
+      <Select aria-label="Line to cut words from" value={item} onChange={(e) => { setItem(e.target.value); setCut(new Set()); }} className="mb-2 h-8 w-72">
+        {ids.map((id) => (
+          <option key={id} value={id}>{id} · {(tl.story[id]?.text ?? "").slice(0, 60)}</option>
+        ))}
+      </Select>
+      <p className="flex flex-wrap gap-1" aria-label="Words of the line">
+        {words.map(([i, w]) => {
+          const off = cut.has(i);
+          return (
+            <button key={i} type="button" aria-pressed={off} aria-label={`${off ? "Keep" : "Cut"} “${w}”`}
+                    onClick={() => setCut((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n; })}
+                    className={cx("rounded-control px-1.5 py-0.5 text-meta", off ? "bg-st-fail/20 text-fg-muted line-through" : "bg-bg-raised text-fg-primary hover:bg-bg-high")}>
+              {w}
+            </button>
+          );
+        })}
+      </p>
+    </Row>
+  );
+}
+
 function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
   const a = tl.adjust;
   const family = a.caption_family ?? tl.timeline.captions?.family ?? "";
@@ -306,6 +349,7 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
         </Panel>
         <Panel title="Story">
           <StoryLines tl={tl} ctx={ctx} onApplied={() => undefined} />
+          <WordCut tl={tl} ctx={ctx} onApplied={() => undefined} />
         </Panel>
         <Panel title="Pacing">
           <Row title="Punch-ins" hint={base.punchOff ? "None in this edit. Ask the Editor (Revise) to add some." : `${a.punch_ins} in this edit.`} kind="punch_ins_off" value={true} dirty={v.punchOff && !base.punchOff} ctx={ctx} onApplied={done(["punchOff"])}>

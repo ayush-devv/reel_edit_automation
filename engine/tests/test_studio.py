@@ -174,7 +174,7 @@ def test_project_list_and_detail(env):
     assert d["media"]["final"] == "render/final.mp4"
 
     tl = env["c"].get("/api/projects/p1/timeline").json()
-    assert tl["story"]["k01"] == {"beat": "hook", "text": "How much sugar"}
+    assert tl["story"]["k01"] == {"beat": "hook", "text": "How much sugar", "words": [[0, "How"], [1, "much"], [2, "sugar"]]}
     assert tl["timeline"]["effects"] == [] and tl["timeline"]["grade"]["grain"] == 0.0  # defaults filled in
     r = tl["reasons"]  # keyed like the layer blocks: plan item, punch-in clip, dialogue clip, singletons
     assert r["k01"].startswith("opens on the question") and "Hook: a question hook" in r["k01"]

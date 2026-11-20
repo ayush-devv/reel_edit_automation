@@ -21,7 +21,36 @@ export const STAGES = [
 export type StageName = (typeof STAGES)[number];
 
 export type StageStatus = "pending" | "queued" | "running" | "done" | "failed" | "skipped";
-export type ProjectStatus = "draft" | "queued" | "running" | "sendable" | "hold" | "failed" | "awaiting_choice" | "source";
+export type ProjectStatus = "draft" | "queued" | "running" | "sendable" | "hold" | "failed" | "awaiting_choice" | "source" | "awaiting_story";
+
+/** 3a.2 per-client style memory, learned from reels the owner delivered or labelled sendable. */
+export interface ClientStyle {
+  client: string;
+  profile: {
+    reels: number;
+    caption_family: string | null;
+    look: string | null;
+    cuts_per_min: number | null;
+    length_s: number | null;
+    music_mood: string | null;
+    hook_title: string | null;
+    recurring_settings: { kind: string; value: unknown; reels: number }[];
+  } | null;
+  reels: { id: string; name: string; why: string; has_video: boolean }[];
+}
+
+/** 3a.1 story check-in: the plan in plain words before the finish pass and render are paid for. */
+export interface StoryCheckin {
+  status: "open" | "approved";
+  summary: string;
+  genre: string;
+  hook: { item: string; text: string };
+  lines: { id: string; beat: string; seconds: number; text: string }[];
+  total_s: number;
+  left_out: { seg_id: string; seconds: number; text: string }[];
+  questions: { id: string; kind: "hook" | "take" | "drop"; text: string; why: string }[];
+  warnings: string[];
+}
 
 /** Clip Factory (G2.2): a long recording analysed once ("source"), reels made from it ("clip"), or an ordinary reel. */
 export type ProjectKind = "reel" | "source" | "clip";
@@ -496,7 +525,7 @@ export interface TimelineView {
   /** Keyed like the layer blocks: plan item (k01), punch-in clip (v_k04), dialogue clip (a_k04), sfx/pip/effect/graphic id, hook_title, grade, captions, music. */
   reasons: Record<string, string>;
   /** Kept lines: item id → beat and spoken text. */
-  story: Record<string, { beat: string; text: string }>;
+  story: Record<string, { beat: string; text: string; words?: [number, string][] }>;
   adjust: AdjustState;
 }
 
@@ -539,7 +568,9 @@ export type AdjustKind =
   | "vignette"
   | "max_pause_ms"
   /** C4: the kept line ids in their new order; a line left out is dropped (with what was attached to it). */
-  | "story_lines";
+  | "story_lines"
+  /** 3a.3: `{ item, remove: [[first word, last word], …] }`: cut words out of one kept line. */
+  | "story_words";
 
 export interface NotesPreview {
   /** anchored[i] belongs to the i-th non-empty line sent. */

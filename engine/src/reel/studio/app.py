@@ -30,8 +30,8 @@ from reel.workspace import Workspace, atomic_write_bytes, atomic_write_json
 
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".mkv", ".webm"}  # FR-2
 ADJUST_KINDS = ("caption_family", "caption_token", "look", "look_strength", "music_track", "music_gain_db", "sfx_off",
-                "punch_ins_off", "grain", "vignette", "max_pause_ms", "story_lines")
-STORY_KINDS = ("max_pause_ms", "story_lines")  # adjustments that change plan/story.json
+                "punch_ins_off", "grain", "vignette", "max_pause_ms", "story_lines", "story_words")
+STORY_KINDS = ("max_pause_ms", "story_lines", "story_words")  # adjustments that change plan/story.json
 PROJECT_JOBS = ("run", "retry", "revise", "notes", "proof", "adjust", "restore", "deliver")
 GLOBAL_SLOTS = ("_lab", "_library")  # job slots that are not projects
 
@@ -93,6 +93,11 @@ class PreviewChoice(BaseModel):
 
 class TemplatesBody(BaseModel):
     templates: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+class CheckinBody(BaseModel):
+    yes: list[str] = Field(default_factory=list, max_length=10)
+    note: str = Field(default="", max_length=2000)
 
 
 class VoteBody(BaseModel):
@@ -280,6 +285,12 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         reference = str(form.get("reference_url") or "").strip().removeprefix("file://") or None
         if reference and (re.match(r"^[a-z]+://", reference) or not Path(reference).expanduser().is_file()):
             raise ApiError(400, "reference_url must be a local video file (links are not supported)")
+        match = str(form.get("match_project") or "").strip()
+        if match:  # 3a.2 "edit like this past reel": its final becomes the reference reel
+            past = projects.project_dir(s.projects_root, match)
+            if past is None or not (past / "export" / "reel.mp4").exists():
+                raise ApiError(400, f"no finished reel in project {match!r} to match")
+            reference = str(past / "export" / "reel.mp4")
 
         pid = f"{re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')[:48] or 'reel'}-{secrets.token_hex(2)}"
         ws = Workspace.create(s.projects_root / pid).root
@@ -309,9 +320,10 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
                 "reference": str(Path(reference).expanduser().resolve()) if reference else None, "language": None,
                 "stock": str(form.get("stock") or "").strip().lower() in ("1", "true", "on"),
                 "preview_first": str(form.get("preview_first") or "").strip().lower() in ("1", "true", "on"),
+                "story_checkin": str(form.get("story_checkin") or "").strip().lower() in ("1", "true", "on"),
                 "broll": broll_folder}
         if str(form.get("mode") or "").strip() == "long":  # Clip Factory (G2.2): analyse once, then a board of candidate reels
-            opts = {k: v for k, v in opts.items() if k != "preview_first"} | {"mine": True}
+            opts = {k: v for k, v in opts.items() if k not in ("preview_first", "story_checkin")} | {"mine": True}
             projects.update_studio_meta(ws, kind="source")
         job = submit(pid, "run", cli(*_run_args(ws, opts)), ws=ws, est_gb=estimate_run_gb(footage or None),
                      label="Find reels" if opts.get("mine") else "Edit")
@@ -408,6 +420,36 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         opts = {k: v for k, v in opts.items() if k != "preview_first"}
         return {"job": submit(pid, "run", cli(*_run_args(ws, opts)), ws=ws, est_gb=estimate_run_gb(footage), label=f"Edit with look {body.option}")}
 
+    @app.get("/api/projects/{pid}/checkin")
+    def checkin_get(pid: str):
+        from reel import checkin
+
+        c = checkin.load(Workspace(ws_of(pid)))
+        if c is None:
+            raise ApiError(404, "this edit has no story check-in")
+        return c
+
+    @app.post("/api/projects/{pid}/checkin")
+    def checkin_answer(pid: str, body: CheckinBody):
+        """3a.1: accept some of the questions (and/or a note), approve the story, and finish the edit as one job."""
+        from reel import checkin
+
+        ws = ws_of(pid)
+        c = checkin.load(Workspace(ws))
+        if not c or c.get("status") != "open":
+            raise ApiError(409, "there is no open story check-in for this project")
+        unknown = [q for q in body.yes if q not in {x["id"] for x in c["questions"]}]
+        if unknown:
+            raise ApiError(400, f"unknown question(s): {', '.join(unknown)}")
+        busy(pid, ws)
+        args = ["checkin", "--project", ws, "--approve", "--continue"]
+        if body.yes:
+            args += ["--yes", ",".join(body.yes)]
+        if body.note.strip():
+            args += ["--note", body.note.strip()]
+        footage = projects.studio_meta(ws).get("footage_s")
+        return {"job": submit(pid, "run", cli(*args), ws=ws, est_gb=estimate_run_gb(footage), label="Story approved: finishing the edit")}
+
     @app.post("/api/projects/{pid}/cancel", status_code=204)
     def cancel(pid: str):
         ws_of(pid)
@@ -498,7 +540,7 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         baseline(ws)
         if body.kind in STORY_KINDS:  # only then: a re-dumped story.json changes bytes, which the finish stage fingerprints
             atomic_write_json(ws / "plan" / "story.json", story.model_dump(mode="json"))
-            if body.kind == "story_lines":  # the Reviewer reads the read-back: keep it in step with the new order
+            if body.kind in ("story_lines", "story_words"):  # the Reviewer reads the read-back: keep it in step with the new story
                 from reel import decide
 
                 try:
@@ -603,13 +645,31 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
     def label(pid: str, body: LabelBody):
         ws = ws_of(pid)
         atomic_write_json(ws / "qa" / "owner_label.json", {"sendable": body.sendable, "note": body.reason})  # as `reel label`
+        delivered = bool(projects.studio_meta(ws).get("delivered"))
+        _client_memory(ws, "owner_sendable" if body.sendable else ("delivered" if delivered else None))
         return Response(status_code=204)
 
     @app.post("/api/projects/{pid}/delivered", status_code=204)
     def delivered(pid: str, body: DeliveredBody | None = None):
         body = body or DeliveredBody()
-        projects.update_studio_meta(ws_of(pid), delivered=time.time() if body.delivered else None)
+        ws = ws_of(pid)
+        projects.update_studio_meta(ws, delivered=time.time() if body.delivered else None)
+        label = projects.read_json(ws / "qa" / "owner_label.json") or {}
+        _client_memory(ws, "delivered" if body.delivered else ("owner_sendable" if label.get("sendable") else None))
         return Response(status_code=204)
+
+    @app.get("/api/clients/{name}")
+    def client_style(name: str):
+        """3a.2: the client's style profile from approved reels, and those reels (for "match a past reel")."""
+        from reel import client_memory
+
+        s_ = client_memory.slug(name)
+        f = s.projects_root / ".clients" / f"{s_}.json" if s_ else None
+        data = client_memory._read(f)
+        reels = sorted(data.get("reels", {}).values(), key=lambda r: -r.get("approved", 0))
+        return {"client": data.get("client") or name, "profile": client_memory.profile_of(data),
+                "reels": [{"id": r["project"], "name": projects.studio_meta(s.projects_root / r["project"]).get("name") or r["project"],
+                           "why": r.get("why"), "has_video": (s.projects_root / r["project"] / "export" / "reel.mp4").exists()} for r in reels]}
 
     # -------------------------------------------------------------- libraries, brands
 
@@ -945,6 +1005,22 @@ def _show(value) -> str:
     return str(value)
 
 
+def _client_memory(ws: Path, why: str | None) -> None:
+    """3a.2: learn from an approved reel (delivered / owner-sendable), or forget it when the approval is withdrawn.
+    Never fails the request: the memory is derived and rebuildable."""
+    from reel import client_memory
+
+    try:
+        if why:
+            client_memory.learn(Workspace(ws), why)
+        else:
+            client_memory.forget(Workspace(ws))
+    except Exception:  # noqa: BLE001
+        import logging
+
+        logging.getLogger(__name__).exception("client memory not updated for %s", ws.name)
+
+
 def _log_adjustment(ws: Path, kind: str, value) -> None:
     """Kept adjustments (G2.4): a later chat revision is told about them and warns if it undoes one."""
     from reel import adjustments
@@ -958,6 +1034,8 @@ def _run_args(ws: Path, opts: dict, force: str | None = None) -> list[str]:
         args = ["run", "--project", str(ws)]
         if opts.get("skip_review"):
             args.append("--skip-review")
+        if opts.get("story_checkin"):
+            args.append("--story-checkin")
         return args + (["--force", force] if force else [])
     args = ["run", opts["input"], "--project", str(ws)]
     if opts.get("mine"):
@@ -975,6 +1053,8 @@ def _run_args(ws: Path, opts: dict, force: str | None = None) -> list[str]:
         args.append("--stock")
     if opts.get("preview_first"):
         args.append("--preview-first")
+    if opts.get("story_checkin"):
+        args.append("--story-checkin")
     if opts.get("skip_review"):
         args.append("--skip-review")
     if force:
@@ -1095,6 +1175,18 @@ def _apply_adjust(ws: Path, kind: str, value):
         except story_edit.StoryEditError as exc:
             raise ApiError(400, str(exc)) from exc
         note = story_edit.summary(meta)
+    elif kind == "story_words":  # 3a.3: cut words out of one kept line; it splits around them
+        from reel import story_edit
+
+        ok = isinstance(value, dict) and isinstance(value.get("item"), str) and isinstance(value.get("remove"), list) and value["remove"] \
+            and all(isinstance(r, list) and len(r) == 2 and all(isinstance(x, int) for x in r) for r in value["remove"])
+        if not ok:
+            raise ApiError(400, "story_words takes {item, remove: [[first word, last word], …]}")
+        try:
+            story, fin, meta = story_edit.cut_words(story, fin, value["item"], value["remove"], project.word_table(w))
+        except story_edit.StoryEditError as exc:
+            raise ApiError(400, str(exc)) from exc
+        note = story_edit.summary(meta)
 
     words = project.word_table(w)
     manifest = projects.read_json(ws / "source" / "manifest.json", {}) or {}
@@ -1106,5 +1198,5 @@ def _apply_adjust(ws: Path, kind: str, value):
         issues += validate_finish(fin, story, words, idx)
     if errors(issues):
         raise ApiError(422, "the engine's validator refused this change", None, issues=[i.as_dict() for i in errors(issues)],
-                       **({"hint": "This change needs the Editor: describe it in Revise instead."} if kind == "story_lines" else {}))
+                       **({"hint": "This change needs the Editor: describe it in Revise instead."} if kind in ("story_lines", "story_words") else {}))
     return story, fin, note

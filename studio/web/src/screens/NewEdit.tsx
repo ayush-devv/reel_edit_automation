@@ -26,6 +26,43 @@ function TF({ label, value, onChange, hint, placeholder, error, required }: { la
   );
 }
 
+/** 3a.2: what this client's approved reels looked like, and "match a past reel". */
+function ClientStyleCard({ client, match, onMatch }: { client: string; match: string; onMatch: (id: string) => void }) {
+  const api = useApi();
+  const [name, setName] = useState(client.trim());
+  useEffect(() => {
+    const t = setTimeout(() => setName(client.trim()), 400);
+    return () => clearTimeout(t);
+  }, [client]);
+  const q = useQuery(() => (name ? api.clientStyle(name) : Promise.resolve(null)), [api, name]);
+  const s = q.data;
+  if (!s || (!s.profile && !s.reels.length)) return null;
+  const p = s.profile;
+  return (
+    <div className="col-span-2 rounded-control border border-line-subtle bg-bg-raised p-3" aria-label="This client's style">
+      {p && (
+        <p className="text-meta text-fg-secondary">
+          <span className="text-fg-primary">{s.client}’s style</span> from {p.reels} approved reel{p.reels === 1 ? "" : "s"}: captions{" "}
+          {prettyId(p.caption_family ?? "—")} · look {p.look ?? "—"} · about {p.cuts_per_min ?? "—"} cuts/min · {p.length_s ? `${Math.round(p.length_s)} s` : "—"}
+          {p.recurring_settings.length > 0 && <> · always: {p.recurring_settings.map((r) => `${r.kind.replace(/_/g, " ")} ${String(r.value)}`).join(", ")}</>}.
+          The Editor follows it unless the brief says otherwise.
+        </p>
+      )}
+      {s.reels.some((r) => r.has_video) && (
+        <label className="mt-2 flex items-center gap-2 text-meta text-fg-secondary">
+          Edit like
+          <Select aria-label="Match a past reel" value={match} onChange={(e) => onMatch(e.target.value)} className="h-8 w-64">
+            <option value="">their usual style</option>
+            {s.reels.filter((r) => r.has_video).map((r) => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </Select>
+        </label>
+      )}
+    </div>
+  );
+}
+
 function TA({ label, value, onChange, hint, placeholder, rows = 3 }: { label: string; value: string; onChange: (v: string) => void; hint?: ReactNode; placeholder?: string; rows?: number }) {
   const id = useFieldId();
   return (
@@ -68,6 +105,8 @@ export default function NewEdit() {
   const [brollFolder, setBrollFolder] = useState("");
   const [previewFirst, setPreviewFirst] = useState(false);
   const [longRecording, setLongRecording] = useState(false);
+  const [storyCheckin, setStoryCheckin] = useState(false);
+  const [matchProject, setMatchProject] = useState("");
   const [dragOver, setDragOver] = useState(false);
 
   // Brief templates live in the engine (~/.config/reel/templates.json); a browser's old copy is moved there once.
@@ -142,7 +181,8 @@ export default function NewEdit() {
     setBusy(true);
     try {
       const input = { files, name: form.name.trim(), brief: toBrief(form), brand: brand || null, reference_url: refUrl.trim() || null, stock, broll_folder: brollFolder.trim() || null,
-                      preview_first: previewFirst && !longRecording, mode: longRecording ? ("long" as const) : ("reel" as const) };
+                      preview_first: previewFirst && !longRecording, mode: longRecording ? ("long" as const) : ("reel" as const),
+                      story_checkin: storyCheckin && !longRecording, match_project: matchProject || null };
       const { id } = await api.createProject(input, (loaded, total) =>
         setSent({ loaded, total }),
       );
@@ -282,6 +322,13 @@ export default function NewEdit() {
                 description="For a podcast, webinar or talk: it is analysed once, then the Clip Miner proposes standalone reels. You pick which ones to make; each becomes its own project."
               />
               <Toggle
+                checked={storyCheckin && !longRecording}
+                disabled={longRecording}
+                onChange={setStoryCheckin}
+                label="Check the story before the full edit"
+                description="Stops after the Editor picks the hook and lines: you see them in plain words, tick suggestions or write a change, then the full edit runs. Saves a render on a story you'd reject."
+              />
+              <Toggle
                 checked={previewFirst && !longRecording}
                 disabled={longRecording}
                 onChange={setPreviewFirst}
@@ -306,6 +353,7 @@ export default function NewEdit() {
             <div className="grid grid-cols-2 gap-x-4 gap-y-5">
               <TF label="Project name" required value={form.name} onChange={(v) => set("name", v)} error={touched ? errors.name : undefined} placeholder="e.g. Glow serum testimonial" />
               <TF label="Client" value={form.client} onChange={(v) => set("client", v)} placeholder="e.g. DearMa Skincare" />
+              {form.client.trim() && <ClientStyleCard client={form.client} match={matchProject} onMatch={setMatchProject} />}
               <SF label="Goal" value={form.goal} onChange={(v) => set("goal", v)}>
                 <option value="">Let the Editor decide</option>
                 {GOALS.map((g) => (

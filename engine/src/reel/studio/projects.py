@@ -27,7 +27,7 @@ ID_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 MEDIA_PREFIXES = ("render/", "export/", "qa/sheets/", "qa/cuts/", "versions/")  # the NLE package is export/package/
 COVER_RE = re.compile(r"^cover[^/]*\.jpg$")
 STUDIO_FILE = "studio.json"
-ATTENTION_ORDER = {"hold": 0, "awaiting_choice": 0, "source": 1, "failed": 1, "sendable": 2, "running": 3, "queued": 4, "draft": 5, "delivered": 6}
+ATTENTION_ORDER = {"hold": 0, "awaiting_choice": 0, "awaiting_story": 0, "source": 1, "failed": 1, "sendable": 2, "running": 3, "queued": 4, "draft": 5, "delivered": 6}
 ANALYSIS_STAGES = ("ingest", "mezzanine", "perception", "tables")
 SOURCE_STAGES = [*ANALYSIS_STAGES, "mine"]  # a Clip Factory source: analysed once, then mined (G2.2)
 
@@ -172,6 +172,10 @@ def summary(ws: Path, job: str | None = None) -> dict:
     if status == "draft" and pv and not pv.get("chosen"):  # a --preview-first run ended at the hook previews (G1.6)
         status = "awaiting_choice"
         attention.append("pick the hook look (A/B)")
+    ci = read_json(ws / "plan" / "checkin.json")
+    if status == "draft" and ci and ci.get("status") == "open":  # a --story-checkin run ended after the story pass (3a.1)
+        status = "awaiting_story"
+        attention.append("check the story")
     source = is_source(ws)
     if source and status == "draft" and (ws / "mine" / "candidates.json").exists():
         status = "source"
@@ -658,7 +662,9 @@ def timeline_view(ws: Path) -> dict | None:
     words = words_text(ws)
     story = read_json(ws / "plan" / "story.json", {}) or {}
     fin = read_json(ws / "plan" / "finish.json", {}) or {}
-    items = {it["id"]: {"beat": it.get("beat") or "", "text": _line(words, it, 10_000)} for it in story.get("items", [])}
+    items = {it["id"]: {"beat": it.get("beat") or "", "text": _line(words, it, 10_000),  # words: 3a.3 word-level edits
+                        "words": [[i, words.get(i, "")] for i in range(it["word_start"], it["word_end"] + 1)]}
+             for it in story.get("items", [])}
 
     reasons: dict[str, str] = {}
 

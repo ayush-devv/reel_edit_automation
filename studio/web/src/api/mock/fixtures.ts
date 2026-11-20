@@ -368,7 +368,8 @@ export function makeTimeline(): TimelineView {
       captions: "Editorial kinetic: premium, conversational; emphasis on the 7 words that carry the story.",
       a_voice: "Dialogue, levelled to −16 LUFS before the mix.",
     },
-    story: Object.fromEntries(items.map((it) => [it.id, { beat: it.beat, text: it.text }])),
+    story: Object.fromEntries(items.map((it, n) => [it.id, { beat: it.beat, text: it.text,
+      words: it.text.split(" ").map((w, k) => [n * 100 + k, w] as [number, string]) }])),
     adjust: {
       caption_family: "editorial_kinetic",
       caption_tokens: { emph_color: "#FF5FA2" },

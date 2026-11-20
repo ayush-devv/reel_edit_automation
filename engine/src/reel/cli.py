@@ -38,15 +38,63 @@ def _print_state(state: dict, ws) -> None:
 CARRIED_OPTIONS = ("deliverables",)
 
 
+def _print_checkin(ws) -> None:
+    from reel import checkin
+
+    c = checkin.load(ws)
+    if not c or c.get("status") != "open":
+        return
+    print(f"\nStory check-in — {c['summary']} ({c['total_s']} s)\nHook: “{c['hook']['text']}”")
+    for line in c["lines"]:
+        print(f"  {line['id']:6} {line['seconds']:5.1f} s  {line['beat']:8} {line['text']}")
+    for w in c["warnings"]:
+        print(f"warning: {w}")
+    for q in c["questions"]:
+        print(f"  [{q['id']}] {q['text']}")
+    print(f"\nanswer with `reel checkin --project {ws.root} [--yes q1,q2] [--note \"…\"] --continue`")
+
+
+def _cmd_checkin(args: argparse.Namespace) -> int:
+    """3a.1: answer the story check-in (accepted question ids, an optional note), then optionally finish the edit."""
+    from reel import autofix, checkin, decide
+    from reel.stages import CLIP_PIPELINE, EDIT_PIPELINE
+    from reel.workspace import Workspace
+
+    ws = Workspace(Path(args.project).resolve())
+    options = json.loads(ws.path("run_options.json").read_text()) if ws.path("run_options.json").exists() else {}
+    if not args.yes and not args.note and not args.approve and not args.cont:
+        _print_checkin(ws)
+        return 0
+    try:
+        res = checkin.answer(ws, decide.load_inputs(ws, options.get("brief"), options.get("brand")),
+                             [x.strip() for x in (args.yes or "").split(",") if x.strip()], args.note)
+    except checkin.CheckinError as exc:
+        print(f"not applied: {exc}")
+        return 1
+    print(f"story approved ({', '.join(res['applied']) or 'as it was'})")
+    if args.cont:
+        stages = CLIP_PIPELINE if ws.path("window.json").exists() else EDIT_PIPELINE
+        out = autofix.run(ws, stages, options)
+        _print_state(out["state"], ws)
+        _print_verdict(ws, out["loops"])
+    return 0
+
+
 def _run_child(args: argparse.Namespace) -> int:
     """A Clip Factory reel project: edit stages only, on the source's shared analysis (reel.clipfactory)."""
     from reel import autofix
-    from reel.stages import CLIP_PIPELINE
+    from reel.runner import run_pipeline
+    from reel.stages import CLIP_PIPELINE, edit
     from reel.workspace import Workspace
 
     ws = Workspace(Path(args.project).resolve())
     options = json.loads(ws.path("run_options.json").read_text())
     options["skip_review"] = bool(getattr(args, "skip_review", False)) or bool(options.get("skip_review"))
+    if getattr(args, "story_checkin", False):
+        state = run_pipeline(ws, edit.checkin_pipeline(CLIP_PIPELINE), options=options)
+        _print_state(state, ws)
+        _print_checkin(ws)
+        return 0
     res = autofix.run(ws, CLIP_PIPELINE, options, force=set(getattr(args, "force", None) or []))
     _print_state(res["state"], ws)
     _print_verdict(ws, res["loops"])
@@ -125,6 +173,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
         carried = {k: v for k, v in json.loads(prev.read_text()).items() if k in CARRIED_OPTIONS}
         options = {**carried, **options}
     atomic_write_json(ws.path("run_options.json"), options)  # `reel revise` / `reel proof` reuse them
+    if getattr(args, "story_checkin", False):  # 3a.1: stop after the story pass; `reel checkin` answers and continues
+        from reel.stages import edit
+
+        state = run_pipeline(ws, edit.checkin_pipeline(EDIT_PIPELINE), options=options, force=set(args.force or []))
+        _print_state(state, ws)
+        _print_checkin(ws)
+        return 0
     if getattr(args, "mine", False):  # Clip Factory: analyse the long recording once, then find the reels in it
         from reel.stages import MINE_PIPELINE
 
@@ -626,9 +681,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--reference", help="a finished reel the client likes: its pacing, captions and colour become the style to match")
     p.add_argument("--broll", help="folder of client b-roll clips (conformed, described by Claude, offered to the Editor)")
     p.add_argument("--stock", action="store_true", help="find stock b-roll on Pexels for this talk at edit time (needs PEXELS_API_KEY)")
+    p.add_argument("--story-checkin", action="store_true", help="stop after the story pass for the owner's check-in (`reel checkin`)")
     p.add_argument("--mine", action="store_true", help="Clip Factory: a long recording → analysis + a ranked board of candidate reels")
     p.add_argument("--clip-length", help="(--mine) speech length per reel in seconds, e.g. 20-75 (default 20-75 or the brief's)")
     p.set_defaults(func=_cmd_run)
+
+    p = sub.add_parser("checkin", help="answer the story check-in (3a.1); without answers, print it")
+    p.add_argument("--project", required=True)
+    p.add_argument("--yes", help="accepted question ids, comma-separated (e.g. q1,q3)")
+    p.add_argument("--note", help="a change in your words (one Editor call)")
+    p.add_argument("--approve", action="store_true", help="approve the story as it is")
+    p.add_argument("--continue", dest="cont", action="store_true", help="then run the rest of the edit")
+    p.set_defaults(func=_cmd_checkin)
 
     p = sub.add_parser("listen", help="free-model listening test (G2.5): blind A/B of generated SFX, music, voice")
     lsub = p.add_subparsers(dest="listen_cmd", required=True)

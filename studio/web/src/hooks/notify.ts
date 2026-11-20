@@ -12,6 +12,7 @@ const NOTIFY: Partial<Record<ProjectStatus, string>> = {
   failed: "stopped: it failed",
   awaiting_choice: "is waiting for the A/B pick",
   source: "has reels ready to pick",
+  awaiting_story: "is waiting for your story check",
 };
 
 export function notificationsOn(): boolean {

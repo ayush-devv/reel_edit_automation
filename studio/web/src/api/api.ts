@@ -3,9 +3,11 @@ import type {
   BrandEntry,
   Brand,
   Brief,
+  ClientStyle,
   ClipsBoard,
   Listening,
   ListenSet,
+  StoryCheckin,
   Costs,
   Health,
   Job,
@@ -44,6 +46,10 @@ export interface NewProjectInput {
   preview_first?: boolean;
   /** "long": a long recording → analysis + a board of candidate reels (Clip Factory). Default "reel". */
   mode?: "reel" | "long";
+  /** 3a.1: stop after the story pass so the owner checks the story first. */
+  story_checkin?: boolean;
+  /** 3a.2: a past project whose finished reel becomes the reference to match. */
+  match_project?: string | null;
 }
 
 /** Saved brief templates (server-side, ~/.config/reel/templates.json): name → form values. */
@@ -88,6 +94,12 @@ export interface Api {
   createReviewLink(id: string, hours: number): Promise<ReviewLink>;
   revokeReviewLink(id: string, linkId: string): Promise<void>;
   label(id: string, sendable: boolean, reason: string): Promise<void>;
+  /** 3a.2: the client's style profile and approved reels. */
+  clientStyle(client: string): Promise<ClientStyle>;
+  /** 3a.1 story check-in (404 when the edit has none). */
+  checkin(id: string): Promise<StoryCheckin>;
+  /** Accept some questions and/or a note; approves the story and finishes the edit as one job. */
+  answerCheckin(id: string, yes: string[], note?: string): Promise<JobRef>;
   /** Clip Factory board of a mined long recording (404 while it is still being analysed). */
   clips(id: string): Promise<ClipsBoard>;
   /** Make reel projects from the picked candidates; `run` queues an edit of each. */

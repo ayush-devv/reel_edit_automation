@@ -209,6 +209,7 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
         thumb: null,
         delivered_at: null,
         kind: input.mode === "long" ? "source" : "reel",
+        ...(input.story_checkin ? { status: "awaiting_story" as const, needs_attention: ["check the story"] } : {}),
         brief: input.brief as unknown as Record<string, unknown>,
         brand: input.brand ?? null,
         stages: STAGES.map((name, i) => ({ name, status: slotFree ? (i === 0 ? "running" : "pending") : "queued", started: slotFree && i === 0 ? Date.now() / 1000 : null, finished: null, meta: {} })),
@@ -430,6 +431,43 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
     },
     async label() {
       await guard();
+    },
+    async clientStyle(client) {
+      await guard();
+      const mine = [...projects.values()].filter((p) => p.client && p.client.toLowerCase() === client.toLowerCase() && p.delivered_at);
+      return {
+        client,
+        profile: mine.length ? { reels: mine.length, caption_family: "bold_pop", look: "warm", cuts_per_min: 21, length_s: 38, music_mood: "upbeat",
+                                 hook_title: "card", recurring_settings: [{ kind: "music_gain_db", value: -20, reels: 2 }] } : null,
+        reels: mine.map((p) => ({ id: p.id, name: p.name, why: "delivered", has_video: true })),
+      };
+    },
+    async checkin(id) {
+      await guard();
+      const p = must(id);
+      if (p.status !== "awaiting_story") throw new ApiError(404, "this edit has no story check-in");
+      return {
+        status: "open", summary: "Save first, spend what is left", genre: "genre.tutorial",
+        hook: { item: "k01", text: "Most people save what is left after spending." },
+        lines: [
+          { id: "k01", beat: "hook", seconds: 3.2, text: "Most people save what is left after spending." },
+          { id: "k02", beat: "setup", seconds: 9.4, text: "When I got my first salary of twenty-five thousand, I spent it all in the first week…" },
+          { id: "k03", beat: "payoff", seconds: 4.1, text: "Flip it: save first, then spend what is left." },
+        ],
+        total_s: 16.7, left_out: [{ seg_id: "s007", seconds: 6.2, text: "Anyway, coming back to the point…" }],
+        questions: [
+          { id: "q1", kind: "hook", text: "Open with “Flip it: save first, then spend what is left.” instead?", why: "the payoff" },
+          { id: "q2", kind: "drop", text: "Drop this 9 s line: “When I got my first salary…”?", why: "long lines slow a reel down" },
+        ],
+        warnings: [],
+      };
+    },
+    async answerCheckin(id) {
+      await guard();
+      const p = must(id);
+      p.status = "running";
+      p.needs_attention = [];
+      return job(id, "run", "Story approved: finishing the edit");
     },
     async clips(id) {
       await guard();

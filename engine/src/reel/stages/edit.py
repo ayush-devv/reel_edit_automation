@@ -170,9 +170,17 @@ REFERENCE = Stage(name="reference", input_hash=_reference_hash, run=_reference,
 # ------------------------------------------------------------------ story
 
 
+def _client_key(ctx: StageContext) -> dict:
+    """3a.2: the client's style profile, only when one exists (no profile: old hashes unchanged)."""
+    from reel import client_memory
+
+    fp = client_memory.fingerprint(ctx.ws)
+    return {"client_style": fp} if fp else {}
+
+
 def _story_hash(ctx: StageContext) -> str:
     window = {"window": _fp(ctx, "window.json")} if ctx.ws.path("window.json").exists() else {}  # absent: old hashes unchanged
-    return hash_inputs({**window, "tables": [_fp(ctx, f) for f in TABLE_FILES], "reference": _fp(ctx, "context/reference_style.md"), "brief": _opt_file(ctx.options.get("brief")),
+    return hash_inputs({**window, **_client_key(ctx), "tables": [_fp(ctx, f) for f in TABLE_FILES], "reference": _fp(ctx, "context/reference_style.md"), "brief": _opt_file(ctx.options.get("brief")),
                         "brand": _opt_file(ctx.options.get("brand")), "persona": file_fingerprint(decide.STORY_PERSONA),
                         "knowledge": _knowledge_fp(), "schema": decide.schema(StoryPlan), "effort": decide.STORY_EFFORT,
                         "prompts": [decide.STORY_PROMPT, decide.READBACK_PROMPT], **_model_key(ctx)})
@@ -199,7 +207,7 @@ def _finish_hash(ctx: StageContext) -> str:
     # a reel that finished first must not re-run because a later sibling picked clips.
     style = batch_style(ctx.ws)
     batch = {"batch_style": style} if style else {}
-    return hash_inputs({**batch, "story": _fp(ctx, "plan/story.json"), "brand": _opt_file(ctx.options.get("brand")), "broll": _fp(ctx, "broll/index.json"),
+    return hash_inputs({**batch, **_client_key(ctx), "story": _fp(ctx, "plan/story.json"), "brand": _opt_file(ctx.options.get("brand")), "broll": _fp(ctx, "broll/index.json"),
                         "reference": _fp(ctx, "context/reference_style.md"), "persona": file_fingerprint(decide.FINISH_PERSONA), "knowledge": _knowledge_fp(), "assets": _assets_fp(),
                         "schema": decide.schema(FinishPlan), "effort": decide.FINISH_EFFORT, "prompt": decide.FINISH_PROMPT,
                         **_model_key(ctx)})
@@ -663,6 +671,31 @@ def _preview(ctx: StageContext) -> dict:
 
 
 PREVIEW = Stage(name="preview", input_hash=_preview_hash, outputs=lambda ctx: [ctx.ws.path("export", "preview", "preview.json")], run=_preview)
+
+
+# ------------------------------------------------------------------ story check-in (roadmap 3a.1)
+
+
+def _checkin_hash(ctx: StageContext) -> str:
+    from reel import checkin
+
+    return hash_inputs({"story": _fp(ctx, "plan/story.json"), "takes": _fp(ctx, "tables/takes.json"), "brief": _opt_file(ctx.options.get("brief")),
+                        "code": file_fingerprint(Path(checkin.__file__)), "v": VERSION})
+
+
+def _checkin(ctx: StageContext) -> dict:
+    from reel import checkin
+
+    return checkin.build(ctx.ws, _inputs(ctx))
+
+
+CHECKIN = Stage(name="checkin", input_hash=_checkin_hash, outputs=lambda ctx: [ctx.ws.path("plan", "checkin.json")], run=_checkin)
+
+
+def checkin_pipeline(base: list[Stage]) -> list[Stage]:
+    """`run --story-checkin`: the given pipeline up to the story pass, then the check-in; the run ends there."""
+    names = [s.name for s in base]
+    return [*base[:names.index("story") + 1], CHECKIN]
 
 
 def preview_pipeline() -> list[Stage]:
