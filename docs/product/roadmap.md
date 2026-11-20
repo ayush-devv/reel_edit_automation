@@ -1085,7 +1085,7 @@ All five items are built and tested with fakes. Each item needs owner input befo
 |---|---|---|
 | **Chatterbox Multilingual** (Resemble AI, MIT, weights `5bb1f6ee…`) | **Clears for Hindi (Devanagari) and English.** Blind A/B against macOS `say`: won 3 of 3 and usable 3 of 3 (Hindi numbers, "ढाई करोड़", English CTA); the Hinglish pair has no vote yet | About 55 s per line on this Mac (MPS), most of it model load. **Hinglish in Latin script sounds like an English speaker reading Hindi; the same sentence in Devanagari sounded far better** (owner, not blind). No Tamil. Every output carries Resemble's PerTh watermark, and the project is no longer maintained |
 | VoxCPM2 (OpenBMB, Apache-2.0) | Not testable here | On MPS it runs in float32 (~9 GB) and swapped: 72 s per step, about 12 h per line. Needs a rented GPU |
-| Maya 2 (Apache-2.0 + Mimi CC-BY-4.0) | Not tried | 2.5B parameters, CUDA-only reference engine; expected to behave like VoxCPM2 here |
+| Maya 2 (Apache-2.0 + Mimi CC-BY-4.0) | Not tried yet: **the leading cloning candidate** | The official engine is CUDA-only, but the community Mac port `justanurag/maya-mac` (Apache-2.0, MLX 8-bit, about 7 GB peak, reported RTF 0.23 on an M5 Pro) fits this Mac. The only candidate with Tamil and the other Indic targets. (An earlier version of this table wrongly said it would behave like VoxCPM2 here.) |
 | ZONOS3-Mini (Apache-2.0) | Deferred | The Python package does not support ZONOS3 yet, and every voice needs a reference clip (cloning: owner's own voice with written consent only) |
 
 What 3c.4 takes from this:
@@ -1094,6 +1094,32 @@ What 3c.4 takes from this:
 - **Tamil still has no local voice.**
 
 Set-up lives outside the repo, in `~/.cache/reel/generators/<model>/` (`gen.py` runner, offline, network refused); declarations in `~/.config/reel/generators.json`.
+
+#### 3c.4a Dub spike (plan, 2026-11-20)
+
+**What it proves:** that a finished project can be re-voiced in another language end to end: translation, timing, mix, captions, licence record. It does **not** prove speaker likeness: the only voice cleared so far is Chatterbox's **built-in voice**, which is a stranger's voice over the client's face. So the spike's output is for the owner to judge the pipeline, **not for delivery**. The voice is a swappable input; the speaker's cloned voice (Chatterbox `audio_prompt_path`, or Maya 2 on its Mac port) slots in later with no redesign.
+
+**Shape:** `reel dub --project P --lang hi|en [--voice <generator id>]`, CLI only, run on a finished project (`timeline/timeline.json`, `render/base.mov`, `render/stems/*.wav`, `render/overlay.mov` inputs). Everything it writes stays in `dub/<lang>/`; the project itself is untouched.
+
+1. **Lines.** Caption pages grouped into spoken lines at pauses (≥ 0.35 s), sentence ends, or 6 s.
+2. **Translate (one Claude call, `decide.decide` repair loop).** Per line: `caption` (the target's caption script: Devanagari for `hi`, Latin for `en`) and `tts` (what the voice reads: **Devanagari for Hindi and Hinglish**, numbers as words), written to fit the line's time budget; product and brand names kept. Code checks: one answer per line, no empty text, `tts` script matches the language.
+3. **Synthesise.** The voice generator from `~/.config/reel/generators.json` (set `voice`, licence row checked as in G2.5), run in **batch mode** (model loaded once per job). Never alongside a Remotion render: 16 GB machine.
+4. **Fit.** Each line's slot runs to the next line's start. Over the slot by > 15 %: one shorter rewrite from Claude for those lines, re-synthesised. Then `atempo` within 0.87–1.15. Still over: the next line slides later (never overlap); the total drift is reported.
+5. **QA (`dub_intelligibility`).** The engine's own ASR (mlx-whisper) on every line; word error on script-agnostic keys with numbers compared as values (the recogniser writes "5000" for "पाँच हज़ार"). Measured on the G2.5 clips: Devanagari 1 real error in 24 words, Latin-script Hinglish 42 %. A line over 35 % is a Hold reason in `dub.json`.
+6. **Mix.** Dubbed dialogue (lines placed at their slots) + the project's own `music` and `sfx` stems (already ducked to the original speech, which the slots follow) → a dub base (`base.mov` picture, new PCM audio).
+7. **Captions.** Target-script caption pages re-timed from the dubbed audio (ASR word times where the counts align, else spread by characters); the overlay is re-rendered with only the caption track swapped, then the existing `overlay.composite` (loudnorm, delivery checks).
+8. **Record.** `dub/<lang>/dub.json`: generator, commit, weights hash, licence source, **PerTh watermark**, voice = "built-in (not the speaker)", per-line QA, drift, timings, and an "AI voice" disclosure line.
+
+**Cloning gate (spec now, built with cloning):** a generator marked `"clones": true` runs only with `dub/consent.json` covering research_notes/free-alternatives/dubbing.md §7 (whose voice, which languages, which reels, retention, revocation). Without it, `reel dub` refuses.
+
+**Later, after the owner has watched a spike render:** cloning (Maya 2 vs Chatterbox clone, blind), Studio screens, per-language packages, Tamil.
+
+**As built (2026-11-20):** `reel/dub.py`, `reel dub`, `personas/dubber.md`, `tests/test_dub.py`; Chatterbox runner gained a batch mode. First real run, `_speech` (9 s, English → Hindi): 2 lines, 1 rewritten shorter, one line sped up 13.6 %, no drift; word error 0 % and 12 % (one slurred phrase); Devanagari captions render with the word highlight; −14.4 LUFS, −1.5 dBTP, frame-exact; $0.08 of Claude; 6.9 min (6.4 of it voice, two model loads on a busy machine). **Owner verdict: the pipeline and captions work; the built-in voice is clearly AI** (so was the synthetic source). That's the expected limit of a stock voice: delivery needs the speaker's cloned voice.
+
+**To do later (owner):**
+- **Cloning test:** about 10 s of the owner's own clean speech plus a consent note (dubbing.md §7). Compare a Chatterbox clone against Maya 2 on `maya-mac`, blind.
+- **Then** a real on-camera project (`_real_doac_v2`, 97 s).
+- **Gaps:** on-screen titles aren't translated; voice time per line still to measure on an idle machine.
 
 ---
 

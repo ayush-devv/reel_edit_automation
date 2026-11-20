@@ -136,6 +136,24 @@ def _cmd_listen(args: argparse.Namespace) -> int:
         return 1
 
 
+def _cmd_dub(args: argparse.Namespace) -> int:
+    """3c.4a: the dub spike."""
+    from reel import dub
+
+    try:
+        r = dub.run(Path(args.project).expanduser(), dub.Options(lang=args.lang, voice=args.voice, render=not args.no_render, glossary=args.keep))
+    except (dub.DubError, FileNotFoundError) as exc:
+        print(f"not dubbed: {exc}")
+        return 1
+    worst = max((q["error"] for q in r["lines"]), default=0.0)
+    print(f"{r['status'].upper()} · {len(r['lines'])} lines · worst line error {worst:.0%} · {len(r['rewritten'])} rewritten shorter · "
+          f"voice {r['voice']['generator']} ({r['voice']['voice']}) · {r['total_s']} s")
+    for h in r["hold"]:
+        print(f"  hold: {h}")
+    print(f"  {r['output'] or 'no video (--no-render)'}; details in dub/{args.lang}/dub.json · not for delivery: {r['why_not_for_delivery']}")
+    return 0 if r["status"] == "ok" else 2
+
+
 def _cmd_factory(args: argparse.Namespace) -> int:
     from reel import clipfactory, mine
     from reel.workspace import Workspace
@@ -742,6 +760,14 @@ def main(argv: list[str] | None = None) -> int:
         q = lsub.add_parser(name, help=help_text)
         q.add_argument("--set", required=True, choices=["sfx", "music", "voice"])
     p.set_defaults(func=_cmd_listen)
+
+    p = sub.add_parser("dub", help="dub spike (3c.4a): re-voice a finished project in another language into dub/<lang>/ (not for delivery)")
+    p.add_argument("--project", required=True, help="a finished project folder")
+    p.add_argument("--lang", required=True, choices=["hi", "en"])
+    p.add_argument("--voice", help="voice generator id from ~/.config/reel/generators.json (default: the first declared voice)")
+    p.add_argument("--keep", action="append", default=[], help="a name or product to keep exactly (repeatable)")
+    p.add_argument("--no-render", action="store_true", help="stop before the video: lines, voice, QA, dialogue track only")
+    p.set_defaults(func=_cmd_dub)
 
     p = sub.add_parser("factory", help="Clip Factory: turn picked candidates of a mined recording into reel projects")
     p.add_argument("--project", required=True, help="the mined source project (`reel run <long recording> --mine`)")
