@@ -480,6 +480,19 @@ export interface Settings {
   pixabay_key_set?: boolean;
   /** Write-only on PUT: a new Pixabay key (never returned by GET). */
   pixabay_key?: string;
+  /** 4.1: monthly AI spend cap in USD; 0 = no cap. */
+  monthly_cap_usd?: number;
+}
+
+/** GET /api/spend (4.1 cost guard). */
+export interface SpendStatus {
+  month: { claude_usd: number; paid_usd: number; total_usd: number };
+  cap_usd: number | null;
+  /** One more edit's likely Claude cost, from past edits (null with fewer than 3). */
+  estimate: { low_usd: number; high_usd: number; from_edits: number } | null;
+  over_cap: boolean;
+  /** Paid generator requests waiting for the owner's approval. */
+  pending: { at: number; hash: string; generator: string; quote_usd: number; what?: string; project?: string | null }[];
 }
 
 export interface PackageFile {

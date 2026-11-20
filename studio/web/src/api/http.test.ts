@@ -40,6 +40,20 @@ describe("http client", () => {
     expect((init?.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
   });
 
+  it("past the monthly cap, asks once and resends with spend_anyway only on yes (4.1)", async () => {
+    const over = { error: "this month's AI spend ($5.00) has reached the $4.00 cap", over_cap: true };
+    const fetchMock = vi.fn(async (_u: RequestInfo | URL, init?: RequestInit) =>
+      JSON.parse(String(init?.body)).spend_anyway ? json(200, { job: "j1" }) : json(409, over));
+    const api = createHttpApi(fetchMock as unknown as typeof fetch);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(true);
+    await expect(api.revise("p1", "faster")).resolves.toEqual({ job: "j1" });
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({ request: "faster", spend_anyway: true });
+    confirm.mockReturnValueOnce(false);
+    await expect(api.revise("p1", "faster")).rejects.toMatchObject({ status: 409 });
+    expect(fetchMock).toHaveBeenCalledTimes(3); // no resend after "no"
+    confirm.mockRestore();
+  });
+
   it("turns a 422 into validator issues", async () => {
     const issues = [{ code: "must_keep", path: "story.items", message: "This removes a must-keep line", fix: "Keep k04." }];
     const api = createHttpApi((async () => json(422, { error: "invalid", issues })) as unknown as typeof fetch);

@@ -205,9 +205,20 @@ def voice(gen_id: str | None, gens: dict | None = None, reg=None, project: Works
 
 
 def synthesize(spec: dict, jobs: list[dict], work: Path) -> None:
-    """jobs: [{text, lang, out}]. One model load with `batch_cmd`; else one process per line with `cmd`."""
+    """jobs: [{text, lang, out}]. One model load with `batch_cmd`; else one process per line with `cmd`. A paid generator
+    runs line by line through the cost guard (reel.spend): each line needs an approval bound to its exact text, and a line
+    already bought is reused, never bought twice."""
+    from reel import spend
+
     work.mkdir(parents=True, exist_ok=True)
-    if spec.get("batch_cmd"):
+    if spec.get("paid"):
+        for j in jobs:
+            cmd = [a.replace("{prompt}", j["text"]).replace("{lang}", j["lang"]).replace("{out}", j["out"]).replace("{seconds}", "0")
+                   for a in spec["cmd"]]
+            spend.paid_call(spec.get("id", "voice"), spec, {"text": j["text"], "lang": j["lang"]}, Path(j["out"]),
+                            lambda cmd=cmd: subprocess.run(cmd, check=True, capture_output=True, timeout=SYNTH_TIMEOUT_S),
+                            chars=len(j["text"]), what=f"voice line: {j['text'][:80]}")
+    elif spec.get("batch_cmd"):
         jf = work / "jobs.json"
         atomic_write_json(jf, jobs)
         cmd = [a.replace("{jobs}", str(jf)) for a in spec["batch_cmd"]]
@@ -399,6 +410,7 @@ def run(project_root: Path, opts: Options, *, caller=None, gens: dict | None = N
         if not project.path(need).exists():
             raise DubError(f"{project.root.name} has no {need}: run the edit to the end first")
     gid, spec = voice(opts.voice, gens, reg, project)
+    spec = {**spec, "id": gid}
     out_dir = project.path("dub", opts.lang)
     out_dir.mkdir(parents=True, exist_ok=True)
     work = out_dir / "lines"
@@ -414,8 +426,13 @@ def run(project_root: Path, opts: Options, *, caller=None, gens: dict | None = N
     tts_lang = LANGS[opts.lang]["tts_lang"]
 
     def speak(ids: list[str]) -> None:
+        from reel import spend
+
         by = {x.id: x for x in plan.lines}
-        synth(spec, [{"text": by[i].tts, "lang": tts_lang, "out": str(work / f"{i}.wav")} for i in ids], work)
+        try:
+            synth(spec, [{"text": by[i].tts, "lang": tts_lang, "out": str(work / f"{i}.wav")} for i in ids], work)
+        except spend.ApprovalNeeded as exc:
+            raise DubError(str(exc)) from exc
 
     t_synth = time.time()
     speak([x.id for x in ls])

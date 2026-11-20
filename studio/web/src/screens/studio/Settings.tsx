@@ -186,6 +186,11 @@ function SettingsForm() {
         <Field label="Pexels API key" htmlFor="pexels" hint={s.pexels_key_set ? "A key is saved on this Mac. Enter a new one to replace it." : "Stored only on this Mac. Enables stock search in Libraries."}>
           <TextInput id="pexels" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={s.pexels_key_set ? "••••••••••••" : "Paste your key"} />
         </Field>
+        <Field label="Monthly AI spend cap (USD)" htmlFor="cap" hint="0 = no cap. Past it, a new edit, revision or notes run asks before it starts; an edit already running always finishes.">
+          <TextInput id="cap" inputMode="decimal" value={String(s.monthly_cap_usd ?? 0)}
+                     onChange={(e) => setS({ ...s, monthly_cap_usd: Math.max(0, Number(e.target.value.replace(/[^0-9.]/g, "")) || 0) })}
+                     className="w-32 font-mono text-mono" />
+        </Field>
         <Field label="Projects folder" htmlFor="pdir" hint="Where footage, renders and packages are stored. To use another folder, restart with: reel studio --projects <folder>">
           <TextInput id="pdir" value={s.projects_dir} readOnly className="font-mono text-mono text-fg-secondary" />
         </Field>
@@ -196,6 +201,64 @@ function SettingsForm() {
           {msg && <span className={cx("text-label", msg.tone === "ok" ? "text-st-sendable" : "text-st-fail")}>{msg.text}</span>}
         </div>
       </form>
+    </Panel>
+  );
+}
+
+/** 4.1 cost guard: this month's AI spend against the cap, and paid requests waiting for approval. */
+function SpendPanel() {
+  const api = useApi();
+  const q = useQuery(() => api.spend(), [api], { intervalMs: 30000 });
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const st = q.data;
+  return (
+    <Panel title="AI spend this month">
+      {!st ? (
+        q.error ? <Notice tone="error">{friendlyError(q.error)}</Notice> : <Loading />
+      ) : (
+        <div className="space-y-3">
+          <p className="text-fg-primary">
+            <span className="font-mono">${st.month.total_usd.toFixed(2)}</span>
+            {st.cap_usd ? <> of a <span className="font-mono">${st.cap_usd.toFixed(2)}</span> cap</> : " · no cap set"}
+            {st.over_cap && <span className="text-st-hold"> · at the cap: new runs ask first</span>}
+          </p>
+          <p className="text-meta text-fg-muted">
+            Claude ${st.month.claude_usd.toFixed(2)} · paid generators ${st.month.paid_usd.toFixed(2)}
+            {st.estimate && <> · one more edit ≈ ${st.estimate.low_usd.toFixed(2)}–${st.estimate.high_usd.toFixed(2)}</>}
+          </p>
+          {st.pending.length > 0 && (
+            <ul className="divide-y divide-line-subtle border-y border-line-subtle" aria-label="Paid requests waiting for approval">
+              {st.pending.map((p) => (
+                <li key={p.hash} className="flex items-center justify-between gap-3 py-2 text-meta">
+                  <span className="min-w-0 truncate text-fg-secondary">{p.generator} · {p.what || p.hash}</span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span className="font-mono text-fg-primary">${p.quote_usd.toFixed(2)}</span>
+                    <Button
+                      busy={busy === p.hash}
+                      onClick={async () => {
+                        setBusy(p.hash);
+                        setErr(null);
+                        try {
+                          await api.approveSpend(p.hash);
+                          q.reload();
+                        } catch (e) {
+                          setErr(friendlyError(e));
+                        } finally {
+                          setBusy(null);
+                        }
+                      }}
+                    >
+                      Approve
+                    </Button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {err && <Notice tone="error">{err}</Notice>}
+        </div>
+      )}
     </Panel>
   );
 }
@@ -285,6 +348,7 @@ export default function Settings() {
         </div>
         <div className="col-span-12 xl:col-span-5">
           <SettingsForm />
+          <SpendPanel />
           <Notifications />
           <ProjectActions />
         </div>

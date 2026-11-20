@@ -89,6 +89,7 @@ export default function NewEdit() {
   const { health, jobs } = useStatus();
   const brands = useQuery(() => api.brands(), [api]);
   const settings = useQuery(() => api.settings(), [api]);
+  const spend = useQuery(() => api.spend(), [api]);
   const [files, setFiles] = useState<File[]>([]);
   const [rejected, setRejected] = useState<{ name: string; reason: string }[]>([]);
   const [form, setForm] = useState<BriefForm>(EMPTY_FORM);
@@ -180,9 +181,20 @@ export default function NewEdit() {
       setError("Add at least one video file, or name a file on this Mac.");
       return;
     }
+    // 4.1: past the monthly cap, ask before uploading (never after: a big upload must not be sent twice)
+    let spendAnyway = false;
+    try {
+      const st = await api.spend();
+      if (st.over_cap) {
+        if (!window.confirm(`This month's AI spend ($${st.month.total_usd.toFixed(2)}) has reached your $${(st.cap_usd ?? 0).toFixed(2)} cap. Start this edit anyway?`)) return;
+        spendAnyway = true;
+      }
+    } catch {
+      /* the server checks again */
+    }
     setBusy(true);
     try {
-      const input = { files, name: form.name.trim(), brief: toBrief(form), brand: brand || null, reference_url: refUrl.trim() || null, stock, broll_folder: brollFolder.trim() || null,
+      const input = { spend_anyway: spendAnyway, files, name: form.name.trim(), brief: toBrief(form), brand: brand || null, reference_url: refUrl.trim() || null, stock, broll_folder: brollFolder.trim() || null,
                       preview_first: previewFirst && !longRecording, mode: longRecording ? ("long" as const) : ("reel" as const),
                       story_checkin: storyCheckin && !longRecording, match_project: matchProject || null, source_path: localFile || null };
       const { id } = await api.createProject(input, (loaded, total) =>
@@ -526,6 +538,16 @@ export default function NewEdit() {
                 <span className="flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-st-sendable" aria-hidden="true" /> {running} of {limit} edits running — starts right away.
                 </span>
+              )}
+              {spend.data && (
+                <p className={cx("mt-1", spend.data.over_cap ? "text-st-hold" : "text-fg-muted")}>
+                  {spend.data.estimate
+                    ? `AI cost of this edit ≈ $${spend.data.estimate.low_usd.toFixed(2)}–$${spend.data.estimate.high_usd.toFixed(2)}`
+                    : "AI cost: estimated after 3 edits"}
+                  {` · this month $${spend.data.month.total_usd.toFixed(2)}`}
+                  {spend.data.cap_usd ? ` of $${spend.data.cap_usd.toFixed(2)}` : ""}
+                  {spend.data.over_cap ? " · at the cap: it will ask first" : ""}
+                </p>
               )}
               {error && (
                 <p className="mt-1 text-st-fail" role="alert">

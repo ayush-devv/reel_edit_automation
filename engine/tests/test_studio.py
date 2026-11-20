@@ -621,7 +621,7 @@ def test_settings_persist_private_and_feed_the_queue(env):
     c, s = env["c"], env["s"]
     got = c.get("/api/settings").json()
     assert got == {"max_jobs": 3, "projects_dir": str(env["root"]), "default_brief": {}, "default_deliverables": [], "pexels_key_set": False,
-                   "pixabay_key_set": False}
+                   "pixabay_key_set": False, "monthly_cap_usd": 0.0}
     new = {**got, "max_jobs": 1, "default_brief": {"language": "hinglish", "platform": "platform.tiktok"}, "default_deliverables": ["square"],
            "pexels_key": "sekret-key", "pixabay_key": "pix-sekret"}
     r = c.put("/api/settings", json=new)

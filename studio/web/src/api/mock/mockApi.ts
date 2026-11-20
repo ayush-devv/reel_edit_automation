@@ -582,6 +582,16 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
       await guard();
       return clone(COSTS);
     },
+    async spend() {
+      await guard();
+      const cap = settings.monthly_cap_usd || 0;
+      const month = { claude_usd: COSTS.total_usd, paid_usd: 0, total_usd: COSTS.total_usd };
+      return { month, cap_usd: cap || null, estimate: { low_usd: 0.6, high_usd: 0.9, from_edits: 4 }, over_cap: !!cap && month.total_usd + 0.6 >= cap, pending: [] };
+    },
+    async approveSpend() {
+      await guard();
+      return {};
+    },
     async settings() {
       await guard();
       return clone(settings);

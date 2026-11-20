@@ -1199,6 +1199,20 @@ Don't put build days on platform assumptions. Check against Meta's and Google's 
 - **Quote → approve for paid calls** (any generator with `paid: true`): one approval bound to the call's input hash, and a content-keyed ledger (`~/.config/reel/paid_ledger.jsonl`), so an identical request is never bought twice. This must exist before any paid provider ships.
 - **Tests:** the estimate from fixtures; the cap prompt; a repeated paid request served from the ledger; an approval for one hash refused for another.
 
+**As built (2026-11-20):**
+- **Code:**
+  - `reel/spend.py`: month to date, `status`, `quote`, `paid_call`, `approve`, `pending`.
+  - `reel spend [approve <hash>]`.
+  - Studio:
+    - `GET /api/spend` and `POST /api/spend/approve/{hash}`;
+    - a cap check on create, retry, revise, notes, check-in and Clip Factory make;
+    - `Settings.monthly_cap_usd`.
+  - Web: an estimate line in New edit (it asks before uploading); "AI spend this month" with Approve buttons in Settings; a single "spend anyway" confirm in the API client for every other route.
+- **Paid generators:**
+  - The dub job and the listening test run paid generators through `paid_call`, line by line, with a declared `price` (`{"usd", "per": "call" | "1k_chars" | "second"}`).
+  - Today every declared generator is free, so nothing changes until a paid one is added.
+- **Cap:** off (0) until the owner sets one.
+
 #### 4.2 "What was not checked" in the verdict (about half a day)
 
 - Every verdict lists the gates that **could not measure** (no face found, OCR failed, no reference) as Hold-worthy, never as a pass, and a fixed list of things gates **never** check ("music taste", "joke timing", "whether the story is interesting").

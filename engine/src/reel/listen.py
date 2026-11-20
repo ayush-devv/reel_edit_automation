@@ -170,9 +170,13 @@ def prepare(kind: str, root: Path | None = None, *, gens: dict[str, dict] | None
             dst = pdir / _blind_name(gid, p["id"], ".wav")
             t0 = time.time()
             try:
-                run(spec["cmd"], p, dst)
+                from reel import spend  # a paid generator needs an approval per prompt; a bought prompt is reused
+
+                spend.paid_call(gid, spec, {"prompt": p["text"], "seconds": p.get("seconds") or 0, "set": kind}, dst,
+                                lambda: run(spec["cmd"], p, dst), chars=len(p["text"]), seconds=float(p.get("seconds") or 0),
+                                what=f"listening test {kind}: {p['id']}")
                 manifest["outputs"].append({"prompt": p["id"], "model": gid, "file": str(dst.relative_to(root)), "seconds": round(time.time() - t0, 1)})
-            except (subprocess.SubprocessError, OSError, ListenError, KeyError) as exc:
+            except (subprocess.SubprocessError, OSError, ListenError, KeyError, RuntimeError) as exc:  # RuntimeError: spend.ApprovalNeeded
                 manifest["generators"][gid].setdefault("failures", []).append(f"{p['id']}: {type(exc).__name__}: {exc}"[:300])
     atomic_write_json(out_dir / "manifest.json", manifest)
     pairs(kind, root, seed=int(manifest["created"]))

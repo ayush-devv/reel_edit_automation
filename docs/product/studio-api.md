@@ -141,6 +141,8 @@ type JobRef = { job: Job };   // what every POST that starts work returns; SSE `
 | GET | /r/{link} | no token (the link is the key) | the client page: the reel + notes once rendered; before that the hook A/B pick and/or the story check-in (summary, lines, suggestions as tick boxes, a note; the engine's reasons stay internal); otherwise "the edit is in progress". 410 when expired or turned off |
 | GET | /r/{link}/video, /r/{link}/hook/{A\|B} | — | the small watermarked copies only (never the full-quality render or previews); 410 when not available |
 | POST | /r/{link}/notes, /r/{link}/checkin, /r/{link}/hook | form posts | 303 back to the page. **The client only suggests:** answers go to `client/review_choices.jsonl`; the Studio's check-in panel offers "Use the client's answers" and the hook chooser shows the client's pick. 400 for a settled check-in, a chosen hook, an unknown question or option |
+| GET | /api/spend | — | 4.1 cost guard: `{ month: {claude_usd, paid_usd, total_usd}, cap_usd: number \| null, estimate: {low_usd, high_usd, from_edits} \| null, over_cap, pending: {at, hash, generator, quote_usd, what, project}[] }`. `over_cap` = month to date + one edit's low estimate ≥ the cap |
+| POST | /api/spend/approve/{hash} | — | approves one pending paid request (bound to its input hash); 400 for a malformed hash, 404 for no such quote. The next identical request buys it once; later identical requests reuse the output |
 | GET | /api/costs | `?days=30` | `{ total_usd, calls, by_project: {id, usd}[], by_day: {date, usd}[] }`: `by_day` lists every day of the window, oldest first, zeros included (FR-12) |
 | GET | /api/settings | — | `Settings` (below) |
 | PUT | /api/settings | `Settings` (+ write-only `pexels_key`) | the saved `Settings` |
@@ -178,6 +180,8 @@ type TimelineView = {
 | `beauty` | `"off"` \| `"light"` (3c.1): this project's own switch, stored in `beauty_override.json` and winning over the brief and the brand kit. No plan changes: `rerun --from render`, picture only. `TimelineView.adjust.beauty` = what the last render applied |
 
 Numbers must be JSON numbers (a string is 400). Every applied adjustment is logged to `plan/adjustments.jsonl`; a later chat revision is told to keep the ones still in force and warns (`adjustment_reverted`) when it changes one the request doesn't mention. Not available yet: trimming inside a line (AC-12).
+
+**Cost guard (4.1).** With a monthly cap set (`Settings.monthly_cap_usd`, 0 = off), the routes that start paid Claude passes — `POST /api/projects`, `/retry`, `/revise`, `/notes/apply`, `/checkin` and `/clips/make` (with `run`) — answer **409** `{ error, over_cap: true, month_usd, cap_usd, hint }` when the month is at the cap, unless the body (or form) carries `spend_anyway: true` (`spend_anyway=1`). A run already going is never stopped. The web client asks once and resends; New edit asks *before* uploading.
 
 `POST /api/projects` also takes `source_path=<file on this Mac>` instead of `files[]`: the video is used where it is (no upload, no copy, no size cap; links, folders and non-video files are 400; both or neither is 400; keep the file in place until the edit is done). A request whose `Content-Length` exceeds 4 × the 4 GB file cap is refused with **413** before the body is read, and with **507** when free disk is under twice its size plus 2 GB; both hints point at `source_path`.
 

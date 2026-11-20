@@ -136,6 +136,32 @@ def _cmd_listen(args: argparse.Namespace) -> int:
         return 1
 
 
+def _cmd_spend(args: argparse.Namespace) -> int:
+    """4.1 cost guard: this month's AI spend, the cap, pending paid quotes; `approve <hash>` approves one."""
+    from reel import spend
+    from reel.studio.settings import Settings, load_prefs
+
+    if args.spend_cmd == "approve":
+        try:
+            q = spend.approve(args.hash)
+        except KeyError:
+            print(f"no quote {args.hash}")
+            return 1
+        print(f"approved {q['generator']} (${q['quote_usd']:.2f}); run it again to buy it")
+        return 0
+    s = Settings()
+    root = Path(args.projects).expanduser() if args.projects else s.projects_root
+    st = spend.status(root, float(load_prefs(s.prefs_file).get("monthly_cap_usd") or 0.0))
+    m = st["month"]
+    print(f"this month: ${m['total_usd']:.2f} (Claude ${m['claude_usd']:.2f} + paid generators ${m['paid_usd']:.2f})"
+          + (f" of a ${st['cap_usd']:.2f} cap{' — OVER' if st['over_cap'] else ''}" if st["cap_usd"] else " · no cap set"))
+    if st["estimate"]:
+        print(f"one more edit: about ${st['estimate']['low_usd']:.2f}–${st['estimate']['high_usd']:.2f} (from {st['estimate']['from_edits']} edits)")
+    for p in st["pending"]:
+        print(f"  pending: {p['hash']}  {p['generator']}  ${p['quote_usd']:.2f}  {p.get('what') or ''}")
+    return 0
+
+
 def _cmd_dub(args: argparse.Namespace) -> int:
     """3c.4a: the dub spike."""
     from reel import dub
@@ -778,6 +804,13 @@ def main(argv: list[str] | None = None) -> int:
         q = lsub.add_parser(name, help=help_text)
         q.add_argument("--set", required=True, choices=["sfx", "music", "voice"])
     p.set_defaults(func=_cmd_listen)
+
+    p = sub.add_parser("spend", help="cost guard (4.1): this month's AI spend, the cap, pending paid quotes")
+    p.add_argument("--projects", help="projects folder (default: the Studio's)")
+    ssub = p.add_subparsers(dest="spend_cmd")
+    q = ssub.add_parser("approve", help="approve one paid request by its hash")
+    q.add_argument("hash")
+    p.set_defaults(func=_cmd_spend, spend_cmd=None)
 
     p = sub.add_parser("dub", help="dub spike (3c.4a): re-voice a finished project in another language into dub/<lang>/ (not for delivery)")
     p.add_argument("--project", required=True, help="a finished project folder")

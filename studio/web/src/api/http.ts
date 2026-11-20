@@ -32,6 +32,13 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
       } catch {
         /* not JSON (e.g. the dev proxy's 502 page) */
       }
+      // 4.1 cost guard: past the monthly cap the engine asks first. The owner can say "spend anyway" once, here.
+      const over = res.status === 409 && detail && typeof detail === "object" && (detail as { over_cap?: boolean }).over_cap;
+      if (over && method === "POST" && body && typeof body === "object" && !(body as { spend_anyway?: boolean }).spend_anyway
+          && typeof window !== "undefined" && typeof window.confirm === "function"
+          && window.confirm(`${message}. Spend anyway? (You can raise the cap in Settings.)`)) {
+        return request<T>(method, path, { ...(body as object), spend_anyway: true });
+      }
       throw new ApiError(res.status, message, detail);
     }
     if (res.status === 204) return undefined as T;
@@ -58,6 +65,7 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
     if (input.story_checkin) form.append("story_checkin", "1");
     if (input.match_project) form.append("match_project", input.match_project);
     if (input.source_path) form.append("source_path", input.source_path);
+    if (input.spend_anyway) form.append("spend_anyway", "1");
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${base}/api/projects`);
@@ -132,6 +140,8 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
     voteListening: (set, vote) => post(`/api/listening/${set}/vote`, vote),
     listeningMediaUrl: (set, path) => withToken(`/api/listening/${set}/media/${path.split("/").map(enc).join("/")}`),
     costs: (days = 30) => get(`/api/costs?days=${days}`),
+    spend: () => get("/api/spend"),
+    approveSpend: (hash) => post(`/api/spend/approve/${enc(hash)}`),
     settings: () => get("/api/settings"),
     saveSettings: (s: Settings) => request("PUT", "/api/settings", s),
     mediaUrl: (id, path, v) =>

@@ -22,6 +22,7 @@ import type {
   ReviewLink,
   ReviewLinks,
   Settings,
+  SpendStatus,
   SseEvent,
   TimelineView,
   Version,
@@ -52,6 +53,8 @@ export interface NewProjectInput {
   match_project?: string | null;
   /** A video already on this Mac (absolute path), used where it is instead of uploading `files` (long recordings). */
   source_path?: string | null;
+  /** 4.1: the owner already said "spend anyway" for this month's cap. */
+  spend_anyway?: boolean;
 }
 
 /** Saved brief templates (server-side, ~/.config/reel/templates.json): name → form values. */
@@ -123,6 +126,9 @@ export interface Api {
   /** C3: switch a QA gate between warn and block (block only once calibration cleared it). */
   setGateMode(gate: string, mode: "warn" | "block"): Promise<{ gate: string; mode: string; recomputed: number }>;
   costs(days?: number): Promise<Costs>;
+  /** 4.1 cost guard: month to date, the cap, one edit's estimate, pending paid quotes. */
+  spend(): Promise<SpendStatus>;
+  approveSpend(hash: string): Promise<unknown>;
   settings(): Promise<Settings>;
   saveSettings(s: Settings): Promise<Settings>;
   /** `v` busts the browser cache when a re-render rewrites the same path (e.g. the version number). */

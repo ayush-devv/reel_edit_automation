@@ -63,14 +63,17 @@ class ApiError(Exception):
 
 class RetryBody(BaseModel):
     stage: str | None = None
+    spend_anyway: bool = False
 
 
 class ReviseBody(BaseModel):
     request: str = Field(min_length=1, max_length=4000)
+    spend_anyway: bool = False
 
 
 class NotesBody(BaseModel):
     text: str = Field(min_length=1, max_length=20000)
+    spend_anyway: bool = False
 
 
 class ProofWord(BaseModel):
@@ -121,6 +124,7 @@ class PairwiseVoteBody(BaseModel):
 class CheckinBody(BaseModel):
     yes: list[str] = Field(default_factory=list, max_length=10)
     note: str = Field(default="", max_length=2000)
+    spend_anyway: bool = False
 
 
 class VoteBody(BaseModel):
@@ -137,6 +141,7 @@ class GateModeBody(BaseModel):
 class MakeClipsBody(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=20)
     run: bool = True  # queue an edit of each new reel
+    spend_anyway: bool = False
 
 
 class LabelBody(BaseModel):
@@ -159,6 +164,11 @@ class SettingsBody(BaseModel):
     default_deliverables: list[Literal["feed_4x5", "square"]] = Field(default_factory=list)
     pexels_key: str | None = Field(default=None, max_length=200)  # write-only; "" or absent keeps the saved key
     pixabay_key: str | None = Field(default=None, max_length=200)  # write-only; "" or absent keeps the saved key
+    monthly_cap_usd: float | None = Field(default=None, ge=0, le=100_000)  # 4.1: 0 = no cap; absent keeps the saved cap
+
+
+class SpendAnyway(BaseModel):
+    spend_anyway: bool = False
 
 
 class LabBody(BaseModel):
@@ -286,6 +296,7 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         name = str(form.get("name") or "").strip()
         if not name or len(name) > 120:
             raise ApiError(400, "a project name (1–120 characters) is required")
+        spend_guard(str(form.get("spend_anyway") or "").strip().lower() in ("1", "true", "on"))
         files = [f for f in [*form.getlist("files[]"), *form.getlist("files")] if isinstance(f, UploadFile)]
         source_path = local_video(str(form.get("source_path") or ""))
         if files and source_path:
@@ -432,6 +443,7 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         if not opts or not (opts.get("input") or opts.get("parent")):
             raise ApiError(400, "this project has never been started (no run_options.json)")
         busy(pid, ws)
+        spend_guard(bool(body and body.spend_anyway))
         footage = projects.studio_meta(ws).get("footage_s")
         return {"job": submit(pid, "retry", cli(*_run_args(ws, opts, force=stage)), ws=ws, est_gb=estimate_run_gb(footage),
                               label=f"Retry from {stage}" if stage else "Resume")}
@@ -476,6 +488,7 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         if unknown:
             raise ApiError(400, f"unknown question(s): {', '.join(unknown)}")
         busy(pid, ws)
+        spend_guard(body.spend_anyway)
         args = ["checkin", "--project", ws, "--approve", "--continue"]
         if body.yes:
             args += ["--yes", ",".join(body.yes)]
@@ -511,6 +524,7 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         ws = ws_of(pid)
         _need_edit(ws)
         busy(pid, ws)
+        spend_guard(body.spend_anyway)
         baseline(ws)
         req = " ".join(body.request.split())
         return {"job": submit(pid, "revise", cli("revise", "--project", ws, "--", body.request), ws=ws, est_gb=estimate_render_gb(reel_s(ws)),
@@ -535,6 +549,7 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         if not notes.parse(body.text):
             raise ApiError(400, "no notes found in the text")
         busy(pid, ws)
+        spend_guard(body.spend_anyway)
         baseline(ws)
         f = ws / "log" / f"notes_{time.strftime('%Y%m%d-%H%M%S')}.txt"
         atomic_write_bytes(f, body.text.encode())
@@ -676,6 +691,8 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
 
         ws = ws_of(pid)
         busy(pid, ws, toolchain=body.run)
+        if body.run:
+            spend_guard(body.spend_anyway)
         try:
             made = clipfactory.spawn(Workspace(ws), body.ids)
         except ValueError as exc:
@@ -899,6 +916,42 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
             raise ApiError(400, "days must be 1–3650")
         return costs.summary(s.projects_root, days)
 
+    # -------------------------------------------------------------- cost guard (roadmap 4.1)
+
+    def _cap() -> float:
+        return float(load_prefs(s.prefs_file).get("monthly_cap_usd") or 0.0)
+
+    def spend_guard(spend_anyway: bool) -> None:
+        """Before a new run that calls Claude: past the monthly cap, the owner must say "spend anyway". A run already
+        going is never stopped."""
+        from reel import spend
+
+        cap = _cap()
+        if not cap or spend_anyway:
+            return
+        st = spend.status(s.projects_root, cap)
+        if st["over_cap"]:
+            raise ApiError(409, f"this month's AI spend (${st['month']['total_usd']:.2f}) has reached the ${cap:.2f} cap",
+                           over_cap=True, month_usd=st["month"]["total_usd"], cap_usd=cap,
+                           hint="send it again with “spend anyway”, or raise the cap in Settings")
+
+    @app.get("/api/spend")
+    def spend_status():
+        from reel import spend
+
+        return spend.status(s.projects_root, _cap())
+
+    @app.post("/api/spend/approve/{request_hash}")
+    def spend_approve(request_hash: str):
+        from reel import spend
+
+        if not re.fullmatch(r"[0-9a-f]{24}", request_hash):
+            raise ApiError(400, "not a request hash")
+        try:
+            return spend.approve(request_hash)
+        except KeyError as exc:
+            raise ApiError(404, "no such quote") from exc
+
     @app.get("/api/jobs")
     def job_list():
         return {"running": [j.public() for j in mgr.running()], "queued": [j.public() for j in mgr.queued()]}
@@ -909,7 +962,7 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         prefs = load_prefs(s.prefs_file)
         return {"max_jobs": s.max_jobs, "projects_dir": str(s.projects_root), "default_brief": prefs["default_brief"],
                 "default_deliverables": prefs["default_deliverables"], "pexels_key_set": bool(prefs["pexels_key"]),
-                "pixabay_key_set": bool(prefs.get("pixabay_key"))}
+                "pixabay_key_set": bool(prefs.get("pixabay_key")), "monthly_cap_usd": float(prefs.get("monthly_cap_usd") or 0.0)}
 
     @app.get("/api/settings")
     def get_settings():
@@ -932,6 +985,8 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
             prefs["pexels_key"] = body.pexels_key.strip()
         if body.pixabay_key and body.pixabay_key.strip():
             prefs["pixabay_key"] = body.pixabay_key.strip()
+        if body.monthly_cap_usd is not None:
+            prefs["monthly_cap_usd"] = round(body.monthly_cap_usd, 2)
         save_prefs(s.prefs_file, prefs)
         apply_prefs(s, prefs)
         mgr.tick()  # a higher limit starts queued jobs now

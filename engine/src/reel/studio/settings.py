@@ -59,7 +59,8 @@ class Settings:
 
 # ------------------------------------------------------------------ the owner's preferences (studio_settings.json)
 
-PREF_DEFAULTS = {"max_jobs": MAX_JOBS_LIMIT, "default_brief": {}, "default_deliverables": [], "pexels_key": "", "pixabay_key": ""}
+PREF_DEFAULTS = {"max_jobs": MAX_JOBS_LIMIT, "default_brief": {}, "default_deliverables": [], "pexels_key": "", "pixabay_key": "",
+                 "monthly_cap_usd": 0.0}  # 4.1 cost guard: 0 = no cap
 
 
 def load_prefs(path: Path) -> dict:
