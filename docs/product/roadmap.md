@@ -13,7 +13,9 @@ This file ties all the plans together and holds the implementation plans that we
 |---|---|---|---|
 | **1** | Before the first paying client | about 6–8 days | **Built** (G1.1–G1.8, commits `00cdf10` … `6ab7999`) |
 | **2** | Growth: Clip Factory, asset search index, UI phases 3–4, free-model listening test (+ two small additions from the harness comparison) | about 8–10.5 days as planned; 7–9.5 without the additions | **Built, not committed** (see "Group 2 as built"); real-project checks wait on owner input |
-| 3 | Free replacements for paid features: SFX, music, dubbing, lip-sync, beauty pass | about 5–8 days | To write before building |
+| **3a** | Client-facing: story check-in, per-client style memory, word-level text edits | about 4.5–5.5 days | **Detailed below** |
+| **3b** | Proving quality: brief rubric, pairwise judge, revision evals, verdict-checked replies, gold-pair tooling | about 3–3.5 days | **Detailed below** |
+| **3c** | Free generative assets: beauty pass now; SFX, music, voice, dubbing, lip-sync gated by the listening test | beauty pass 1–1.5 days; the rest 5–8 once models clear | **Detailed below** (generative items as gated outlines) |
 | 4 | Later: beat-synced montage, publishing, Resolve, Epidemic | 5 days or more | To write before building |
 
 Done so far: the licence gate (asset-library phase A) and all of Group 1.
@@ -792,3 +794,213 @@ All five items are built and tested with fakes. Each item needs owner input befo
 - Engine: 471 passed, 1 skipped (`SSL_CERT_FILE=$HOME/.mac-ca-bundle.pem`, run on its own). This includes the new `test_pace.py`, `test_clipfactory.py`, `test_studio_clips.py`, `test_asset_search.py`, `test_studio_controls.py` and `test_listen.py`.
 - Web: 57 passed; the type check passes and `npm run build` succeeds.
 - Run alongside a real render, two Remotion overlay tests failed on contention. They pass when the suite runs on its own.
+
+---
+
+## Group 3: what comes after Group 2 (planned 2026-11-20)
+
+**Sources:** the ranked gaps and harness ideas in `research_notes/harness-comparison.md` (§3, §4), and the old Group 3 list.
+
+**A correction found while planning:** harness idea #1 (statistical acceptance in `reel improve`) is **already built**. `evalh/acceptance.py` has a paired permutation test, a noise-based minimum gain, a confirmation re-run and per-language subsets. What limits it is the data: 6 English gold pairs. So Group 3b builds tooling for growing the gold set, not new statistics.
+
+**Order and why:**
+- **3a first.** These are client-visible wins that need nothing from the owner.
+- **3b alongside.** It pays off as the owner's labels and Hindi pairs arrive.
+- **3c.1 (beauty pass) any time.** It uses MediaPipe, which is already installed.
+- **3c.2–3c.5 only after the listening test** clears a model for each.
+
+**Rules:** the same as Groups 1 and 2: fakes in tests, a real-project check where the output changes, cost and re-runs stated, and a commit only when the owner says so.
+
+---
+
+### Group 3a: client-facing
+
+#### 3a.1 Story check-in before the money is spent (about 1 day)
+
+**What the owner sees:**
+- An optional stop after the story pass, before the finish pass and render are paid for.
+- One plain paragraph: the hook, the kept lines in order with timings, and what was left out.
+- At most 3 questions, each with buttons: "Open with option 2 instead?", "Use take 3 of this line (the engine's suggested take) instead?", "Drop this 9-second line?".
+- Approve, answer, or type a change.
+
+**Design**
+- **The stop:** a run option `story_checkin`. The pipeline's stage list ends at STORY, like G1.6's `preview_first`. The project status becomes `awaiting_story`, shown under "Needs you". It never reads as failed.
+- **The questions come from code, with no Claude call and no schema change.**
+  - A schema change would put the schema in the story hash and re-run every project's story pass.
+  - The questions are built from:
+    - `hook_options` ranked 2 and 3;
+    - take groups where the Editor kept a take other than the suggested one (`tables/takes.json`);
+    - kept lines over 8 s;
+    - dropped segments that contain a `brief.must_keep_lines` match, which become a warning, not a question.
+- **Answers apply through code paths that already exist:**
+  - a hook swap or a dropped line: `story_edit.reorder`;
+  - a different take: a `replace` op validated by `validate_story`, with the window for Clip Factory reels;
+  - free text: `decide.revise` on the story session, which costs one Claude call;
+  - then the run continues from FINISH.
+- **Studio:**
+  - a "Check the story first" toggle in New edit, also available as a brand-kit default;
+  - the check-in panel in the project header, like the hook chooser;
+  - the review link page can show it to the client, behind the same token.
+
+**Tests:**
+- the stop and the status;
+- each question type built from fixtures;
+- each answer applied and re-validated, including the window;
+- the continue job's arguments;
+- the review-link block.
+
+**Cost:** no new Claude call unless the owner types a change. It saves the finish pass and render on a story the owner would reject.
+
+#### 3a.2 Per-client style memory: "edit like my last approved reel" (about 2 days)
+
+**What the owner sees:**
+- The 4th reel for a client looks like the first three without setting anything.
+- New edit offers "Match: last approved reel for this client", or a specific past reel.
+- Studio shows the client's style card: caption family, look, pace, music mood, typical length, and recurring notes ("no SFX", "keep it under 40 s").
+
+**Design**
+- **The memory file:** `projects/.clients/<client-slug>.json`. It is derived and rebuildable from the projects. The client is the brief's `client`, or else the studio client.
+- **When a reel is learned from:** when it is marked **delivered**, or labelled sendable by the owner. These are real approvals, not the engine's own verdict. Each entry records:
+  - from `plan/finish.json`: caption family and tokens, look and strength, grain and vignette, punch-ins per minute, SFX per minute, graphic kinds, hook-title style, b-roll share, music track mood and energy;
+  - from `qa/pace.json`: cuts per minute and the longest static stretch;
+  - the reel's length;
+  - the owner's adjustments (`plan/adjustments.jsonl`) and revision requests (`plan/history/*_request.json`), as raw notes.
+- **The profile:** medians over the last 5 approved reels, plus the notes that recur in at least 2 reels. Notes are condensed by code (deduplicated, counted), not by Claude.
+- **How the Editor uses it:**
+  - the story and finish packs get a "# This client's approved reels" section: the medians and the recurring notes, phrased as defaults, not rules;
+  - brand-kit locks still win.
+- **"Match a past reel":** sets `options["reference"]` to that project's `export/reel.mp4`. The existing REFERENCE stage and `reference_style.md` then do the rest, and the G2.1 pace gates judge against it automatically.
+- **A drift check (warn, `client_style_drift`):** after finish, code compares caption family, look and cuts per minute with the profile. It warns when two or more of them differ and the brief doesn't ask for a change.
+- **Hashes:** the story and finish hashes include the profile's fingerprint only when a profile exists. New approvals then change the next edit's packs, but never re-run finished projects: hashes are checked only when a project runs.
+
+**Tests:**
+- learning only from delivered or owner-sendable reels;
+- medians and recurring notes;
+- the pack section;
+- "match a past reel" setting the reference;
+- the drift warning;
+- no profile means no hash change;
+- the client slug falls back to the studio client.
+
+**Cost:** no new calls. One finish pass re-runs only for projects run again after their client gains a profile.
+
+**Real-project check:** this needs the owner's 3 or more delivered reels for one client. Until then, test it on copies.
+
+#### 3a.3 Word-level text editing (about 1.5–2 days)
+
+**What the owner sees:** in Adjust → Story, each kept line opens to its words. Striking words removes them, and "trim to here" trims the line's start or end. The validator checks the result as with any other adjustment.
+
+**Design**
+- **Engine:** `story_edit.cut_words(story, fin, item_id, ranges)` splits an item around the removed words into `k07a` and `k07b`, keeping the original id on the first part.
+- **Finish elements:**
+  - an element anchored to a word moves to the part that holds the word;
+  - an element spanning a removed word is dropped and counted in the note;
+  - SFX anchored "cut after item" follow the last part.
+- **Checks:**
+  - a cut inside a word is refused, using word edges;
+  - removing a whole line goes through `reorder`;
+  - in a Clip Factory reel, the window is still checked.
+- **API:** adjust kind `story_words` with `{item, remove: [[from, to]]}`, logged as a kept adjustment.
+- **Studio:** a word-chip view, using `TimelineView.story[id].text` plus word indices (a new field). Shift-click selects a range.
+
+**Tests:** the split, rebinding, dropping, edge refusal, a removal that empties a line, the window, and the route plus the web.
+
+**Cost:** no calls. A re-render from compile, which G1.5 makes partial where it can.
+
+**Group 3a total:** about 4.5–5.5 days.
+
+---
+
+### Group 3b: proving quality
+
+#### 3b.1 A rubric frozen per brief (about 0.5 day)
+
+**The idea:** the Reviewer scores against criteria written *before* any output exists. Evidence: VideoArgus, arXiv 2608.05485.
+
+**Design**
+- At the STORY stage, code writes `plan/rubric.json` from the brief and the client profile, with no Claude call:
+  - must-keep lines;
+  - the CTA;
+  - banned claims;
+  - target length;
+  - tone and genre;
+  - the hook within 2 s;
+  - the client's recurring notes.
+- `Review` gains `rubric: [{id, met, evidence}]`. The Reviewer may not add or remove criteria; a validator check returns any change to it.
+- `verdict_md` shows the met and unmet criteria. An unmet must-keep or CTA criterion is a Hold reason. Other criteria are warnings.
+- **Cost:** the Review schema is part of the QA hash, so **QA re-runs once per project, with 1 Reviewer call each**. Ship it together with 3b.2 so it happens once.
+
+#### 3b.2 Pairwise judge for evals, both orders (about 1 day)
+
+**The idea:** for each gold reel, a judge sees our reel and the pro reel as contact sheets plus the same four pace numbers. It is asked twice with the sides swapped; when the two answers disagree, the result is a tie. Evidence: Unified Agentic Video Editing; EditDuet.
+
+**Design**
+- `reel eval --pairwise` adds a `pairwise` family: wins, ties and losses against the pro reel.
+- It stays **out of the primary score** until it agrees with the owner's own pairwise picks. The Quality lab gets a small "which is better?" page reusing G2.5's blind A/B component.
+- **Cost:** 2 Claude calls per gold reel per eval run. It is opt-in.
+
+#### 3b.3 Revision evals: "do what I asked, don't break the rest" (about 1 day)
+
+**Design**
+- `eval/revisions/*.yaml` cases, each with: a project snapshot, a client note, the expected output region (seconds), and the expected change kind (caption, music, cut).
+- The harness runs `decide.revise` on a copy, compiles the result, and uses `rediff.changed_ranges` (from G1.5) between the old and new overlay props, plus a timeline diff.
+- **Scores:**
+  - *did it*: a change in the expected region, of the expected kind;
+  - *collateral*: changed frames outside the region;
+  - *don't break*: no new failing gate.
+- Seed 6 cases from `_real_doac_v2` notes. The scoreboard gains a `revisions` family.
+- **Cost:** 1 Claude call per case per run.
+
+#### 3b.4 Replies checked against the gates (about 0.5 day)
+
+**The problem:** in Timeline-Bench, agents claimed success in 93% of runs, including 95.5% of the runs that failed a test. Our revise and notes replies are Claude's words, written before the re-render and QA.
+
+**Design:**
+- After the re-render, the version entry's reply gets the measured verdict appended, for example "QA: Hold, 1 caption word to confirm".
+- The Studio Revise chat shows the reply and the verdict together.
+- **Cost:** no calls.
+
+#### 3b.5 Gold-pair tooling (about 0.5 day)
+
+**Design:**
+- `reel gold add <raw folder> <final.mp4> --language hi|hinglish|en --split tuning|holdout`.
+- It copies the files into `samples/gold/<id>/`, writes the brief stub, refreshes `eval/manifest.yaml`, and refuses a pair whose final is not derived from the raw (an audio fingerprint overlap check).
+- The Quality lab shows "Hindi/Hinglish pairs: n", which unlocks the per-language acceptance subset.
+- This makes the owner task (2–4 Hindi pairs) a 2-minute job per pair.
+
+**Group 3b total:** about 3–3.5 days.
+
+---
+
+### Group 3c: free generative assets
+
+#### 3c.1 Beauty pass, opt-in (about 1–1.5 days)
+
+**What the client sees:** a gently fresher face (smoother skin, slightly brighter eyes) that never reads as "filtered". It is off unless the brand kit or the brief turns it on.
+
+**Design**
+- **Masks:** per-frame face-oval and eye masks from the MediaPipe Face Landmarker that `cover.py` already uses. They are sampled at 6 fps, interpolated, feathered, and written as a low-resolution matte (`render/beauty_mask.mov`), cached by the mezzanine fingerprint.
+- **Render:** in `render.build_command`, a masked `bilateral` (skin) plus a small local `eq` lift (eyes) inside the matte. Strength is capped at `light`.
+- **Switches:** `Brand.beauty: off|light`, brief `beauty: bool`, and a per-project Adjust toggle.
+- **A QA gate (warn, `beauty_strength`):** measures the face-region detail loss (Laplacian variance before and after) and warns above a cap. "Never reads as filtered" is measured, not promised.
+- **Never on by default.** The UI notes that it shouldn't be used on minors; there is no age detection.
+
+**Tests:** mask interpolation, the filter graph, the gate on a synthetic face, and the brand and brief switches.
+
+**Cost:** no calls. The base render re-runs only for projects that turn it on.
+
+#### 3c.2–3c.5 Gated on the listening test (outlines; detailed when a model clears)
+
+| Item | Needs from G2.5 | Shape |
+|---|---|---|
+| **3c.2 Generated SFX** | an SFX model with usable ≥ 70% that beats the library | The finish pass may request a missing sound as a short text in a new optional `sfx_requests` field. It's a schema change, so it ships with another finish-schema change. The file is generated once, measured by the existing indexer, and stored as an owned asset with the generator's licence row. |
+| **3c.3 Music fitted to the cut** | a music model that clears; otherwise the MIDI + FluidSynth fallback | Score to the compiled cut times and the drop on the hook (G1.4). The stems already exist, so it slots in as a music asset. |
+| **3c.4 Indian-language voice and dubbing** | a voice model that clears, plus **written consent** from the speaker per language | A design spike first: Claude translation with a glossary; timing fit (rewrite to length, then speed control, then pause trims, then a stretch of at most ±15%); captions in the target script; per-language packages. |
+| **3c.5 Lip-sync** | 3c.4 done; a commercial-safe face parser in place of the non-commercial one | MuseTalk on close-ups only, gated by face size from perception. LatentSync on a rented GPU as the fallback. |
+
+**Owner tasks for Group 3:**
+- 3 or more delivered reels for one client (3a.2's real check);
+- the Hindi gold pairs (3b.5 makes it quick);
+- pairwise picks (3b.2);
+- model downloads and listening (3c.2–3c.5);
+- speaker consent for voice cloning (3c.4).

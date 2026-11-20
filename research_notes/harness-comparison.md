@@ -213,11 +213,17 @@ Why #1 sits first despite being "small":
 
 Each idea is mapped to the stage where it would go. Ordered by expected effect on *proven quality*, which §1 found is our weakest point.
 
-1. **Accept `reel improve` changes on statistics, not on score movement.**
+1. **Make `reel improve`'s statistics able to say something.**
    - Evidence: Timeline-Bench [paper]. Its VLM judges agree with humans barely per edit (κ ≈ 0.15) but well when ranking whole agents (ρ = 0.93). About 1.9k words of editing advice gave a gain that was not significant.
-   - Map: in `improve.harness_evaluator`, require a paired, significance-tested win across the whole gold set.
-   - Prerequisite: grow the gold set well beyond 6 English pairs and add Hindi/Hinglish pairs. With 6 pairs no delta can pass an honest test.
-   - Collect *pairwise* or repeated owner labels: one-off labels are noisy (α ≈ 0.10 in their data).
+   - **Correction (2026-11-20, after reading the code):** `evalh/acceptance.py` already does the statistics this idea asked for. It applies:
+     - a paired sign-flip permutation test (p ≤ 0.10);
+     - a minimum gain set from measured run-to-run noise;
+     - a confirmation re-run of both arms;
+     - per-language subsets that must not drop.
+   - So the gap is not the method but the data: 6 English gold pairs.
+     - With 6 pairs the smallest possible p is 1/64, and any gain must hold on nearly every reel.
+     - There is no Hindi/Hinglish pair, so the per-language check never runs for Hindi.
+   - Map: grow the gold set (owner task) and collect *pairwise* or repeated owner labels: one-off labels are noisy (α ≈ 0.10 in their data).
 2. **Pacing gates measured on the render.**
    - Evidence: Timeline-Bench [paper]. Agents' clearest measurable gap was cuts per minute (0.72× the reference) and the longest static stretch (1.5× the reference).
    - Map: QA gains `cut_rate` and `longest_static_s`, compared against the reference video's style analysis or a genre band, in warn mode, then calibrated like the other gates.
