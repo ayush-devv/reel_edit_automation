@@ -1262,6 +1262,17 @@ A tunnel to port 8765 would expose the whole Studio API behind one token. Two sa
   - **A kill switch:** "Stop sharing" in Settings.
 - **Recommendation:** (a). It keeps footage on the Mac, and the engine side is small.
 
+**As built (2026-11-21), option (a), switched off:**
+- **The client-only app:**
+  - The client routes moved to `studio/client_routes.py`; the Studio and the new app share them.
+  - `create_client_app` serves `/r/*` only. Everything else is a 404, including `/api` with a valid token, the web app and the docs.
+  - `reel share-server [--port 8766]` binds 127.0.0.1 and only runs when the owner starts it.
+- **Settings → "Public address for review links"** (https only): copied links use it, and the Deliver panel says how sharing works.
+- **Frame-accurate notes:** the client's "Add time" button stamps `m:ss.t`, which the notes parser already reads.
+- **Not done, on purpose:**
+  - **No tunnel installed or started.** Exposing the Mac is the owner's decision.
+  - **No pin-on-video drawing.** That would be a later UI piece.
+
 #### 4.4 Performance loop: read-only insights (about 3 days; after 4.0)
 
 - **Connect:** the owner connects a client's Instagram professional account (and optionally YouTube) once; tokens live in the macOS Keychain, never in a project.

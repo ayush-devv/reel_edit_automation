@@ -122,14 +122,14 @@ function useClientLink(projectId: string) {
   const api = useApi();
   const q = useQuery(() => api.reviewLinks(projectId), [api, projectId], { intervalMs: 15000 });
   const active = (q.data?.links ?? []).find((l) => l.state === "active");
-  return { q, active, choices: q.data?.choices };
+  return { q, active, choices: q.data?.choices, base: q.data?.public_base ?? null };
 }
 
-function AskClient({ projectId, active, onMade }: { projectId: string; active?: { id: string; path: string }; onMade: () => void }) {
+function AskClient({ projectId, active, base, onMade }: { projectId: string; active?: { id: string; path: string }; base?: string | null; onMade: () => void }) {
   const api = useApi();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const origin = base || (typeof window !== "undefined" ? window.location.origin : "");
   async function copy(path: string) {
     await navigator.clipboard?.writeText(origin + path).then(() => setMsg("Link copied"), () => setMsg(origin + path));
   }
@@ -175,7 +175,7 @@ function HookChooser({ p, onPicked }: { p: Project; onPicked: () => void }) {
     <section aria-label="Pick the hook look" className="border-b border-line-subtle px-8 py-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-section text-fg-primary">Pick the look for this reel</p>
-        {opts.length > 1 && <AskClient projectId={p.id} active={client.active} onMade={client.q.reload} />}
+        {opts.length > 1 && <AskClient projectId={p.id} active={client.active} base={client.base} onMade={client.q.reload} />}
       </div>
       <p className="mb-4 text-meta text-fg-muted">The opening seconds in {opts.length === 1 ? "the Editor's look (the brand kit fixes the style)" : "two looks"}. The full reel renders in the one you pick.</p>
       {pick && (
@@ -234,7 +234,7 @@ function StoryCheckinPanel({ p, onDone }: { p: Project; onDone: () => void }) {
     <section aria-label="Check the story" className="border-b border-line-subtle px-8 py-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-section text-fg-primary">Check the story before the full edit</p>
-        <AskClient projectId={p.id} active={client.active} onMade={client.q.reload} />
+        <AskClient projectId={p.id} active={client.active} base={client.base} onMade={client.q.reload} />
       </div>
       <p className="mb-3 text-meta text-fg-muted">
         {c.summary} · {c.total_s.toFixed(0)} s of speech · nothing has been rendered yet, so changes here cost nothing.

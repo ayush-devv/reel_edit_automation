@@ -191,6 +191,10 @@ function SettingsForm() {
                      onChange={(e) => setS({ ...s, monthly_cap_usd: Math.max(0, Number(e.target.value.replace(/[^0-9.]/g, "")) || 0) })}
                      className="w-32 font-mono text-mono" />
         </Field>
+        <Field label="Public address for review links" htmlFor="pub" hint="Empty = links work on this Mac only. To share: run `reel share-server` (review pages only, nothing else), point your own tunnel at it, and paste the tunnel's https address here.">
+          <TextInput id="pub" value={s.public_review_url ?? ""} onChange={(e) => setS({ ...s, public_review_url: e.target.value })}
+                     placeholder="https://your-tunnel.example.com" className="font-mono text-mono" />
+        </Field>
         <Field label="Projects folder" htmlFor="pdir" hint="Where footage, renders and packages are stored. To use another folder, restart with: reel studio --projects <folder>">
           <TextInput id="pdir" value={s.projects_dir} readOnly className="font-mono text-mono text-fg-secondary" />
         </Field>

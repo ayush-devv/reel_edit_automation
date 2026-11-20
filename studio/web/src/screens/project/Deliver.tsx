@@ -97,7 +97,7 @@ function ReviewLinkPanel({ projectId }: { projectId: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const origin = q.data?.public_base || (typeof window !== "undefined" ? window.location.origin : "");
   const active = (q.data?.links ?? []).filter((l) => l.state === "active");
   const old = (q.data?.links ?? []).length - active.length;
 
@@ -131,7 +131,11 @@ function ReviewLinkPanel({ projectId }: { projectId: string }) {
   return (
     <Panel title="Review link">
       <p className="text-fg-secondary">A private page with the watermarked review copy and a notes box for the client. Their notes arrive in Revise.</p>
-      <p className="mt-2 text-meta text-fg-muted">The studio only listens on this Mac, so the link works elsewhere only if you expose it on purpose (for example with a tunnel).</p>
+      <p className="mt-2 text-meta text-fg-muted">
+        {q.data?.public_base
+          ? <>Links use your public address ({q.data.public_base}). They work while <span className="font-mono">reel share-server</span> and your tunnel are running.</>
+          : <>Links work on this Mac only. To share outside it: run <span className="font-mono">reel share-server</span> (review pages only), point your own tunnel at it, and put the tunnel's https address in Settings.</>}
+      </p>
       {q.data && !q.data.ready ? (
         <p className="mt-3 text-meta text-fg-secondary">Available once the edit has rendered. Creating a link makes a small watermarked copy of the reel.</p>
       ) : (

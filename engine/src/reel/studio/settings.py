@@ -60,7 +60,8 @@ class Settings:
 # ------------------------------------------------------------------ the owner's preferences (studio_settings.json)
 
 PREF_DEFAULTS = {"max_jobs": MAX_JOBS_LIMIT, "default_brief": {}, "default_deliverables": [], "pexels_key": "", "pixabay_key": "",
-                 "monthly_cap_usd": 0.0}  # 4.1 cost guard: 0 = no cap
+                 "monthly_cap_usd": 0.0,  # 4.1 cost guard: 0 = no cap
+                 "public_review_url": ""}  # 4.3: the owner's tunnel address for `reel share-server`; "" = links work on this Mac only
 
 
 def load_prefs(path: Path) -> dict:

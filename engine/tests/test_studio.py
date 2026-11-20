@@ -621,7 +621,7 @@ def test_settings_persist_private_and_feed_the_queue(env):
     c, s = env["c"], env["s"]
     got = c.get("/api/settings").json()
     assert got == {"max_jobs": 3, "projects_dir": str(env["root"]), "default_brief": {}, "default_deliverables": [], "pexels_key_set": False,
-                   "pixabay_key_set": False, "monthly_cap_usd": 0.0}
+                   "pixabay_key_set": False, "monthly_cap_usd": 0.0, "public_review_url": ""}
     new = {**got, "max_jobs": 1, "default_brief": {"language": "hinglish", "platform": "platform.tiktok"}, "default_deliverables": ["square"],
            "pexels_key": "sekret-key", "pixabay_key": "pix-sekret"}
     r = c.put("/api/settings", json=new)
@@ -798,6 +798,41 @@ def test_review_link_lifecycle_and_isolation(env, monkeypatch):
     assert bare.get(expiring["path"]).status_code == 410
     monkeypatch.setattr(time, "time", real_time)
     assert c.post("/api/projects/p1/review-links", json={"hours": 0}).status_code == 400
+
+
+def test_the_client_only_app_serves_review_pages_and_nothing_else(env, monkeypatch):
+    """4.3 (E3): what a tunnel would expose. The same client routes; no API, no web app, no project media, even with the token."""
+    from reel.studio import review_links
+    from reel.studio.client_routes import create_client_app
+
+    monkeypatch.setattr(review_links, "_transcode", lambda src, dst: dst.write_bytes(b"MP4DATA"))
+    make_project(env["root"])
+    link = env["c"].post("/api/projects/p1/review-links", json={"hours": 24}).json()
+    pub = TestClient(create_client_app(env["root"]))
+    page = pub.get(link["path"])
+    assert page.status_code == 200 and "Send notes" in page.text and "0:00.0" in page.text  # frame-accurate stamps
+    assert pub.get(link["path"] + "/video").content == b"MP4DATA"
+    assert pub.post(link["path"] + "/notes", data={"text": "0:12.4 cut here"}, follow_redirects=False).status_code == 303
+    assert env["c"].get("/api/projects/p1/review-links").json()["notes"][-1]["text"] == "0:12.4 cut here"
+    tok = {"X-Reel-Token": env["token"]}
+    for path in ("/api/projects", "/api/health", "/", "/p/p1", f"/api/projects/p1/media/render/final.mp4?token={env['token']}",
+                 "/docs", "/openapi.json", "/r/../api/projects"):
+        assert pub.get(path, headers=tok).status_code == 404, path
+    assert pub.post("/api/projects", headers=tok, data={"name": "x"}).status_code == 404
+    assert pub.get("/r/" + "A" * 30).status_code == 410
+
+
+def test_the_public_review_address_is_https_only(env):
+    c = env["c"]
+    mj = c.get("/api/settings").json()["max_jobs"]
+    assert c.put("/api/settings", json={"max_jobs": mj, "public_review_url": "http://insecure.example.com"}).status_code == 400
+    assert c.put("/api/settings", json={"max_jobs": mj, "public_review_url": "javascript:alert(1)"}).status_code == 400
+    r = c.put("/api/settings", json={"max_jobs": mj, "public_review_url": "https://reel-abc.trycloudflare.com/"})
+    assert r.json()["public_review_url"] == "https://reel-abc.trycloudflare.com"
+    make_project(env["root"])
+    assert c.get("/api/projects/p1/review-links").json()["public_base"] == "https://reel-abc.trycloudflare.com"
+    c.put("/api/settings", json={"max_jobs": mj, "public_review_url": ""})
+    assert c.get("/api/projects/p1/review-links").json()["public_base"] is None
 
 
 def test_review_link_before_the_render_shows_the_checkin_and_the_hook(env, monkeypatch):

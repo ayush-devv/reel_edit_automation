@@ -355,7 +355,7 @@ label.tick{display:flex;gap:8px;align-items:flex-start;color:#ECEDEE;font-size:1
 
 _SCRIPT = """
 const v=document.getElementById('v'),t=document.getElementById('note'),b=document.getElementById('stamp');
-const fmt=s=>{const m=Math.floor(s/60),r=Math.floor(s%60);return m+':'+String(r).padStart(2,'0')};
+const fmt=s=>{const t=Math.floor(s*10)/10,m=Math.floor(t/60),r=(t%60).toFixed(1);return m+':'+r.padStart(4,'0')};
 v.addEventListener('timeupdate',()=>{b.textContent='Add time '+fmt(v.currentTime)});
 b.addEventListener('click',()=>{const s=fmt(v.currentTime)+' ';const i=t.selectionStart;
 const before=t.value.slice(0,i),pre=before&&!before.endsWith('\\n')?'\\n':'';t.value=before+pre+s+t.value.slice(i);
@@ -403,7 +403,7 @@ def _notes_block(link_id: str) -> str:
     return f"""<form method="post" action="/r/{link_id}/notes">
 <label for="note">Your notes, one per line. Start a line with a time to point at a moment.</label>
 <textarea id="note" name="text" maxlength="{MAX_NOTE_CHARS}" placeholder="0:12 make this faster&#10;0:31 spell the doctor's name right&#10;love the ending" required></textarea>
-<div class="row"><button type="button" id="stamp">Add time 0:00</button></div>
+<div class="row"><button type="button" id="stamp">Add time 0:00.0</button><span class="meta">pauses the video and adds the exact moment</span></div>
 {_NAME_FIELD}
 <div class="row"><button class="primary" type="submit">Send notes</button></div>
 </form>"""

@@ -136,6 +136,22 @@ def _cmd_listen(args: argparse.Namespace) -> int:
         return 1
 
 
+def _cmd_share_server(args: argparse.Namespace) -> int:
+    """4.3 (E3): serve ONLY the client review pages, on 127.0.0.1, for a tunnel the owner sets up and points at this port."""
+    import uvicorn
+
+    from reel.studio.client_routes import create_client_app
+    from reel.studio.settings import Settings
+
+    root = Path(args.projects).expanduser().resolve() if args.projects else Settings().projects_root
+    print(f"Review pages only (no Studio, no API) on http://127.0.0.1:{args.port}  ·  projects: {root}")
+    print("To share outside this Mac, point YOUR tunnel at that address (e.g. `cloudflared tunnel --url http://127.0.0.1:"
+          f"{args.port}`), then put the tunnel's https address in Studio → Settings → Public address for review links.")
+    print("Stop with Ctrl-C; turned-off and expired links stop working at once.")
+    uvicorn.run(create_client_app(root), host="127.0.0.1", port=args.port, log_level="warning")
+    return 0
+
+
 def _cmd_spend(args: argparse.Namespace) -> int:
     """4.1 cost guard: this month's AI spend, the cap, pending paid quotes; `approve <hash>` approves one."""
     from reel import spend
@@ -811,6 +827,11 @@ def main(argv: list[str] | None = None) -> int:
         q = lsub.add_parser(name, help=help_text)
         q.add_argument("--set", required=True, choices=["sfx", "music", "voice"])
     p.set_defaults(func=_cmd_listen)
+
+    p = sub.add_parser("share-server", help="4.3: serve only the client review pages on 127.0.0.1 (for your own tunnel); off unless you run this")
+    p.add_argument("--port", type=int, default=8766)
+    p.add_argument("--projects", help="projects folder (default: the Studio's)")
+    p.set_defaults(func=_cmd_share_server)
 
     p = sub.add_parser("spend", help="cost guard (4.1): this month's AI spend, the cap, pending paid quotes")
     p.add_argument("--projects", help="projects folder (default: the Studio's)")

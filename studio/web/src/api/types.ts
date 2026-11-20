@@ -491,6 +491,8 @@ export interface Settings {
   pixabay_key?: string;
   /** 4.1: monthly AI spend cap in USD; 0 = no cap. */
   monthly_cap_usd?: number;
+  /** 4.3: https address of the owner's tunnel to `reel share-server`; "" = review links work on this Mac only. */
+  public_review_url?: string;
 }
 
 /** GET /api/spend (4.1 cost guard). */
@@ -546,6 +548,8 @@ export interface ReviewLinks {
   notes: ReviewNote[];
   ready: boolean;
   choices?: ClientChoices;
+  /** 4.3: the owner's public address for review links (their tunnel to `reel share-server`); null = this Mac only. */
+  public_base?: string | null;
 }
 
 /** Current value of every guided adjustment (FR-8). */
