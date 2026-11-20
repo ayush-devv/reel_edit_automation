@@ -43,8 +43,15 @@ class ReviewIssue(_Strict):
     fix: str  # concrete instruction for the Editor (or the owner)
 
 
+class RubricCheck(_Strict):
+    id: str  # a criterion id from plan/rubric.json, exactly as given
+    met: bool
+    evidence: str  # what in the reel shows it (timecode + what is seen/heard), or why not
+
+
 class Review(_Strict):
     sendable: bool  # would a demanding client accept this reel as is?
     summary: str
     issues: list[ReviewIssue]
     strengths: list[str]
+    rubric: list[RubricCheck] = []  # 3b.1: one answer per fixed criterion (older reviews have none)

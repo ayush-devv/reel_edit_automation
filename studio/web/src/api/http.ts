@@ -124,6 +124,8 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
     lab: () => get("/api/lab"),
     labAction: (action, body) => post(`/api/lab/${action}`, body ?? {}),
     setGateMode: (gate, mode) => request("PUT", `/api/lab/gates/${enc(gate)}`, { mode }),
+    votePairwise: (run, reel, choice) => post(`/api/lab/pairwise/vote`, { run, reel, choice }),
+    pairwiseMediaUrl: (run, reel, side) => withToken(`/api/lab/pairwise/${enc(run)}/${enc(reel)}/${side}`),
     listening: (set) => get(`/api/listening/${set}`),
     prepareListening: (set) => post<JobRef>(`/api/listening/${set}/prepare`),
     voteListening: (set, vote) => post(`/api/listening/${set}/vote`, vote),

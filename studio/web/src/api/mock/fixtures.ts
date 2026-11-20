@@ -463,6 +463,8 @@ export const BRANDS: BrandEntry[] = [
 
 export const LAB: Lab = {
   gold: { pairs: 18, tuning: 12, holdout: 6, hinglish: 7 },
+  pairwise: { last: { win: 2, tie: 5, loss: 5 }, last_run: "20261118-210000", agreement: { n: 4, agree: 3, rate: 0.75 },
+              pending: [{ run: "20261118-210000", reel: "thediaryofaceo_HAXzFdJ9U-0" }, { run: "20261118-210000", reel: "hubermanlab_C0RyMr9s3Hw" }] },
   release_locked: true,
   lock_reason: "Held-out pairs are scored only by a release check (ADR-0031). Last release check 9 days ago; the next is allowed after 3 more tuning runs.",
   calibration: {

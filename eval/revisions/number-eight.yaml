@@ -1,0 +1,3 @@
+project: projects/_real_doac_v2
+note: Show the number 8 on screen when he says eight teaspoons of sugar.
+expect: {kind: graphics, region_s: [23.5, 27.9]}

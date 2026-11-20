@@ -101,6 +101,23 @@ def _run_child(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_gold(args: argparse.Namespace) -> int:
+    """3b.5: add one gold pair (raw + the pro's final), checked to belong together."""
+    from reel.evalh import gold_add
+
+    try:
+        r = gold_add.add_pair(Path(args.raw).expanduser().resolve(), Path(args.final).expanduser().resolve(), language=args.language,
+                              split=args.split, genre=args.genre, channel=args.channel, pair_id=args.id, check=not args.no_check)
+    except gold_add.GoldError as exc:
+        print(f"not added: {exc}")
+        return 1
+    print(f"added {r['id']} ({r['duration_s']} s, match {r['match'] if r['match'] is not None else 'not checked'}) · "
+          f"{r['pairs']} gold pairs, {r['hindi_hinglish']} Hindi/Hinglish")
+    if r.get("warning"):
+        print(f"warning: {r['warning']}")
+    return 0
+
+
 def _cmd_listen(args: argparse.Namespace) -> int:
     """G2.5: render the blind listening set, or print its result."""
     from reel import listen
@@ -533,8 +550,19 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         print(Counter((r["split"], r.get("language")) for r in m["reels"]))
         print(f"manifest: {harness.MANIFEST} ({len(m['reels'])} reels)")
         return 0
-    row = harness.run_eval(args.set, allow_holdout=args.holdout)
-    print(json.dumps({k: row[k] for k in ("run_id", "split", "commit", "dirty", "knowledge", "mean_primary", "vetoed")}, indent=2))
+    if args.revisions:  # 3b.3: one Claude call per case in eval/revisions/
+        from reel.evalh import revisions
+
+        out = revisions.run_all()
+        for c in out["cases"]:
+            print(f"{c['id']:22} did_it {c['did_it']!s:5} collateral {c.get('collateral_s', '—')!s:>6} s  dont_break {c['dont_break']!s:5} "
+                  + (c.get("error") or f"“{c.get('reply', '')}”"))
+        print(f"\n{out['did_it']}/{out['n']} did what was asked · {out['dont_break']}/{out['n']} broke nothing · "
+              f"mean collateral {out['mean_collateral_s']} s")
+        return 0
+    row = harness.run_eval(args.set, allow_holdout=args.holdout, pairwise=args.pairwise)
+    keys = ("run_id", "split", "commit", "dirty", "knowledge", "mean_primary", "vetoed", "pairwise")
+    print(json.dumps({k: row[k] for k in keys if k in row}, indent=2))
     return 0
 
 
@@ -686,6 +714,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--clip-length", help="(--mine) speech length per reel in seconds, e.g. 20-75 (default 20-75 or the brief's)")
     p.set_defaults(func=_cmd_run)
 
+    p = sub.add_parser("gold", help="gold set: `gold add <raw> <final.mp4> --language hi` (3b.5)")
+    gsub = p.add_subparsers(dest="gold_cmd", required=True)
+    q = gsub.add_parser("add", help="add one pair: raw footage (file or folder) + the pro's finished reel")
+    q.add_argument("raw")
+    q.add_argument("final")
+    q.add_argument("--language", required=True, choices=["en", "hi", "hinglish"])
+    q.add_argument("--split", default="tuning", choices=["tuning", "holdout"])
+    q.add_argument("--genre", help="e.g. genre.podcast_clip")
+    q.add_argument("--channel", help="the creator, e.g. @handle (spreads the holdout across creators)")
+    q.add_argument("--id", help="pair id (default: from the final's file name)")
+    q.add_argument("--no-check", action="store_true", help="skip the 'final was cut from this raw' audio check")
+    p.set_defaults(func=_cmd_gold)
+
     p = sub.add_parser("checkin", help="answer the story check-in (3a.1); without answers, print it")
     p.add_argument("--project", required=True)
     p.add_argument("--yes", help="accepted question ids, comma-separated (e.g. q1,q3)")
@@ -828,6 +869,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--set", default="tuning", choices=["tuning", "holdout"])
     p.add_argument("--holdout", action="store_true", help="confirm running the holdout set (release candidates only)")
     p.add_argument("--auto-holdout", action="store_true", help="with --init: pick a seeded, stratified holdout (≥ 2 Hinglish) once")
+    p.add_argument("--pairwise", action="store_true", help="also judge ours vs the pro's reel, both orders (2 Claude calls per reel; 3b.2)")
+    p.add_argument("--revisions", action="store_true", help="run the revision evals in eval/revisions/ (1 Claude call per case; 3b.3)")
     p.set_defaults(func=_cmd_eval)
 
     p = sub.add_parser("conformance", help="build the synthetic corpus and check S0 on it")

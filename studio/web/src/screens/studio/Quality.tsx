@@ -115,6 +115,60 @@ function GateSwitch({ gate, onChanged }: { gate: CalibrationGate; onChanged: () 
   );
 }
 
+/** 3b.2: ours vs the pro's reel. The judge's tally, how often it agrees with the owner, and the next blind pair. */
+function Pairwise({ lab, onVoted }: { lab: Lab; onVoted: () => void }) {
+  const api = useApi();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const pw = lab.pairwise;
+  if (!pw || (!pw.last && !pw.pending.length)) return null;
+  const next = pw.pending[0];
+  const vote = async (choice: "A" | "B" | "same") => {
+    if (!next) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.votePairwise(next.run, next.reel, choice);
+      onVoted();
+    } catch (e) {
+      setErr(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Panel title="Ours vs the pro (blind)">
+      {pw.last && (
+        <p className="text-fg-secondary">
+          Judge, last run: {pw.last.win} win · {pw.last.tie} tie · {pw.last.loss} loss (asked both ways round; a flip counts as a tie).
+          {" "}Agrees with your picks {pw.agreement.rate === null ? "— no picks yet" : `${pct(pw.agreement.rate)} of ${pw.agreement.n}`}. It
+          stays out of the score until it agrees with you.
+        </p>
+      )}
+      {next && (
+        <>
+          <p className="mt-3 text-meta text-fg-muted">Which reel is better? You aren't told which one the engine made. {pw.pending.length} to go.</p>
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            {(["A", "B"] as const).map((side) => (
+              <figure key={side}>
+                <figcaption className="mb-1 text-label text-fg-primary">{side}</figcaption>
+                <video src={api.pairwiseMediaUrl(next.run, next.reel, side)} controls playsInline className="aspect-[9/16] w-full rounded-control bg-black"
+                       aria-label={`Reel ${side}`} />
+              </figure>
+            ))}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <Button busy={busy} onClick={() => vote("A")}>A is better</Button>
+            <Button busy={busy} onClick={() => vote("same")}>Same</Button>
+            <Button busy={busy} onClick={() => vote("B")}>B is better</Button>
+          </div>
+        </>
+      )}
+      {err && <div className="mt-2"><Notice tone="error">{err}</Notice></div>}
+    </Panel>
+  );
+}
+
 /** C5: which speech-to-text engine transcribes the owner's Hinglish clips best. */
 function Bakeoff({ lab, onStarted }: { lab: Lab; onStarted: () => void }) {
   const api = useApi();
@@ -337,6 +391,7 @@ export default function Quality() {
               )}
             </Panel>
             <Actions lab={lab} onStarted={q.reload} />
+            <Pairwise lab={lab} onVoted={q.reload} />
             <Bakeoff lab={lab} onStarted={q.reload} />
             <Panel title="Listening test">
               <p className="text-fg-secondary">Blind A/B of free sound-effect, music and voice models against what we have today, before any of them is used in a reel.</p>

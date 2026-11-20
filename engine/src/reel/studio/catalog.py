@@ -156,7 +156,30 @@ def lab(settings) -> dict:
             for i, r in enumerate(_jsonl(settings.scoreboard)) if isinstance(r.get("mean_primary"), (int, float))]
     return {"gold": gold, "gold_pairs": [{k: p[k] for k in ("id", "split", "language", "source")} for p in pairs],
             "release_locked": locked, "lock_reason": reason or None, "calibration": calibration(settings),
-            "improve_history": [_improve_row(e) for e in _jsonl(settings.improve_log)], "runs": runs, "bakeoff": bakeoff()}
+            "improve_history": [_improve_row(e) for e in _jsonl(settings.improve_log)], "runs": runs, "bakeoff": bakeoff(),
+            "pairwise": pairwise_summary(settings)}
+
+
+def pairwise_summary(settings) -> dict:
+    """3b.2: the judge's last tally and how often it agrees with the owner's blind picks (kept out of the score until it does)."""
+    from reel.evalh import pairwise as pw
+
+    rows = [r for r in _jsonl(settings.scoreboard) if r.get("pairwise")]
+    last = rows[-1] if rows else None
+    picks = pw.owner_picks(settings.pairwise_log)
+    pending = [{"run": row["run_id"], "reel": r["id"]} for row in rows for r in row.get("reels", [])
+               if r.get("files") and (row["run_id"], r["id"]) not in picks]
+    return {"last": last["pairwise"] if last else None, "last_run": last["run_id"] if last else None,
+            "agreement": pw.owner_agreement(rows, settings.pairwise_log), "pending": pending[:20]}
+
+
+def pairwise_files(settings, run_id: str, reel: str) -> dict | None:
+    for row in _jsonl(settings.scoreboard):
+        if row.get("run_id") == run_id:
+            for r in row.get("reels", []):
+                if r.get("id") == reel and r.get("files"):
+                    return r["files"]
+    return None
 
 
 def bakeoff_paths() -> tuple[Path, Path]:

@@ -94,7 +94,8 @@ QA_GATES = {
     "numbers": "warn",  # on-screen numbers vs speech (reel.numbers); the plan check already sends clear mismatches back
     "pace": "warn", "static_stretch": "warn",  # G2.1: judged only against the project's reference reel
     "broll_repeat": "warn",  # G2.3: the same or a near-identical cutaway twice
-    "client_style_drift": "warn",  # 3a.2: departs from this client's approved reels on two or more counts
+    "client_style_drift": "warn",
+    "beauty_strength": "warn",  # 3c.1: the beauty pass took too much detail from the face  # 3a.2: departs from this client's approved reels on two or more counts
 }
 GATE_OVERRIDES_FILE = "gates.json"  # in ~/.config/reel (or $REEL_CONFIG_DIR): the owner's warn ↔ block switches (UI C3)
 

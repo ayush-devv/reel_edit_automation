@@ -33,6 +33,7 @@ class Brief(_Strict):
     use_categories: list[str] = Field(default_factory=list)  # political | dating | drugs | alcohol | gambling | religious | adult
     purpose: str = "promo"  # editorial | organic | promo | paid_ad
     accept_credits: bool = True  # False: the client won't carry credits, so CC BY music/SFX are left out
+    beauty: bool = False  # 3c.1: gentle skin smoothing on the speaker (opt-in; never for minors)
 
     @field_validator("use_categories")
     @classmethod
@@ -128,6 +129,14 @@ class Brand(_Strict):
     look: str | None = None  # locks the colour look (reel.color.LOOKS)
     end_card: str | None = None
     cta_style: str | None = None
+    beauty: str = "off"  # 3c.1: "off" | "light" for every reel of this client (opt-in; never for minors)
+
+    @field_validator("beauty")
+    @classmethod
+    def _beauty(cls, v: str) -> str:
+        if v not in ("off", "light"):
+            raise ValueError("beauty must be off or light")
+        return v
 
 
 def load_brief(path: str | Path | None) -> Brief | None:

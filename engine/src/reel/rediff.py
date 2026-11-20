@@ -39,6 +39,25 @@ def _merge(ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
     return [(a, b) for a, b in out]
 
 
+def changed_elements(old: dict | None, new: dict) -> list[tuple[int, int]] | None:
+    """The spans of overlay elements whose content changed (added, removed, edited), with no padding and no closure:
+    what a revision actually changed, for the revision evals (3b.3). None = a global change (or no baseline)."""
+    if not old or any(_key(old.get(k)) != _key(new.get(k)) for k in GLOBAL_KEYS):
+        return None
+    oc, nc = old.get("captions") or {}, new.get("captions") or {}
+    if any(_key(oc.get(k)) != _key(nc.get(k)) for k in CAPTION_GLOBAL):
+        return None
+    out: list[tuple[int, int]] = []
+    for lst in ID_LISTS:
+        o = {e["id"]: e for e in old.get(lst) or []}
+        n = {e["id"]: e for e in new.get(lst) or []}
+        out += [_span(e) for eid in set(o) | set(n) if _key(o.get(eid)) != _key(n.get(eid)) for e in (o.get(eid), n.get(eid)) if e]
+    op, np_ = oc.get("pages") or [], nc.get("pages") or []
+    okeys, nkeys = {_key(p) for p in op}, {_key(p) for p in np_}
+    out += [_span(p) for p in op if _key(p) not in nkeys] + [_span(p) for p in np_ if _key(p) not in okeys]
+    return _merge(out)
+
+
 def changed_ranges(old: dict | None, new: dict) -> list[tuple[int, int]] | None:
     """Inclusive frame ranges to re-render ([] = nothing changed), or None = render everything."""
     if not old:
@@ -74,13 +93,18 @@ def changed_ranges(old: dict | None, new: dict) -> list[tuple[int, int]] | None:
         return []
     total = int(new.get("duration_f", 0))
     ranges = _merge([(max(0, a - PAD_F), min(total - 1, b + PAD_F)) for a, b in marked])
-    everything = [_span(e) for lst in ID_LISTS for e in (new.get(lst) or [])] + [_span(p) for p in np_]
-    while True:  # closure: overlapping elements join until nothing new joins
-        grown = _merge(ranges + [(max(0, a - PAD_F), min(total - 1, b + PAD_F))
-                                 for a, b in everything if any(a <= rb and b >= ra for ra, rb in ranges)])
+    items = [_span(e) for lst in ID_LISTS for e in (new.get(lst) or [])]
+    pages = [_span(p) for p in np_]
+    # Closure over titles, flashes, pips and graphics until nothing new joins (each joins padded: its animations).
+    while True:
+        grown = _merge(ranges + [(max(0, a - PAD_F), min(total - 1, b + PAD_F)) for a, b in items if any(a <= rb and b >= ra for ra, rb in ranges)])
         if grown == ranges:
             break
         ranges = grown
+    # Caption pages under those ranges join padded in ONE pass. Iterating them chain-reacted through back-to-back
+    # pages (each padded joiner reached the next page) and turned a one-page change into a full re-render
+    # (found by the revision evals, roadmap 3b.3). A changed page's own neighbours are already marked above.
+    ranges = _merge(ranges + [(max(0, a - PAD_F), min(total - 1, b + PAD_F)) for a, b in pages if any(a <= rb and b >= ra for ra, rb in ranges)])
     if sum(b - a + 1 for a, b in ranges) > MAX_SHARE * total:
         return None
     return ranges

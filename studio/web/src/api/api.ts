@@ -110,6 +110,9 @@ export interface Api {
   saveBrand(id: string, brand: Brand, isNew: boolean): Promise<void>;
   lab(): Promise<Lab>;
   labAction(action: "eval" | "calibrate" | "improve" | "bakeoff", body?: Record<string, unknown>): Promise<JobRef>;
+  /** 3b.2: the owner's blind pick between our reel and the pro's (sides are hidden; the engine keeps the key). */
+  votePairwise(run: string, reel: string, choice: "A" | "B" | "same"): Promise<void>;
+  pairwiseMediaUrl(run: string, reel: string, side: "A" | "B"): string;
   /** G2.5 listening test. */
   listening(set: ListenSet): Promise<Listening>;
   prepareListening(set: ListenSet): Promise<JobRef>;

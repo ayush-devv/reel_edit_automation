@@ -34,6 +34,7 @@ class Settings:
     scoreboard: Path = field(default_factory=lambda: config.EVAL_DIR / "scoreboard.jsonl")
     improve_log: Path = field(default_factory=lambda: config.EVAL_DIR / "improve_log.jsonl")
     calibration_report: Path = field(default_factory=lambda: config.EVAL_DIR / "calibration" / "auto_latest.json")
+    pairwise_log: Path = field(default_factory=lambda: config.EVAL_DIR / "pairwise_owner.jsonl")  # 3b.2 the owner's blind picks
     python: str = sys.executable  # interpreter for job subprocesses (`python -m reel.cli …`)
     max_jobs: int = MAX_JOBS_LIMIT  # NFR-2 (the owner's `max_jobs` preference overrides it at start-up)
     memory_budget_gb: float = 12.0  # NFR-2: estimated memory of running jobs stays under this

@@ -526,6 +526,21 @@ def versions(ws: Path) -> list[dict]:
     return out
 
 
+def with_measured_verdict(ws: Path, reply: str) -> str:
+    """3b.4: an Editor reply ("Fixed the caption") is a claim made before the re-render. Append what QA measured after
+    it, so the owner never reads a success the checks didn't confirm (Timeline-Bench: agents claimed success in 93 %
+    of runs, including 95.5 % of failed ones)."""
+    v = read_json(ws / "qa" / "verdict.json")
+    if not v or v.get("status") not in ("sendable", "hold"):
+        return reply
+    if v["status"] == "sendable":
+        tail = "QA after the change: Sendable" + (f" ({len(v.get('warnings', []))} warning(s))" if v.get("warnings") else "")
+    else:
+        reasons = v.get("reasons", [])
+        tail = f"QA after the change: Hold, {len(reasons)} reason(s): " + "; ".join(r.split(":")[0] for r in reasons[:3])
+    return f"{reply} · {tail}" if reply else tail
+
+
 VERSION_FILES = ("plan/story.json", "plan/finish.json", "plan/story_readback.txt", "timeline/timeline.json")
 
 

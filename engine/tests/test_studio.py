@@ -250,7 +250,7 @@ def test_adjust_validation_422_then_applies(env):
     env["launcher"].finish()
     vs = c.get("/api/projects/p1/versions").json()
     assert [v["label"] for v in vs] == ["Original edit", "Manual"] and vs[1]["final"] == "versions/2/final.mp4"
-    assert vs[1]["reply"] == "caption family → clean_phrase"
+    assert vs[1]["reply"] == "caption family → clean_phrase · QA after the change: Hold, 1 reason(s): proof_words"  # 3b.4
     assert (ws / "versions" / "1" / "plan" / "finish.json").exists()
     assert c.post("/api/projects/p1/adjust", json={"kind": "punch_ins_off", "value": True}).status_code == 200
     assert json.loads((ws / "plan" / "finish.json").read_text())["punch_ins"] == []
@@ -678,16 +678,17 @@ def test_job_versions_reply_cost_and_sse_snapshot_after_done(env):
     names = [e for e, _ in events]
     job_ev = next(d for e, d in events if e == "job" and d["status"] == "done")
     assert job_ev["id"] == job_id
-    assert next(d for e, d in events if e == "revision") == {"reply": "Trimmed the opening breath.", "request": "make the hook faster", "version": 2}
+    measured = "Trimmed the opening breath. · QA after the change: Hold, 1 reason(s): proof_words"  # 3b.4: the claim next to the measured verdict
+    assert next(d for e, d in events if e == "revision") == {"reply": measured, "request": "make the hook faster", "version": 2}
     assert names.index("done") < len(names) - 1 and names[names.index("done") + 1] == "snapshot"
     snap = events[names.index("done") + 1][1]
     assert [v["label"] for v in snap["versions"]] == ["Original edit", "Revision: “make the hook faster”"]
-    assert snap["versions"][1]["reply"] == "Trimmed the opening breath." and snap["versions"][1]["cost_usd"] == pytest.approx(0.09)
+    assert snap["versions"][1]["reply"] == measured and snap["versions"][1]["cost_usd"] == pytest.approx(0.09)
     # proof fixes become versions too; restoring the current version is refused
     assert c.post("/api/projects/p1/proof", json={"words": [{"i": 2, "text": "sugar"}]}).status_code == 200
     env["launcher"].finish("proof")
     vs = c.get("/api/projects/p1/versions").json()
-    assert vs[-1]["label"] == "Caption fix" and vs[-1]["reply"] == "Caption words: “sugar” confirmed"
+    assert vs[-1]["label"] == "Caption fix" and vs[-1]["reply"].startswith("Caption words: “sugar” confirmed · QA after the change:")
     assert c.post(f"/api/projects/p1/versions/{vs[-1]['n']}/restore").status_code == 400
     assert c.post("/api/projects/p1/versions/1/restore").status_code == 200
 

@@ -306,6 +306,19 @@ export default function Review() {
           </Panel>
         )}
         {p.review && <ReviewerNotes issues={p.review.issues} summary={p.review.summary} onSeek={seek} />}
+        {p.review?.rubric && p.review.rubric.length > 0 && (
+          <Panel title="Brief checklist (fixed before the edit)">
+            <ul className="space-y-1.5" aria-label="Brief checklist">
+              {p.review.rubric.map((r) => (
+                <li key={r.id} className="flex gap-2 text-meta">
+                  <span className={r.met ? "text-st-sendable" : "text-st-hold"} aria-label={r.met ? "met" : "not met"}>{r.met ? "✓" : "✗"}</span>
+                  <span className="text-fg-primary">{r.id.replace(/_/g, " ")}</span>
+                  {r.evidence && <span className="text-fg-muted">· {r.evidence}</span>}
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        )}
         <Gates p={p} />
         <div className="grid grid-cols-1 gap-x-10 xl:grid-cols-2">
           <LabelControl p={p} />

@@ -167,6 +167,26 @@ REFERENCE = Stage(name="reference", input_hash=_reference_hash, run=_reference,
                   outputs=lambda ctx: [ctx.ws.path("context", "reference_style.md")] if ctx.options.get("reference") else [])
 
 
+# ------------------------------------------------------------------ rubric fixed before the edit (roadmap 3b.1)
+
+
+def _rubric_hash(ctx: StageContext) -> str:
+    from reel import rubric
+
+    return hash_inputs({"brief": _opt_file(ctx.options.get("brief")), **_client_key(ctx), "code": file_fingerprint(Path(rubric.__file__)),
+                        "v": VERSION})
+
+
+def _rubric(ctx: StageContext) -> dict:
+    from reel import client_memory, rubric
+
+    items = rubric.write(ctx.ws, _inputs(ctx).brief, client_memory.profile(ctx.ws))
+    return {"criteria": len(items), "required": sum(c["required"] for c in items)}
+
+
+RUBRIC = Stage(name="rubric", input_hash=_rubric_hash, outputs=lambda ctx: [ctx.ws.path("plan", "rubric.json")], run=_rubric)
+
+
 # ------------------------------------------------------------------ story
 
 
@@ -360,7 +380,8 @@ def _render_hash(ctx: StageContext) -> str:
                         "code": _render_code_fp(),
                         "broll": _fp(ctx, "broll/index.json"),
                         "voice": [_fp(ctx, "perception/voice_enhance.json"), *(_fp(ctx, str(p.relative_to(ctx.ws.root))) for p, _g in enhanced_voice(ctx).values())],
-                        "mezz": _mezz_fps(ctx), "v": VERSION, "crf": render.CRF})
+                        "mezz": _mezz_fps(ctx), "v": VERSION, "crf": render.CRF,
+                        **({"beauty": _beauty_code()} if _beauty_mode(ctx) != "off" else {})})  # 3c.1; off: old hashes unchanged
 
 
 def enhanced_voice(ctx: StageContext) -> dict[str, tuple[Path, float]]:
@@ -417,9 +438,23 @@ def _video_fp(ctx: StageContext, tl: Timeline) -> str:
     d.pop("audio", None)
     d.pop("ducking", None)
     d["assets"] = {k: v for k, v in d["assets"].items() if v.get("kind") in ("video", "image", "matte")}
-    return hash_inputs({"timeline": d, "faces": _fp(ctx, "perception/faces.json"), "scenes": _fp(ctx, "perception/scenes.json"),
+    beauty = {"beauty": _beauty_code()} if _beauty_mode(ctx) != "off" else {}  # off: old fingerprints unchanged
+    return hash_inputs({**beauty, "timeline": d, "faces": _fp(ctx, "perception/faces.json"), "scenes": _fp(ctx, "perception/scenes.json"),
                         "speakers": _fp(ctx, "perception/speakers.json"), "broll": _fp(ctx, "broll/index.json"), "mezz": _mezz_fps(ctx),
                         "code": _render_code_fp(), "v": VERSION, "crf": render.CRF})
+
+
+def _beauty_code() -> str:
+    from reel import beauty
+
+    return file_fingerprint(Path(beauty.__file__))
+
+
+def _beauty_mode(ctx: StageContext) -> str:
+    from reel import beauty
+    from reel import brief as brief_mod
+
+    return beauty.mode(brief_mod.load_brief(ctx.options.get("brief")), brief_mod.load_brand(ctx.options.get("brand")))
 
 
 def _render(ctx: StageContext) -> dict:
@@ -446,6 +481,12 @@ def _render(ctx: StageContext) -> dict:
         luts, measured = clip_luts(ctx, tl)
         meta = render.render_base(tl, ctx.ws.root, base, luts=luts, **common) | {"audio_only": False}
         atomic_write_json(ctx.ws.path("render", "base.grade.json"), measured)
+        if _beauty_mode(ctx) == "light":  # 3c.1: on the rendered picture, so it follows every cut and crop
+            from reel import beauty
+
+            meta["beauty"] = beauty.apply(base, tl.duration_f, tb.parse_rate(tl.fps))
+        else:
+            ctx.ws.path("render", "beauty.json").unlink(missing_ok=True)
     atomic_write_json(meta_file, {"video_fp": video_fp})
     return meta | {"voice_enhanced": sorted(ev), "grade": {"look": tl.grade.look, "strength": tl.grade.strength, "clips": measured}, "room_tone": {k: {"s": round(v[0] / 1e6, 2), "e": round(v[1] / 1e6, 2), "dbfs": v[2]} for k, v in rt.items()}}
 
@@ -567,7 +608,7 @@ def _qa_hash(ctx: StageContext) -> str:
     from reel import qa as qa_mod
     from reel.schemas.review import Review
 
-    return hash_inputs({"final": _fp(ctx, "render/final.mp4"), "proof": _fp(ctx, "qa/proof_confirmed.json"),
+    return hash_inputs({"final": _fp(ctx, "render/final.mp4"), "proof": _fp(ctx, "qa/proof_confirmed.json"), "rubric": _fp(ctx, "plan/rubric.json"),
                         "brief": _opt_file(ctx.options.get("brief")), "reference": _opt_file(ctx.options.get("reference")),
                         "persona": file_fingerprint(verdict.REVIEWER_PERSONA),
                         "schema": decide.schema(Review), "gates": config.QA_GATES, "trusted": config.REVIEWER_TRUSTED,
@@ -821,4 +862,4 @@ VARIANTS = Stage(name="variants", input_hash=_variants_hash,
                                       *(ctx.ws.path("export", "variants", f"reel_{n}.mp4") for n in _deliverables(ctx))],
                  run=_variants)
 
-STAGES = [STOCK, BROLL, REFERENCE, STORY, FINISH, COMPILE, RENDER, OVERLAY, COMPOSITE, QA, COVER, COPY, PACKAGE, VARIANTS]
+STAGES = [STOCK, BROLL, REFERENCE, RUBRIC, STORY, FINISH, COMPILE, RENDER, OVERLAY, COMPOSITE, QA, COVER, COPY, PACKAGE, VARIANTS]

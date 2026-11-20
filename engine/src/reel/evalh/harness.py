@@ -163,7 +163,7 @@ def score_reel(r: dict, ws: Workspace, *, asr_backend, kappa: float | None, styl
 
 
 def run_eval(split: str = "tuning", *, allow_holdout: bool = False, work_root: Path | None = None, caller=None,
-             reels_filter: list[str] | None = None, label: str = "", fresh_decisions: bool = False) -> dict:
+             reels_filter: list[str] | None = None, label: str = "", fresh_decisions: bool = False, pairwise: bool = False) -> dict:
     """Run the full edit (with the fix loop) on every gold reel of `split` and score it vs the owner's final."""
     from reel import autofix, bakeoff, calibrate
     from reel.stages import EDIT_PIPELINE
@@ -201,7 +201,15 @@ def run_eval(split: str = "tuning", *, allow_holdout: bool = False, work_root: P
             if asr is None:
                 eng = config.ASR_ENGINES.get(r.get("language") or "en", config.ASR_ENGINES["en"])
                 asr = bakeoff.engines([eng])[eng]
-            results.append({"id": r["id"], "language": r.get("language"), **score_reel(r, ws, asr_backend=asr, kappa=kappa, style_lib=style_lib)})
+            row_r = {"id": r["id"], "language": r.get("language"), **score_reel(r, ws, asr_backend=asr, kappa=kappa, style_lib=style_lib)}
+            if pairwise:  # 3b.2: a separate family, kept out of the primary score until it agrees with the owner
+                from reel import claude_call
+                from reel.evalh import pairwise as pw
+
+                ours, pro = ws.path("render", "final.mp4"), _abs(r["final"])
+                row_r["pairwise"] = pw.judge(ours, pro, ws.path("eval", "pairwise_judge"), caller or claude_call.call)
+                row_r["files"] = {"ours": str(ours), "pro": str(pro)}
+            results.append(row_r)
         except Exception as exc:  # crash = veto (ADR-0030)
             results.append({"id": r["id"], "language": r.get("language"), "families": {}, "primary": None,
                             "vetoes": [f"crash: {type(exc).__name__}: {exc}"]})
@@ -219,6 +227,10 @@ def run_eval(split: str = "tuning", *, allow_holdout: bool = False, work_root: P
         "mean_primary": round(sum(scored) / len(scored), 2) if scored else None,
         "vetoed": sum(1 for x in results if x["vetoes"]),
     }
+    if pairwise:
+        from reel.evalh import pairwise as pw
+
+        row["pairwise"] = pw.tally(results)
     config.EVAL_DIR.mkdir(parents=True, exist_ok=True)
     with open(SCOREBOARD, "a") as f:
         f.write(json.dumps(row, sort_keys=True) + "\n")

@@ -192,6 +192,21 @@ describe("adjust validation display (FR-8, AC-12)", () => {
     expect(calls[0]).toEqual(["story_words", { item: "k01", remove: [[1, 2]] }]);
   });
 
+  it("the owner picks ours vs the pro blind in the Quality lab (3b.2)", async () => {
+    const api = createMockApi();
+    render(<TestApp api={api} path="/studio/quality" />);
+    expect(await screen.findByText(/2 win · 5 tie · 5 loss/, undefined, T)).toBeInTheDocument();
+    expect(screen.getByText(/2 to go/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "A is better" }));
+    expect(await screen.findByText(/1 to go/, undefined, T)).toBeInTheDocument();
+  });
+
+  it("New edit offers the beauty pass, off by default (3c.1)", async () => {
+    render(<TestApp api={createMockApi()} path="/new" />);
+    const toggle = await screen.findByRole("switch", { name: /Beauty pass/ }, T).catch(() => screen.findByRole("checkbox", { name: /Beauty pass/ }, T));
+    expect(toggle).not.toBeChecked();
+  });
+
   it("a cleared gate can be switched to block in the Quality lab (C3)", async () => {
     const api = createMockApi();
     render(<TestApp api={api} path="/studio/quality" />);

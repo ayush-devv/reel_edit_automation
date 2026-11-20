@@ -56,6 +56,8 @@ export interface BriefForm {
   useCategories: UseCategory[];
   purpose: "editorial" | "organic" | "promo" | "paid_ad";
   acceptCredits: boolean;
+  /** 3c.1: gentle skin smoothing on the speaker (opt-in; never for minors). */
+  beauty: boolean;
 }
 
 export const EMPTY_FORM: BriefForm = {
@@ -81,6 +83,7 @@ export const EMPTY_FORM: BriefForm = {
   useCategories: [],
   purpose: "promo",
   acceptCredits: true,
+  beauty: false,
 };
 
 /** The owner's defaults (Settings → default brief and deliverables, FR-12) applied to an empty form. */
@@ -136,6 +139,7 @@ export function toBrief(f: BriefForm): Brief {
     use_categories: f.useCategories,
     purpose: f.purpose,
     accept_credits: f.acceptCredits,
+    ...(f.beauty ? { beauty: true } : {}),
   };
   return brief;
 }

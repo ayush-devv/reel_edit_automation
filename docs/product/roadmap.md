@@ -1010,6 +1010,75 @@ All five items are built and tested with fakes. Each item needs owner input befo
 
 **Group 3b total:** about 3–3.5 days.
 
+#### Group 3b as built (2026-11-20)
+
+**3b.1 rubric:**
+- **Code:**
+  - `reel/rubric.py` and a `RUBRIC` stage before STORY (no Claude call). It writes `plan/rubric.json` from the brief and the client profile.
+  - `Review.rubric` holds one answer per criterion. A changed list is sent back to the Reviewer; an empty answer becomes a verdict warning, not an error.
+  - An unmet required criterion (must-keep, CTA, banned claim) is a Hold reason; the others are warnings.
+  - The Review screen shows a "Brief checklist".
+- **Cost:** the QA hash includes the rubric, so **QA re-runs once per project (1 Reviewer call)**.
+
+**3b.2 pairwise judge:**
+- **Code:**
+  - `evalh/pairwise.py` and `personas/pairwise_judge.md`.
+  - `reel eval --pairwise` (2 calls per reel). Scoreboard rows carry `pairwise` and the files.
+  - The owner's blind picks: a Quality lab panel → `eval/pairwise_owner.jsonl`, plus an agreement rate.
+- **Kept out of the primary score:** not wired into acceptance until the agreement is known.
+
+**3b.3 revision evals:**
+- **Code:**
+  - `evalh/revisions.py`, plus 6 seed cases in `eval/revisions/` against `_real_doac_v2`.
+  - `reel eval --revisions` (1 call per case).
+  - The project copy uses hard links and is never touched.
+- **Changes from the plan:** "don't break" is measured on the plan validator (errors and new warnings), not by rendering and gating. This keeps a case to one Claude call and no render.
+- **Real-file check, with a fake Editor and no Claude, on `_real_doac_v2` (2026-11-20):**
+  - The first version reported a one-word caption change as about 97 s of overlay change and 167 s of picture change. Two causes, both fixed:
+    - the baseline was the project's stored timeline, compiled by an older engine. It is now a fresh compile of the unrevised plans;
+    - picture spans were counted twice. They are now merged.
+  - After the fix:
+    - a look change scores did-it with 0 s of collateral;
+    - one emphasised word scores 0.54 s changed, 0.46 s of it just outside the asked region (its page edge).
+  - Project inputs load once per case. Each load re-probes every mezzanine, minutes on a long source.
+- **A bug found and fixed in G1.5:** `rediff` iterated padded caption pages until nothing new joined. Back-to-back pages, which are normal, then chain-reacted into a full re-render.
+  - The fix: one padded pass for pages after the graphics closure.
+  - New test: `test_back_to_back_pages_do_not_chain_into_a_full_render`.
+  - New `rediff.changed_elements`, for what actually changed.
+
+**3b.4 replies checked against the gates:** `projects.with_measured_verdict`. Every new version's reply and the live revision event end with "· QA after the change: Sendable / Hold, n reason(s): …".
+
+**3b.5 gold-pair tooling:**
+- **Code:** `evalh/gold_add.py`, `reel gold add <raw> <final> --language hi|hinglish|en [--split] [--genre] [--channel]`.
+- **The "cut from this raw" check:** 1.5 s pieces of the final's speech envelope are each matched against the raw, minus a chance baseline (the raw played backwards).
+- **Measured on the 6 gold pairs:**
+  - own raw: +0.047 to +0.205 (5 of 6 above +0.13);
+  - another pair's raw: −0.002 to +0.046.
+- **What that means:** the two overlap, so this is a guard, not proof.
+  - Below +0.03, the pair is refused; `--no-check` overrides.
+  - Below +0.08, it is accepted with a "watch them side by side" warning.
+
+#### Group 3c as built (2026-11-20)
+
+**3c.1 beauty pass:**
+- **Code:**
+  - `reel/beauty.py`: face boxes from the existing Face Landmarker at 6 fps on the rendered base; an interpolated, feathered skin ellipse written as an FFV1 matte; a masked `bilateral` (sigmaS 6, sigmaR 0.08) plus a +0.012 brightness lift, re-encoded to ProRes with the audio kept.
+  - `Brief.beauty`, `Brand.beauty: off|light`, and a New edit toggle.
+  - It runs inside the RENDER stage after a full base render. An audio-only re-render keeps the processed picture.
+  - It joins the render and picture fingerprints only when on, so projects with it off don't re-render.
+- **QA gate `beauty_strength` (warn):** face-region detail loss, Laplacian variance before and after, limit 35%. "Not measured" fails.
+- **Real-face check on a clone of `_real_doac_v2`'s base (2026-11-20):**
+  - **First version:** the face was found in 489 sampled frames, with −17% face detail in 134 s for 97 s of reel. Looking at the frames, the eyes and lips had softened, and it started to read as filtered.
+  - **Changes made:** the eye band and the mouth are now carved out of the matte (box proportions, `beauty.EYES` / `MOUTH`), and the strength was lowered (sigmaS 5, sigmaR 0.06).
+  - **Second version:** −10% face detail; smoother cheeks; eyes and mouth closer to the original, though the carve-out isn't landmark-exact on angled faces.
+  - That run took 1,039 s while another heavy job was running. Building the mattes for 2,900 frames takes 1.1 s, so render time is dominated by the ProRes re-encode.
+- **Not built:**
+  - eye brightening;
+  - a per-project Adjust toggle (it's set in the brief or brand);
+  - the Brands-screen field (the brand JSON accepts `beauty`).
+
+**3c.2–3c.5 (generated SFX, music, voice/dubbing, lip-sync): not built, still gated** on the listening test (G2.5): a model must be downloaded, its licence row added, and the owner's blind votes must clear it. Dubbing also needs the speaker's written consent.
+
 ---
 
 ### Group 3c: free generative assets

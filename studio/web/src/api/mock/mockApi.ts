@@ -544,6 +544,14 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
       if (action === "eval" && body?.release && LAB.release_locked) throw new ApiError(409, LAB.lock_reason ?? "Release check is locked.", { error: LAB.lock_reason, detail: { release_locked: true } });
       return job("_lab", action, action);
     },
+    async votePairwise(run, reel) {
+      await guard();
+      const p = LAB.pairwise;
+      if (!p || !p.pending.some((x) => x.run === run && x.reel === reel)) throw new ApiError(404, "no such pairwise item");
+      p.pending = p.pending.filter((x) => !(x.run === run && x.reel === reel));
+      p.agreement = { n: p.agreement.n + 1, agree: p.agreement.agree + 1, rate: (p.agreement.agree + 1) / (p.agreement.n + 1) };
+    },
+    pairwiseMediaUrl: () => "",
     async listening(set) {
       await guard();
       const list = listenPairs.get(set) ?? [];

@@ -84,7 +84,8 @@ async def stream(request, ws: Path, pid: str, mgr, settings, build_project):
             if job.status in ("done", "failed", "cancelled", "lost"):
                 if job.status == "done" and job.kind in ("revise", "notes"):
                     rev = projects.last_revision(ws) or {}
-                    out.append(ev("revision", {"reply": rev.get("reply", ""), "request": rev.get("request", ""), "version": job.after.get("version")}))
+                    out.append(ev("revision", {"reply": projects.with_measured_verdict(ws, rev.get("reply", "")), "request": rev.get("request", ""),
+                                               "version": job.after.get("version")}))
                 snap = await asyncio.to_thread(build_project)  # the job changed the edit: verdict, proof, versions, media
                 out.append(ev("done", {"status": snap["status"], "job": job.status, "kind": job.kind}))
                 out.append(ev("snapshot", snap))

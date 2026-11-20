@@ -1,0 +1,3 @@
+project: projects/_real_doac_v2
+note: Take the music out, keep everything else.
+expect: {kind: music}

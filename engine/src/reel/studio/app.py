@@ -95,6 +95,12 @@ class TemplatesBody(BaseModel):
     templates: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
+class PairwiseVoteBody(BaseModel):
+    run: str = Field(min_length=1, max_length=120)
+    reel: str = Field(min_length=1, max_length=200)
+    choice: Literal["A", "B", "same"]
+
+
 class CheckinBody(BaseModel):
     yes: list[str] = Field(default_factory=list, max_length=10)
     note: str = Field(default="", max_length=2000)
@@ -753,6 +759,29 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         args = ["improve", "--budget", body.budget, "--runs", body.runs, "--rounds", body.rounds] + (["--dry-run"] if body.dry_run else [])
         return {"job": submit("_lab", "improve", cli(*args), est_gb=ESTIMATE_GB["improve"], log=log, label=f"Improve (budget {body.budget})")}
 
+    # -------------------------------------------------------------- 3b.2 ours vs pro, the owner's blind picks
+
+    @app.get("/api/lab/pairwise/{run}/{reel}/{side}")
+    def pairwise_media(run: str, reel: str, side: Literal["A", "B"]):
+        from reel.evalh import pairwise as pw
+
+        files = catalog.pairwise_files(s, run, reel)
+        if not files:
+            raise ApiError(404, "no such pairwise item")
+        f = Path(files["ours"] if side == pw.side_of_ours(run, reel) else files["pro"])
+        if not f.is_file():
+            raise ApiError(404, "the reel file is gone")
+        return FileResponse(f)
+
+    @app.post("/api/lab/pairwise/vote", status_code=204)
+    def pairwise_vote(body: PairwiseVoteBody):
+        from reel.evalh import pairwise as pw
+
+        if not catalog.pairwise_files(s, body.run, body.reel):
+            raise ApiError(404, "no such pairwise item")
+        pw.record_owner(body.run, body.reel, body.choice, s.pairwise_log)
+        return Response(status_code=204)
+
     @app.put("/api/lab/gates/{gate}")
     def set_gate_mode(gate: str, body: GateModeBody):
         """C3: switch a QA gate between warn and block. Block only when calibration cleared it (or the code already
@@ -991,6 +1020,7 @@ def _after_job(s: Settings, job) -> None:
             reply = job.after.get("reply", "")
             if job.kind in ("revise", "notes"):
                 reply = (projects.last_revision(ws) or {}).get("reply") or reply
+            reply = projects.with_measured_verdict(ws, reply)  # 3b.4: the claim next to what QA measured afterwards
             spent = sum(c["cost_usd"] for c in costs.calls(ws / "log" / "runs.jsonl") if (c.get("time") or 0) >= (job.started or time.time()))
             job.after["version"] = projects.snapshot(ws, label, reply=reply, cost_usd=round(spent, 4))
 

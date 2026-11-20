@@ -56,6 +56,17 @@ def test_added_and_removed_elements():
     assert changed_ranges(old, new) == [(0, 80 + PAD_F), (700 - PAD_F, 704 + PAD_F)]
 
 
+def test_back_to_back_pages_do_not_chain_into_a_full_render():
+    """A long run of touching caption pages (normal in a talking-head reel): one changed page re-renders itself, its
+    neighbours and at most one more page each side, never the whole reel (the chain reaction fixed in 3b.3)."""
+    pages = [_page(k * 40, k * 40 + 40, f"w{k}") for k in range(22)]  # 0–880, all touching
+    old = _props() | {"captions": _props()["captions"] | {"pages": pages}, "titles": [], "graphics": []}
+    new = copy.deepcopy(old)
+    new["captions"]["pages"][10] = _page(400, 440, "CHANGED")
+    r = changed_ranges(old, new)
+    assert r is not None and len(r) == 1 and r[0][0] >= 320 - PAD_F and r[0][1] <= 520 + PAD_F
+
+
 def test_too_much_change_is_a_full_render():
     old, new = _props(), copy.deepcopy(_props())
     new["graphics"].append({"id": "g9", "kind": "text_card", "start_f": 0, "end_f": 899, "text": "x"})

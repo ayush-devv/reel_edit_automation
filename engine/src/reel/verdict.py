@@ -49,10 +49,16 @@ def run_gates(ws: Workspace, tl: Timeline, story: StoryPlan, brief: brief_mod.Br
     fin = FinishPlan.model_validate_json(fin_file.read_text()) if fin_file.exists() else None
     results = [*qa.frame_and_loudness(tl, final), qa.proof_words(proof, confirmed_words(ws)), qa.brief_compliance(tl, kept_text, brief),
                qa.numbers_match(fin, story, project.word_table(ws)),
-               qa.broll_repeat(fin, project.indexes(ws).broll),
+               qa.broll_repeat(fin, project.indexes(ws).broll), _beauty_gate(ws),
                qa.dead_air(tl), qa.reading_speed(tl), qa.face_cut(tl, faces), *qa.caption_pixels(tl, base, ov, faces, safe, flashes),
                *qa.frozen_and_black(tl, final, dips)]
     return qa.apply_modes(results)
+
+
+def _beauty_gate(ws: Workspace) -> qa.GateResult:
+    from reel import beauty
+
+    return beauty.gate_result(ws.path("render"))
 
 
 def cut_checks(ws: Workspace, tl: Timeline) -> tuple[list[qa.GateResult], list[str]]:
@@ -146,8 +152,12 @@ def final_sheets(ws: Workspace, tl: Timeline) -> list[Path]:
     return sheets.make_sheets(ws.path("render", "final.mp4"), stamps, ws.path("qa", "sheets", "final"))
 
 
-def decide_verdict(gates: list[qa.GateResult], review: Review | None) -> dict:
+def decide_verdict(gates: list[qa.GateResult], review: Review | None, criteria: list[dict] | None = None) -> dict:
+    from reel import rubric
+
     reasons, requests = [], []
+    rubric_reasons, rubric_warnings = rubric.verdict_effects(review, criteria or [])
+    reasons += rubric_reasons
     for g in gates:
         if g.blocking:
             reasons.append(f"{g.gate}: {g.detail}")
@@ -161,7 +171,7 @@ def decide_verdict(gates: list[qa.GateResult], review: Review | None) -> dict:
                     requests.append(f"- [reviewer {i.id}, {i.fix_target.value}] at {i.at or 'whole reel'}: {i.problem} Fix: {i.fix}")
         if not review.sendable and not any(i.severity in (Severity.blocker, Severity.major) for i in review.issues):
             reasons.append(f"reviewer: not sendable — {review.summary}")
-    warnings = [f"{g.gate}: {g.detail}" for g in gates if not g.ok and not g.blocking]
+    warnings = [f"{g.gate}: {g.detail}" for g in gates if not g.ok and not g.blocking] + rubric_warnings
     status = "hold" if reasons else "sendable"
     request = ("Quality check before delivery found these problems. Fix all of them in one revision, changing nothing else:\n"
                + "\n".join(requests)) if requests else ""
@@ -182,6 +192,9 @@ def verdict_md(v: dict, gates: list[qa.GateResult], review: Review | None, proof
     if review:
         lines += ["## Reviewer", "", review.summary, "", *[f"- **{i.severity.value}** {i.category.value} at {i.at or '—'}: {i.problem} → {i.fix}" for i in review.issues]]
         lines += ["", "Strengths: " + "; ".join(review.strengths), ""]
+        if review.rubric:
+            lines += ["## Rubric (fixed before the edit)", "",
+                      *[f"- {'✓' if r.met else '✗'} `{r.id}`" + (f": {r.evidence}" if r.evidence else "") for r in review.rubric], ""]
     lines += ["## Gates", "", "| gate | | mode | detail |", "|---|---|---|---|"]
     lines += [f"| {g.gate} | {'✓' if g.ok else '✗'} | {g.mode} | {g.detail} |" for g in gates]
     return "\n".join(lines) + "\n"
@@ -195,7 +208,9 @@ def recompute(ws: Workspace) -> dict | None:
         return None
     gates = qa.apply_modes([qa.GateResult(**g) for g in json.loads(gp.read_text())])
     review = Review.model_validate_json(rp.read_text()) if rp.exists() else None
-    v = decide_verdict(gates, review)
+    from reel import rubric
+
+    v = decide_verdict(gates, review, rubric.load(ws))
     proof_open = next((g.measured.get("open", []) for g in gates if g.gate == "proof_words"), [])
     atomic_write_json(gp, [g.as_dict() for g in gates])
     atomic_write_json(ws.path("qa", "verdict.json"), v | {"proof_open": proof_open})
@@ -214,15 +229,19 @@ def run(ws: Workspace, options: dict, caller=claude_call.call) -> dict:
     gates += pace_results(pace)
     gates += client_style_results(ws, (pace.get("ours") or {}).get("cuts_per_min"))
     atomic_write_json(ws.path("qa", "pace.json"), pace)
+    from reel import rubric
+
+    criteria = rubric.load(ws)
     sheet_paths = final_sheets(ws, tl)
-    atomic_write_bytes(ws.path("qa", "review_input.md"), review_input(ws, tl, story, brief, gates, sheet_paths, strips, pace).encode())
+    atomic_write_bytes(ws.path("qa", "review_input.md"),
+                       (review_input(ws, tl, story, brief, gates, sheet_paths, strips, pace) + "\n".join(rubric.md(criteria)) + "\n").encode())
     review = None
     if not options.get("skip_review"):
         d = decide.decide(caller, ws, label="review", prompt=REVIEW_PROMPT, model=Review, persona=REVIEWER_PERSONA,
-                          effort=REVIEW_EFFORT, check=lambda r: [])
+                          effort=REVIEW_EFFORT, check=lambda r: rubric.check(r, criteria))
         review = d.plan
         atomic_write_json(ws.path("qa", "review.json"), review.model_dump(mode="json"))
-    v = decide_verdict(gates, review)
+    v = decide_verdict(gates, review, criteria)
     proof_open = next((g.measured.get("open", []) for g in gates if g.gate == "proof_words"), [])
     atomic_write_json(ws.path("qa", "gates.json"), [g.as_dict() for g in gates])
     atomic_write_json(ws.path("qa", "verdict.json"), v | {"proof_open": proof_open})

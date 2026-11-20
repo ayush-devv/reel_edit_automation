@@ -462,6 +462,12 @@ export default function NewEdit() {
                 label="The client accepts music credits in the caption"
                 description="Off: only music and sounds that need no credit are used (today’s free music library needs one)."
               />
+              <Toggle
+                checked={form.beauty}
+                onChange={(v) => set("beauty", v)}
+                label="Beauty pass (light)"
+                description="Gently smoother skin on the speaker, measured so it never looks filtered. Off by default. Don’t use it on minors."
+              />
               <fieldset className="col-span-2">
                 <legend className="mb-2 text-meta text-fg-secondary">The client is in one of these areas (some stock licences forbid them)</legend>
                 <div className="flex flex-wrap gap-x-6 gap-y-2">

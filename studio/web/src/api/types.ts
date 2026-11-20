@@ -195,7 +195,9 @@ export interface Project extends ProjectSummary {
   decisions: Decision[];
   verdict_detail: { verdict: string; reasons: string[]; warnings: string[]; gates: Gate[]; plain?: PlainCheck[] } | null;
   proof: ProofWord[];
-  review: { summary: string; sendable: boolean | null; strengths: string[]; issues: ReviewIssue[] } | null;
+  review: { summary: string; sendable: boolean | null; strengths: string[]; issues: ReviewIssue[];
+            /** 3b.1: the Reviewer's answers to the rubric fixed from the brief before the edit (older reviews: absent). */
+            rubric?: { id: string; met: boolean; evidence: string }[] } | null;
   media: { final?: string; review_copy?: string; cover?: string; sheets: string[]; cut_strips: string[]; variants: string[] };
   versions: Version[];
   calls: Call[];
@@ -269,6 +271,8 @@ export interface Brief {
   use_categories?: UseCategory[];
   purpose?: "editorial" | "organic" | "promo" | "paid_ad";
   accept_credits?: boolean;
+  /** 3c.1 beauty pass (opt-in). */
+  beauty?: boolean;
 }
 
 export const USE_CATEGORIES = ["political", "dating", "drugs", "alcohol", "gambling", "religious", "adult"] as const;
@@ -416,6 +420,13 @@ export interface Lab {
   improve_history: ImproveEntry[];
   runs: EvalRun[];
   gold_pairs: GoldPair[];
+  /** 3b.2: ours vs the pro, judged both ways round; kept out of the score until it agrees with the owner's blind picks. */
+  pairwise?: {
+    last: { win: number; tie: number; loss: number } | null;
+    last_run: string | null;
+    agreement: { n: number; agree: number; rate: number | null };
+    pending: { run: string; reel: string }[];
+  };
   /** C5: the latest speech-to-text bake-off and the engine each language uses now (absent from older engines). */
   bakeoff?: {
     engines_now: Record<string, string>;
