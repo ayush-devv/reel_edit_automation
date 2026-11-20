@@ -89,6 +89,82 @@ function PostCopyPanel({ projectId }: { projectId: string }) {
   );
 }
 
+const PERF_FIELDS = [
+  ["views", "Views"],
+  ["avg_watch_s", "Avg watch time (s)"],
+  ["skip_rate", "Skip rate (%)"],
+  ["reach", "Reach"],
+  ["likes", "Likes"],
+  ["shares", "Shares"],
+  ["saves", "Saves"],
+  ["comments", "Comments"],
+] as const;
+
+/** 4.4: the numbers Instagram / YouTube show for this reel, typed in (an API connection can fill them later). */
+function PerformancePanel({ projectId }: { projectId: string }) {
+  const api = useApi();
+  const q = useQuery(() => api.performance(projectId), [api, projectId]);
+  const [vals, setVals] = useState<Record<string, string>>({});
+  const [url, setUrl] = useState("");
+  const [platform, setPlatform] = useState("instagram");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const d = q.data;
+  const last = d?.readings.at(-1);
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const nums = Object.fromEntries(Object.entries(vals).filter(([, v]) => v.trim() !== "").map(([k, v]) => [k, Number(v)]));
+      await api.addPerformance(projectId, { ...nums, ...(url.trim() ? { post_url: url.trim() } : {}), platform });
+      setVals({});
+      q.reload();
+    } catch (e) {
+      setErr(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Panel title="How it did after posting">
+      <p className="text-meta text-fg-muted">Copy the numbers from the post’s insights (a week after posting is a good time). They feed this client’s “what worked” notes, never the Editor.</p>
+      {last && (
+        <p className="mt-2 text-fg-primary">
+          {last.views != null && <>{last.views.toLocaleString()} views · </>}
+          {d?.hold_rate != null && <>watched {Math.round(d.hold_rate * 100)}% of its length on average · </>}
+          {last.skip_rate != null && <>{last.skip_rate}% skipped in the first 3 s · </>}
+          <span className="text-meta text-fg-muted">entered {ago(new Date(last.at * 1000).toISOString())}</span>
+        </p>
+      )}
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {PERF_FIELDS.map(([k, label]) => (
+          <label key={k} className="text-meta text-fg-secondary">
+            {label}
+            <input inputMode="decimal" value={vals[k] ?? ""} onChange={(e) => setVals((v) => ({ ...v, [k]: e.target.value }))}
+                   className="mt-1 h-8 w-full rounded-control border border-line-control bg-bg-overlay px-2 font-mono text-mono text-fg-primary" />
+          </label>
+        ))}
+      </div>
+      {!d?.post_url && (
+        <div className="mt-2 flex gap-2">
+          <Select aria-label="Platform" value={platform} onChange={(e) => setPlatform(e.target.value)} className="h-8 w-36">
+            <option value="instagram">Instagram</option>
+            <option value="youtube">YouTube</option>
+            <option value="other">Other</option>
+          </Select>
+          <input aria-label="Post link" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.instagram.com/reel/…"
+                 className="h-8 min-w-0 flex-1 rounded-control border border-line-control bg-bg-overlay px-2 font-mono text-mono text-fg-primary" />
+        </div>
+      )}
+      <div className="mt-3 flex items-center gap-2">
+        <Button busy={busy} disabled={!Object.values(vals).some((v) => v.trim())} onClick={save}>Save numbers</Button>
+        {d?.post_url && <a href={d.post_url} target="_blank" rel="noreferrer" className="text-meta text-info hover:underline">Open the post</a>}
+      </div>
+      {err && <div className="mt-2"><Notice tone="error">{err}</Notice></div>}
+    </Panel>
+  );
+}
+
 /** FR-9 review link: a private client page with the review copy and a notes box, expiring after a set time. */
 function ReviewLinkPanel({ projectId }: { projectId: string }) {
   const api = useApi();
@@ -358,6 +434,7 @@ export default function Deliver() {
           )}
         </Panel>
         <PostCopyPanel projectId={p.id} />
+        {p.delivered_at && <PerformancePanel projectId={p.id} />}
         <ReviewLinkPanel projectId={p.id} />
 
         {msg && <Notice tone={msg.tone === "ok" ? "ok" : "error"}>{msg.text}</Notice>}

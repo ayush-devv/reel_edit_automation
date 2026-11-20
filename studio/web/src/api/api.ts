@@ -21,6 +21,8 @@ import type {
   ProjectSummary,
   ReviewLink,
   ReviewLinks,
+  Performance,
+  PerformanceReading,
   Settings,
   SpendStatus,
   SseEvent,
@@ -126,6 +128,9 @@ export interface Api {
   /** C3: switch a QA gate between warn and block (block only once calibration cleared it). */
   setGateMode(gate: string, mode: "warn" | "block"): Promise<{ gate: string; mode: string; recomputed: number }>;
   costs(days?: number): Promise<Costs>;
+  /** 4.4: numbers after posting (typed in from the platform). */
+  performance(id: string): Promise<Performance>;
+  addPerformance(id: string, reading: Partial<Omit<PerformanceReading, "at" | "source">> & { post_url?: string; platform?: string }): Promise<Performance>;
   /** 4.1 cost guard: month to date, the cap, one edit's estimate, pending paid quotes. */
   spend(): Promise<SpendStatus>;
   approveSpend(hash: string): Promise<unknown>;

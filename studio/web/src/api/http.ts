@@ -140,6 +140,8 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
     voteListening: (set, vote) => post(`/api/listening/${set}/vote`, vote),
     listeningMediaUrl: (set, path) => withToken(`/api/listening/${set}/media/${path.split("/").map(enc).join("/")}`),
     costs: (days = 30) => get(`/api/costs?days=${days}`),
+    performance: (id) => get(`/api/projects/${enc(id)}/performance`),
+    addPerformance: (id, reading) => post(`/api/projects/${enc(id)}/performance`, reading),
     spend: () => get("/api/spend"),
     approveSpend: (hash) => post(`/api/spend/approve/${enc(hash)}`),
     settings: () => get("/api/settings"),

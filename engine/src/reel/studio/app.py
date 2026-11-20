@@ -168,8 +168,18 @@ class SettingsBody(BaseModel):
     public_review_url: str | None = Field(default=None, max_length=300)  # 4.3: https://… of the owner's tunnel; "" clears it
 
 
-class SpendAnyway(BaseModel):
-    spend_anyway: bool = False
+class PerformanceBody(BaseModel):
+    """4.4: one reading as the platform showed it (any subset of the numbers)."""
+    post_url: str | None = Field(default=None, max_length=500)
+    platform: Literal["instagram", "youtube", "other"] | None = None
+    views: float | None = None
+    reach: float | None = None
+    avg_watch_s: float | None = None
+    skip_rate: float | None = None
+    likes: float | None = None
+    comments: float | None = None
+    shares: float | None = None
+    saves: float | None = None
 
 
 class LabBody(BaseModel):
@@ -724,8 +734,8 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
 
     @app.get("/api/clients/{name}")
     def client_style(name: str):
-        """3a.2: the client's style profile from approved reels, and those reels (for "match a past reel")."""
-        from reel import client_memory
+        """3a.2: the client's style profile from approved reels, and those reels (for "match a past reel"); 4.4: how they did."""
+        from reel import client_memory, performance
 
         s_ = client_memory.slug(name)
         f = s.projects_root / ".clients" / f"{s_}.json" if s_ else None
@@ -733,7 +743,39 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         reels = sorted(data.get("reels", {}).values(), key=lambda r: -r.get("approved", 0))
         return {"client": data.get("client") or name, "profile": client_memory.profile_of(data),
                 "reels": [{"id": r["project"], "name": projects.studio_meta(s.projects_root / r["project"]).get("name") or r["project"],
-                           "why": r.get("why"), "has_video": (s.projects_root / r["project"] / "export" / "reel.mp4").exists()} for r in reels]}
+                           "why": r.get("why"), "has_video": (s.projects_root / r["project"] / "export" / "reel.mp4").exists()} for r in reels],
+                "performance": performance.client_report(s.projects_root, name)}
+
+    # -------------------------------------------------------------- performance after posting (4.4)
+
+    @app.get("/api/projects/{pid}/performance")
+    def performance_get(pid: str):
+        from reel import performance
+
+        ws = Workspace(ws_of(pid))
+        data = performance.load(ws)
+        e = None
+        try:
+            from reel import client_memory
+
+            e = client_memory.entry(ws)
+        except Exception:  # noqa: BLE001 — the numbers still show without the reel's own description
+            e = None
+        last = performance.latest(ws)
+        return {**data, "hold_rate": performance.hold_rate(last, (e or {}).get("length_s")) if last else None,
+                "length_s": (e or {}).get("length_s")}
+
+    @app.post("/api/projects/{pid}/performance")
+    def performance_add(pid: str, body: PerformanceBody):
+        from reel import performance
+
+        ws = Workspace(ws_of(pid))
+        try:
+            performance.record(ws, body.model_dump(exclude={"post_url", "platform"}, exclude_none=True),
+                               post_url=body.post_url or None, platform=body.platform)
+        except performance.PerformanceError as exc:
+            raise ApiError(400, str(exc)) from exc
+        return performance_get(pid)
 
     # -------------------------------------------------------------- libraries, brands
 

@@ -36,7 +36,7 @@ function ClientStyleCard({ client, match, onMatch }: { client: string; match: st
   }, [client]);
   const q = useQuery(() => (name ? api.clientStyle(name) : Promise.resolve(null)), [api, name]);
   const s = q.data;
-  if (!s || (!s.profile && !s.reels.length)) return null;
+  if (!s || (!s.profile && !s.reels.length && !s.performance?.reels)) return null;
   const p = s.profile;
   return (
     <div className="col-span-2 rounded-control border border-line-subtle bg-bg-raised p-3" aria-label="This client's style">
@@ -47,6 +47,19 @@ function ClientStyleCard({ client, match, onMatch }: { client: string; match: st
           {p.recurring_settings.length > 0 && <> · always: {p.recurring_settings.map((r) => `${r.kind.replace(/_/g, " ")} ${String(r.value)}`).join(", ")}</>}.
           The Editor follows it unless the brief says otherwise.
         </p>
+      )}
+      {s.performance && s.performance.reels > 0 && (
+        <div className="mt-2 text-meta text-fg-secondary" aria-label="How their reels did">
+          {s.performance.what_worked.length > 0 ? (
+            <>
+              <span className="text-fg-primary">What worked: </span>
+              {s.performance.what_worked.join("; ")}.
+            </>
+          ) : (
+            <>Posting numbers for {s.performance.reels} reel{s.performance.reels === 1 ? "" : "s"}; {s.performance.needs > 0 ? `${s.performance.needs} more with watch time to see what worked` : "no clear pattern yet"}.</>
+          )}{" "}
+          <span className="text-fg-muted">{s.performance.caveat}</span>
+        </div>
       )}
       {s.reels.some((r) => r.has_video) && (
         <label className="mt-2 flex items-center gap-2 text-meta text-fg-secondary">

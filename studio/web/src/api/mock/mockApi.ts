@@ -592,6 +592,15 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
       await guard();
       return {};
     },
+    async performance() {
+      await guard();
+      return { post_url: null, platform: null, readings: [], hold_rate: null, length_s: 32 };
+    },
+    async addPerformance(_id, reading) {
+      await guard();
+      const r = { at: Date.now() / 1000, source: "manual" as const, ...reading };
+      return { post_url: reading.post_url ?? null, platform: (reading.platform as "instagram") ?? null, readings: [r], hold_rate: r.avg_watch_s ? r.avg_watch_s / 32 : null, length_s: 32 };
+    },
     async settings() {
       await guard();
       return clone(settings);

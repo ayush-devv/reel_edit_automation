@@ -37,6 +37,40 @@ export interface ClientStyle {
     recurring_settings: { kind: string; value: unknown; reels: number }[];
   } | null;
   reels: { id: string; name: string; why: string; has_video: boolean }[];
+  /** 4.4: how this client's posted reels did (numbers the owner entered). */
+  performance?: ClientPerformance;
+}
+
+/** 4.4 a client's posted reels: hold rate = average watch time ÷ length. `what_worked` appears only from 3 reels with watch time. */
+export interface ClientPerformance {
+  client: string;
+  reels: number;
+  with_watch_time: number;
+  rows: { project: string; hold: number | null; skip_rate: number | null; views: number | null; length_s: number | null; cuts_per_min: number | null }[];
+  what_worked: string[];
+  caveat: string;
+  needs: number;
+}
+
+/** 4.4 one project's numbers after posting. */
+export interface PerformanceReading {
+  at: number;
+  source: "manual" | "api";
+  views?: number;
+  reach?: number;
+  avg_watch_s?: number;
+  skip_rate?: number;
+  likes?: number;
+  comments?: number;
+  shares?: number;
+  saves?: number;
+}
+export interface Performance {
+  post_url: string | null;
+  platform: "instagram" | "youtube" | "other" | null;
+  readings: PerformanceReading[];
+  hold_rate: number | null;
+  length_s: number | null;
 }
 
 /** 3a.1 story check-in: the plan in plain words before the finish pass and render are paid for. */

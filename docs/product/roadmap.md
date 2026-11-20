@@ -1284,14 +1284,30 @@ A tunnel to port 8765 would expose the whole Studio API behind one token. Two sa
   - the Editor's pack gets the client's best-retaining reels as references.
 - **Never:** automatic changes to the engine from a handful of posts.
 
+**As built (2026-11-21), the part that needs no platform account:**
+- **Code:**
+  - `reel/performance.py`: readings in `client/performance.json`, validated; hold rate = average watch ÷ length; `client_report`.
+  - Studio `GET/POST /api/projects/{id}/performance`.
+  - `GET /api/clients/{name}` adds `performance`.
+  - A "How it did after posting" panel in Deliver, shown once the reel is marked delivered.
+  - The client style card in New edit shows "What worked" with its caveat.
+- **"What worked"** appears only from 3 reels with watch time. It compares the better-held half with the rest on length and cuts per minute (only when they differ by 15% or more), and checks for a hook title, caption style or music mood shared by all the best-held reels.
+- **Kept out of** the Editor's packs and every stage fingerprint, with a test for it.
+- **Not built:** the Instagram/YouTube connector. It needs the owner's Meta app with each client's account added (Standard Access, per the spike); it would write the same readings with `source: "api"`.
+
 #### 4.5 Publish and schedule (about 2–3 days; after 4.4's connection)
 
 - "Post" or "Schedule" from Deliver: the package's reel, cover and copy pack (caption, hashtags, first comment) go out through the official Instagram and YouTube APIs.
 - **The owner presses the button; never automatic.** A failed post says why and keeps the package ready to post by hand.
+- **Status (2026-11-21): not built, waiting on the owner.**
+  - It needs the Meta and Google developer apps and each client's consent.
+  - **Instagram** also needs the video at a public URL at posting time (spike). Either the 4.3 share-server plus a tunnel serves that one file briefly, or a static host does.
+  - **YouTube** uploads directly; unaudited projects aren't forced private, per the current docs.
 
 #### 4.6 Trial reels (about 1 day; after 4.5, if 4.0 says the API allows it)
 
 The hook A/B (G1.6) shown to a real audience. Both versions are posted as Instagram trial reels to non-followers. 4.4 reads both, and the owner sees which held viewers longer. It's a small sample, so it's shown as a hint, never as a verdict.
+- **Status (2026-11-21):** the API supports it (`trial_params`, `graduation_strategy` `MANUAL` or `SS_PERFORMANCE`). It's not built because it comes after 4.5.
 
 ### Gated or later
 
