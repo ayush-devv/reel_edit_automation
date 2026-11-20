@@ -721,5 +721,6 @@ def timeline_view(ws: Path) -> dict | None:
         "grain": grade.get("grain", tgrade.get("grain", 0.0)), "vignette": grade.get("vignette", tgrade.get("vignette", 0.0)),
         "music_track": music.get("track", "none"), "music_gain_db": music.get("gain_db", -18.0),
         "max_pause_ms": story.get("max_pause_ms"), "sfx": len(fin.get("sfx") or []), "punch_ins": len(fin.get("punch_ins") or []),
+        "beauty": "light" if (ws / "render" / "beauty.json").exists() else "off",  # what the last render applied (3c.1)
     }
     return {"timeline": tl, "reasons": reasons, "story": items, "adjust": adjust}

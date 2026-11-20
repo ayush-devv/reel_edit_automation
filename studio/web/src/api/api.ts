@@ -50,6 +50,8 @@ export interface NewProjectInput {
   story_checkin?: boolean;
   /** 3a.2: a past project whose finished reel becomes the reference to match. */
   match_project?: string | null;
+  /** A video already on this Mac (absolute path), used where it is instead of uploading `files` (long recordings). */
+  source_path?: string | null;
 }
 
 /** Saved brief templates (server-side, ~/.config/reel/templates.json): name → form values. */

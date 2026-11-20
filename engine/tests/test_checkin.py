@@ -125,6 +125,24 @@ def test_the_run_stops_after_the_story_pass():
     assert [s.name for s in edit.checkin_pipeline(CLIP_PIPELINE)][0] == "stock"
 
 
+def test_the_brand_kit_default_applies_on_the_first_run_only(tmp_path):
+    import argparse
+
+    from reel.cli import story_checkin_wanted
+
+    brand = tmp_path / "acme.json"
+    brand.write_text(json.dumps({"client": "Acme", "story_checkin": True}))
+    ws = Workspace.create(tmp_path / "p")
+    opts = {"brand": str(brand)}
+    ask = lambda **kw: story_checkin_wanted(argparse.Namespace(**{"story_checkin": None, "mine": False, **kw}), ws, opts)  # noqa: E731
+    assert ask() is True  # first run: the client's default
+    assert ask(story_checkin=False) is False and ask(story_checkin=True) is True  # the owner's explicit choice wins
+    assert ask(mine=True) is False  # never for a Clip Factory analysis
+    atomic_write_json(ws.path("plan", "story.json"), {})
+    assert ask() is False  # a re-run of a project that already has a story never stops again
+    assert story_checkin_wanted(argparse.Namespace(story_checkin=None, mine=False), Workspace.create(tmp_path / "q"), {}) is False
+
+
 def test_studio_checkin_flow(env, ws):  # noqa: F811
     import shutil
 

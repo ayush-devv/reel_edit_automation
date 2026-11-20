@@ -136,6 +136,11 @@ type JobRef = { job: Job };   // what every POST that starts work returns; SSE `
 | POST | /api/listening/{set}/prepare | — | `JobRef` (`reel listen prepare`) |
 | POST | /api/listening/{set}/vote | `{ pair, choice: "A" \| "B" \| "tie", usable_a, usable_b }` | 204 |
 | GET | /api/listening/{set}/media/{path} | `?token=` | a rendered file of that set only |
+| GET | /api/projects/{id}/review-links | — | `{ links, notes, ready, choices: { checkin: {at, yes, note, name} \| null, hook: {at, option, name} \| null } }`. `ready` = something to show the client: a render, an open story check-in or a pending hook A/B. `choices` = the client's latest answers to what is open now (stamped: an answer to an older check-in or preview set is dropped). With an active link, this route also refreshes the watermarked copies (owner side only) |
+| POST | /api/projects/{id}/review-links | `{ hours }` | the link; 409 when there's nothing to show yet |
+| GET | /r/{link} | no token (the link is the key) | the client page: the reel + notes once rendered; before that the hook A/B pick and/or the story check-in (summary, lines, suggestions as tick boxes, a note; the engine's reasons stay internal); otherwise "the edit is in progress". 410 when expired or turned off |
+| GET | /r/{link}/video, /r/{link}/hook/{A\|B} | — | the small watermarked copies only (never the full-quality render or previews); 410 when not available |
+| POST | /r/{link}/notes, /r/{link}/checkin, /r/{link}/hook | form posts | 303 back to the page. **The client only suggests:** answers go to `client/review_choices.jsonl`; the Studio's check-in panel offers "Use the client's answers" and the hook chooser shows the client's pick. 400 for a settled check-in, a chosen hook, an unknown question or option |
 | GET | /api/costs | `?days=30` | `{ total_usd, calls, by_project: {id, usd}[], by_day: {date, usd}[] }`: `by_day` lists every day of the window, oldest first, zeros included (FR-12) |
 | GET | /api/settings | — | `Settings` (below) |
 | PUT | /api/settings | `Settings` (+ write-only `pexels_key`) | the saved `Settings` |
@@ -170,10 +175,13 @@ type TimelineView = {
 | `max_pause_ms` | integer: 0, or 300–3000 (a **story** setting, `plan/story.json`, validated with `validate_story` too) |
 | `story_words` | `{ item, remove: [[first, last], …] }` (3a.3): cut words out of one kept line; it splits into `k07`, `k07b`… and attached elements follow their words (`TimelineView.story[id].words` lists `[index, text]`) |
 | `story_lines` | the kept item ids in their new order; an id left out is dropped (C4). Finish elements bound to a dropped item go with it (`note` counts them); whole-reel graphics move to the new opener; 422 with `hint` "describe it in Revise" when the finish no longer fits |
+| `beauty` | `"off"` \| `"light"` (3c.1): this project's own switch, stored in `beauty_override.json` and winning over the brief and the brand kit. No plan changes: `rerun --from render`, picture only. `TimelineView.adjust.beauty` = what the last render applied |
 
 Numbers must be JSON numbers (a string is 400). Every applied adjustment is logged to `plan/adjustments.jsonl`; a later chat revision is told to keep the ones still in force and warns (`adjustment_reverted`) when it changes one the request doesn't mention. Not available yet: trimming inside a line (AC-12).
 
-`POST /api/projects` also takes `story_checkin=1` (3a.1: stop after the story pass) and `match_project=<id>` (3a.2: that project's finished reel becomes the reference to match; 400 when it has none). It also takes `mode=long`: a long recording that is analysed once and mined (`reel run --mine`); the project's `kind` is `source`, its status `source` once the board is ready. Reel projects made from it have `kind: "clip"` and `parent`.
+`POST /api/projects` also takes `source_path=<file on this Mac>` instead of `files[]`: the video is used where it is (no upload, no copy, no size cap; links, folders and non-video files are 400; both or neither is 400; keep the file in place until the edit is done). A request whose `Content-Length` exceeds 4 × the 4 GB file cap is refused with **413** before the body is read, and with **507** when free disk is under twice its size plus 2 GB; both hints point at `source_path`.
+
+`POST /api/projects` also takes `story_checkin=1` (3a.1: stop after the story pass; without it Studio passes `--no-story-checkin`, so a brand kit's `story_checkin` default never overrides the New edit toggle, which starts from that default) and `match_project=<id>` (3a.2: that project's finished reel becomes the reference to match; 400 when it has none). It also takes `mode=long`: a long recording that is analysed once and mined (`reel run --mine`); the project's `kind` is `source`, its status `source` once the board is ready. Reel projects made from it have `kind: "clip"` and `parent`.
 
 ### Package (FR-9)
 `PackageFile = { path, label, kind, bytes, thumb }`:

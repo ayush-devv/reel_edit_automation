@@ -130,6 +130,7 @@ class Brand(_Strict):
     end_card: str | None = None
     cta_style: str | None = None
     beauty: str = "off"  # 3c.1: "off" | "light" for every reel of this client (opt-in; never for minors)
+    story_checkin: bool = False  # 3a.1: new edits for this client stop after the story pass by default
 
     @field_validator("beauty")
     @classmethod

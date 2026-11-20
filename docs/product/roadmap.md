@@ -35,7 +35,7 @@ The work is on branch `engine/licence-gate`, committed per item, not pushed.
   - an audio-only re-render gives identical sound and leaves the picture byte-identical.
 
   The before/after revise-loop times on `_real_doac_v2` still need a real run, which re-buys a finish pass.
-- **G1.6 client review link.** The A/B choice is made in the Studio (project header) or with `reel preview-choose`. The client's review-link page doesn't show A/B yet.
+- **G1.6 client review link.** Done 2026-11-20: the client's review-link page shows both hook looks (small watermarked copies) and records the client's pick; the Studio's hook chooser shows it, and the owner still makes the choice.
 - **G1.8 trademark logos.** 21 brand-logo icons (Instagram, YouTube…) are indexed but marked `trademark` and never offered.
 - **Web type-check.** The web type-check is `npm run typecheck` (`tsc -b`). `tsc --noEmit -p .` checks nothing in this repo, because `tsconfig.json` only has references.
 
@@ -752,7 +752,7 @@ All five items are built and tested with fakes. Each item needs owner input befo
   - **Chunking:** on the real `script.md`, a 0–30 s window keeps 14 of 68 segment lines.
   - **One environment hiccup:** the first overlay attempt failed when Puppeteer couldn't kill its headless Chrome (`kill EPERM`) while the test suite was also rendering. A retry from the overlay stage passed. This is not Clip Factory code.
 - **Still to do with the owner:** the real-project check on a 20–60 min recording. It covers the miner's quality, analysis time and disk on long footage; `OVERVIEW_EVERY_S` stays unchanged until then.
-- **Not done:** Studio uploads are capped at 4 GB, which a long recording can exceed. The CLI `--mine` path has no cap.
+- **Done (2026-11-20):** New edit takes the path of a video already on this Mac (`source_path`): used where it is, no upload, no copy, no cap. Browser uploads keep the 4 GB per-file cap; an oversized request is refused from its `Content-Length` before Studio buffers it, with a hint pointing at the path option.
 
 **G2.3 asset search index:**
 - **Code:**
@@ -925,7 +925,7 @@ All five items are built and tested with fakes. Each item needs owner input befo
   - a notification.
 - **Changes from the plan:**
   - Answers change only `story.json`: no finish plan exists yet at the stop.
-  - The client-facing review-link block and a brand-kit default are **not built**. The toggle is per project.
+  - **Added later (2026-11-20):** the review-link page shows the open check-in to the client (story in plain words, suggestions as tick boxes, a note; the engine's reasons stay internal). The client only suggests: answers are recorded stamped with the check-in, and the panel offers "Use the client's answers". A link can be made at the check-in; it gets the reel once rendered. The brand kit's `story_checkin` sets the New edit toggle and `reel run`'s default (first run only; never for `--mine`; Studio passes the toggle explicitly).
 
 **3a.2 client style memory:**
 - **Code:**
@@ -1072,10 +1072,8 @@ All five items are built and tested with fakes. Each item needs owner input befo
   - **Changes made:** the eye band and the mouth are now carved out of the matte (box proportions, `beauty.EYES` / `MOUTH`), and the strength was lowered (sigmaS 5, sigmaR 0.06).
   - **Second version:** −10% face detail; smoother cheeks; eyes and mouth closer to the original, though the carve-out isn't landmark-exact on angled faces.
   - That run took 1,039 s while another heavy job was running. Building the mattes for 2,900 frames takes 1.1 s, so render time is dominated by the ProRes re-encode.
-- **Not built:**
-  - eye brightening;
-  - a per-project Adjust toggle (it's set in the brief or brand);
-  - the Brands-screen field (the brand JSON accepts `beauty`).
+- **Added later (2026-11-20):** a per-project Adjust switch (`beauty_override.json`, wins over the brief and the brand; `rerun --from render`, no plan or paid pass touched) and the Brands-screen field.
+- **Not built: eye brightening.** The pass only has face boxes; a box-shaped lift would brighten brows and skin. It needs the Face Landmarker's eye-contour/iris points and a check on the real-face clone.
 
 **3c.2–3c.5 (generated SFX, music, voice/dubbing, lip-sync): not built, still gated** on the listening test (G2.5): a model must be downloaded, its licence row added, and the owner's blind votes must clear it. Dubbing also needs the speaker's written consent.
 

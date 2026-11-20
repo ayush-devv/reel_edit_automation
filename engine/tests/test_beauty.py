@@ -22,6 +22,34 @@ def test_off_unless_the_brief_or_the_brand_turns_it_on():
         Brand(client="c", beauty="max")
 
 
+def test_the_projects_own_switch_wins(tmp_path):
+    assert beauty.project_override(tmp_path) is None
+    (tmp_path / beauty.OVERRIDE_FILE).write_text(json.dumps({"mode": "off"}))
+    assert beauty.mode(Brief(project="p", beauty=True), Brand(client="c", beauty="light"), beauty.project_override(tmp_path)) == "off"
+    (tmp_path / beauty.OVERRIDE_FILE).write_text(json.dumps({"mode": "light"}))
+    assert beauty.mode(None, None, beauty.project_override(tmp_path)) == "light"
+    (tmp_path / beauty.OVERRIDE_FILE).write_text("{not json")
+    assert beauty.project_override(tmp_path) is None
+
+
+def test_the_beauty_switch_rerenders_only_the_picture(env):  # noqa: F811
+    from test_studio import make_project
+
+    ws = make_project(env["root"])
+    c = env["c"]
+    assert c.post("/api/projects/p1/adjust", json={"kind": "beauty", "value": "max"}).status_code == 400
+    finish_before = (ws / "plan" / "finish.json").read_bytes()
+    r = c.post("/api/projects/p1/adjust", json={"kind": "beauty", "value": "light"})
+    assert r.status_code == 200, r.text
+    assert json.loads((ws / beauty.OVERRIDE_FILE).read_text()) == {"mode": "light"}
+    assert (ws / "plan" / "finish.json").read_bytes() == finish_before  # no plan change, no paid pass
+    argv = env["launcher"].procs[-1][0].argv
+    assert argv[argv.index("--from") + 1] == "render"
+
+
+from test_studio import env  # noqa: E402,F401 — the env fixture
+
+
 def test_the_matte_smooths_skin_and_keeps_eyes_and_mouth_crisp():
     box = {"x": 0.3, "y": 0.2, "w": 0.4, "h": 0.4}
     w, h = 200, 400

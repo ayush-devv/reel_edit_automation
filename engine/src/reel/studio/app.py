@@ -29,8 +29,25 @@ from reel.studio.settings import MAX_JOBS_LIMIT, Settings, apply_prefs, load_pre
 from reel.workspace import Workspace, atomic_write_bytes, atomic_write_json
 
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".mkv", ".webm"}  # FR-2
+MAX_UPLOAD_FILES = 4  # a request larger than this many 4 GB files is refused before it is read
+TOO_BIG_HINT = "for a long recording, name the file on this Mac instead of uploading it (it's used where it is, without a copy)"
+
+
+def local_video(raw: str) -> Path | None:
+    """A video file already on this Mac, used in place (no upload). Refuses links, folders and non-video files."""
+    raw = raw.strip().removeprefix("file://")
+    if not raw:
+        return None
+    if re.match(r"^[a-z]+://", raw):
+        raise ApiError(400, "the video must be a file on this Mac (links are not supported)")
+    p = Path(raw).expanduser().resolve()
+    if not p.is_file():
+        raise ApiError(400, f"no such file on this Mac: {raw}")
+    if p.suffix.lower() not in VIDEO_EXT:
+        raise ApiError(400, f"{p.name}: not a video file (mp4, mov, m4v, mkv, webm)")
+    return p
 ADJUST_KINDS = ("caption_family", "caption_token", "look", "look_strength", "music_track", "music_gain_db", "sfx_off",
-                "punch_ins_off", "grain", "vignette", "max_pause_ms", "story_lines", "story_words")
+                "punch_ins_off", "grain", "vignette", "max_pause_ms", "story_lines", "story_words", "beauty")
 STORY_KINDS = ("max_pause_ms", "story_lines", "story_words")  # adjustments that change plan/story.json
 PROJECT_JOBS = ("run", "retry", "revise", "notes", "proof", "adjust", "restore", "deliver")
 GLOBAL_SLOTS = ("_lab", "_library")  # job slots that are not projects
@@ -259,18 +276,27 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
     @app.post("/api/projects", status_code=201)
     async def create_project(request: Request):
         need_toolchain()
+        size = int(request.headers.get("content-length") or 0)  # checked before the body is parsed (parsing buffers it to disk)
+        if size > s.max_upload_bytes * MAX_UPLOAD_FILES:
+            raise ApiError(413, "this upload is too large", hint=TOO_BIG_HINT)
+        free = shutil.disk_usage(s.projects_root if s.projects_root.exists() else s.projects_root.parent).free
+        if size and free < 2 * size + (2 << 30):  # the parser's buffer + the copy + headroom
+            raise ApiError(507, "not enough free disk for this upload", hint=TOO_BIG_HINT)
         form = await request.form(max_files=100, max_fields=50)
         name = str(form.get("name") or "").strip()
         if not name or len(name) > 120:
             raise ApiError(400, "a project name (1–120 characters) is required")
         files = [f for f in [*form.getlist("files[]"), *form.getlist("files")] if isinstance(f, UploadFile)]
-        if not files:
-            raise ApiError(400, "upload at least one video file")
+        source_path = local_video(str(form.get("source_path") or ""))
+        if files and source_path:
+            raise ApiError(400, "upload files or name a file on this Mac, not both")
+        if not files and not source_path:
+            raise ApiError(400, "upload at least one video file, or name a video file on this Mac")
         for f in files:
             if Path(f.filename or "").suffix.lower() not in VIDEO_EXT:
                 raise ApiError(400, f"{f.filename}: not a video file (mp4, mov, m4v, mkv, webm)", {"file": f.filename})
             if f.size is not None and f.size > s.max_upload_bytes:
-                raise ApiError(400, f"{f.filename}: larger than 4 GB", {"file": f.filename})
+                raise ApiError(400, f"{f.filename}: larger than 4 GB", {"file": f.filename}, hint=TOO_BIG_HINT)
         brief = None
         if form.get("brief"):
             from reel.brief import Brief
@@ -312,17 +338,19 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
                     while chunk := await f.read(1 << 20):
                         written += len(chunk)
                         if written > s.max_upload_bytes:
-                            raise ApiError(400, f"{f.filename}: larger than 4 GB", {"file": f.filename})
+                            raise ApiError(400, f"{f.filename}: larger than 4 GB", {"file": f.filename}, hint=TOO_BIG_HINT)
                         out.write(chunk)
                 footage += _duration(dst)
         except ApiError:
             shutil.rmtree(ws, ignore_errors=True)
             raise
+        if source_path:  # used where it is: no upload, no copy (a long recording can be tens of GB)
+            footage = _duration(source_path)
         if brief:
             atomic_write_json(ws / "brief.json", brief.model_dump(mode="json"))
         projects.update_studio_meta(ws, name=name, created=time.time(), client=brief.client if brief else None, brand=brand_id,
-                                    footage_s=round(footage, 2) or None)
-        opts = {"input": str(raw_dir), "brief": str(ws / "brief.json") if brief else None, "brand": str(brand_file) if brand_file else None,
+                                    footage_s=round(footage, 2) or None, **({"source_path": str(source_path)} if source_path else {}))
+        opts = {"input": str(source_path or raw_dir), "brief": str(ws / "brief.json") if brief else None, "brand": str(brand_file) if brand_file else None,
                 "reference": str(Path(reference).expanduser().resolve()) if reference else None, "language": None,
                 "stock": str(form.get("stock") or "").strip().lower() in ("1", "true", "on"),
                 "preview_first": str(form.get("preview_first") or "").strip().lower() in ("1", "true", "on"),
@@ -542,6 +570,18 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         ws = ws_of(pid)
         _need_edit(ws)
         busy(pid, ws)
+        if body.kind == "beauty":  # 3c.1: the project's own switch; no plan changes, so only the picture re-renders
+            from reel import beauty
+
+            if body.value not in ("off", "light"):
+                raise ApiError(400, "beauty is off or light")
+            baseline(ws)
+            atomic_write_json(ws / beauty.OVERRIDE_FILE, {"mode": body.value})
+            _log_adjustment(ws, body.kind, body.value)
+            change = f"beauty pass → {body.value}"
+            return {"job": submit(pid, "adjust", cli("rerun", "--project", ws, "--from", "render"), ws=ws,
+                                  est_gb=estimate_render_gb(reel_s(ws)), label=f"Manual: {change}",
+                                  after={"snapshot": "Manual", "reply": change})}
         story, fin, note = _apply_adjust(ws, body.kind, body.value)
         baseline(ws)
         if body.kind in STORY_KINDS:  # only then: a re-dumped story.json changes bytes, which the finish stage fingerprints
@@ -915,16 +955,24 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
     @app.get("/api/projects/{pid}/review-links")
     def review_links_list(pid: str):
         ws = ws_of(pid)
-        return {"links": review_links.for_project(s.projects_root, pid), "notes": review_links.notes(ws),
-                "ready": review_links.can_make(ws)}
+        links = review_links.for_project(s.projects_root, pid)
+        if any(x["state"] == "active" for x in links):  # owner side only: keep what the client sees current (a link made
+            try:  # at the check-in gets the reel once it renders)
+                review_links.refresh_copies(ws)
+            except Exception as exc:  # noqa: BLE001 — a failed transcode must not break the panel
+                import logging
+
+                logging.getLogger(__name__).warning("review copy refresh failed for %s: %s", pid, exc)
+        return {"links": links, "notes": review_links.notes(ws), "ready": review_links.can_make(ws),
+                "choices": review_links.current_choices(ws)}
 
     @app.post("/api/projects/{pid}/review-links")
     def review_links_create(pid: str, body: ReviewLinkBody):
         ws = ws_of(pid)
-        try:  # the small watermarked copy the client sees; (re)made from the current render
-            review_links.ensure_review_copy(ws)
-        except FileNotFoundError as exc:
-            raise ApiError(409, "no rendered reel yet", hint="finish the edit first") from exc
+        if not review_links.can_make(ws):
+            raise ApiError(409, "nothing to show the client yet", hint="wait for the story check-in, the hook preview or the render")
+        try:  # the small watermarked copies the client sees; (re)made from the current render / previews
+            review_links.refresh_copies(ws)
         except Exception as exc:  # ffmpeg failed: say so, don't create a link that can't play
             raise ApiError(500, "couldn't make the review copy", str(exc)[-400:]) from exc
         return review_links.create(s.projects_root, pid, body.hours)
@@ -950,44 +998,81 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         return _client_page(review_links.gone_page(nonce), nonce, 410)
 
     def _link_ws(link_id: str) -> tuple[Path, dict] | None:
+        """An active link's project (whatever stage it is at: the page says what the client can do now)."""
         hit = review_links.resolve(s.projects_root, link_id)
         if hit is None:
             return None
         ws = projects.project_dir(s.projects_root, hit[0])
-        return (ws, hit[1]) if ws is not None and review_links.review_copy(ws) is not None else None
+        return (ws, hit[1]) if ws is not None else None
+
+    def _client_view_page(ws: Path, link: dict, link_id: str, flash: str = "", ok: bool = True, status: int = 200) -> HTMLResponse:
+        nonce = secrets.token_urlsafe(16)
+        title = projects.studio_meta(ws).get("name") or "Your reel"
+        return _client_page(review_links.page(title, link, nonce, link_id, flash, flash_ok=ok, view=review_links.client_view(ws)), nonce, status)
+
+    SENT = {"1": "Thanks — your notes were sent.", "checkin": "Thanks — your answers were sent.", "hook": "Thanks — your pick was sent."}
 
     @app.get("/r/{link_id}", include_in_schema=False)
-    def review_page(link_id: str, sent: int = 0):
+    def review_page(link_id: str, sent: str = ""):
         hit = _link_ws(link_id)
         if hit is None:
             return _gone()
-        ws, link = hit
-        nonce = secrets.token_urlsafe(16)
-        title = projects.studio_meta(ws).get("name") or "Your reel"
-        return _client_page(review_links.page(title, link, nonce, link_id, "Thanks — your notes were sent." if sent else ""), nonce)
+        return _client_view_page(hit[0], hit[1], link_id, SENT.get(sent, ""))
 
     @app.get("/r/{link_id}/video", include_in_schema=False)
     def review_video(link_id: str):
         hit = _link_ws(link_id)
-        if hit is None:
+        if hit is None or review_links.review_copy(hit[0]) is None:
             raise StarletteHTTPException(410, "gone")
         return FileResponse(review_links.review_copy(hit[0]), media_type="video/mp4", headers=review_links.SECURITY_HEADERS)
 
-    @app.post("/r/{link_id}/notes", include_in_schema=False)
-    async def review_notes(link_id: str, request: Request):
+    @app.get("/r/{link_id}/hook/{option}", include_in_schema=False)
+    def review_hook(link_id: str, option: Literal["A", "B"]):
+        hit = _link_ws(link_id)
+        f = review_links.hook_copy(hit[0], option) if hit and review_links.pending_hook(hit[0]) else None
+        if f is None:
+            raise StarletteHTTPException(410, "gone")
+        return FileResponse(f, media_type="video/mp4", headers=review_links.SECURITY_HEADERS)
+
+    async def _client_form(link_id: str, request: Request):
         hit = _link_ws(link_id)
         if hit is None:
-            return _gone()
-        ws, link = hit
+            return None, None
         if int(request.headers.get("content-length") or 0) > 64_000:
             raise StarletteHTTPException(413, "too large")
-        form = await request.form()
-        err = review_links.add_note(s.projects_root, ws, link_id, str(form.get("name") or ""), str(form.get("text") or ""))
+        return hit, await request.form()
+
+    def _after_post(hit, link_id: str, err: str | None, sent: str):
         if err:
-            nonce = secrets.token_urlsafe(16)
-            title = projects.studio_meta(ws).get("name") or "Your reel"
-            return _client_page(review_links.page(title, link, nonce, link_id, err, flash_ok=False), nonce, 400)
-        return Response(status_code=303, headers={"Location": f"/r/{link_id}?sent=1", **review_links.SECURITY_HEADERS})
+            return _client_view_page(hit[0], hit[1], link_id, err, ok=False, status=400)
+        return Response(status_code=303, headers={"Location": f"/r/{link_id}?sent={sent}", **review_links.SECURITY_HEADERS})
+
+    @app.post("/r/{link_id}/notes", include_in_schema=False)
+    async def review_notes(link_id: str, request: Request):
+        hit, form = await _client_form(link_id, request)
+        if hit is None:
+            return _gone()
+        if review_links.review_copy(hit[0]) is None:
+            return _after_post(hit, link_id, "The reel isn't ready for notes yet.", "")
+        err = review_links.add_note(s.projects_root, hit[0], link_id, str(form.get("name") or ""), str(form.get("text") or ""))
+        return _after_post(hit, link_id, err, "1")
+
+    @app.post("/r/{link_id}/checkin", include_in_schema=False)
+    async def review_checkin(link_id: str, request: Request):
+        hit, form = await _client_form(link_id, request)
+        if hit is None:
+            return _gone()
+        err = review_links.add_checkin_answer(s.projects_root, hit[0], link_id, [str(x) for x in form.getlist("yes")],
+                                              str(form.get("note") or ""), str(form.get("name") or ""))
+        return _after_post(hit, link_id, err, "checkin")
+
+    @app.post("/r/{link_id}/hook", include_in_schema=False)
+    async def review_hook_pick(link_id: str, request: Request):
+        hit, form = await _client_form(link_id, request)
+        if hit is None:
+            return _gone()
+        err = review_links.add_hook_pick(s.projects_root, hit[0], link_id, str(form.get("option") or ""), str(form.get("name") or ""))
+        return _after_post(hit, link_id, err, "hook")
 
     # -------------------------------------------------------------- the web app (studio/web/dist), SPA fallback
 
@@ -1085,6 +1170,8 @@ def _run_args(ws: Path, opts: dict, force: str | None = None) -> list[str]:
         args.append("--preview-first")
     if opts.get("story_checkin"):
         args.append("--story-checkin")
+    elif "story_checkin" in opts:  # the owner's New edit choice is explicit: no brand default on top of it
+        args.append("--no-story-checkin")
     if opts.get("skip_review"):
         args.append("--skip-review")
     if force:

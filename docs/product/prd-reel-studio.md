@@ -65,7 +65,7 @@ The visual direction is a dark professional studio, in the style of DaVinci Reso
 **Requirements:**
 - Entry points: the "New edit" button on FR-1, or dragging video files anywhere onto the Projects home.
 - **Upload:**
-  - accepts one or more video files (mp4, mov, m4v, mkv, webm) up to 4 GB each;
+  - accepts one or more video files (mp4, mov, m4v, mkv, webm) up to 4 GB each, or the path of one video already on this Mac (any size; used where it is, with no upload or copy);
   - rejects other files with a message naming the file;
   - shows a progress bar per file.
 - **Brief form**, with every field optional except project name. The fields mirror the engine's brief:

@@ -454,7 +454,8 @@ def _beauty_mode(ctx: StageContext) -> str:
     from reel import beauty
     from reel import brief as brief_mod
 
-    return beauty.mode(brief_mod.load_brief(ctx.options.get("brief")), brief_mod.load_brand(ctx.options.get("brand")))
+    return beauty.mode(brief_mod.load_brief(ctx.options.get("brief")), brief_mod.load_brand(ctx.options.get("brand")),
+                       beauty.project_override(ctx.ws.root))
 
 
 def _render(ctx: StageContext) -> dict:

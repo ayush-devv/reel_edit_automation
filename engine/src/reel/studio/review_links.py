@@ -57,7 +57,149 @@ WATERMARK = "REVIEW COPY · NOT FOR POSTING"
 
 
 def can_make(ws: Path) -> bool:
-    return review_copy(ws) is not None or (ws / FINAL).is_file()
+    return review_copy(ws) is not None or (ws / FINAL).is_file() or pending_checkin(ws) is not None or pending_hook(ws) is not None
+
+
+# ------------------------------------------------------------------ before the render: story check-in (3a.1) and hook A/B (G1.6)
+# The client only suggests: answers are recorded, stamped with what they answered, and the owner applies them in the Studio.
+
+CHOICES = Path("client") / "review_choices.jsonl"
+HOOK_OPTION = re.compile(r"[AB]")
+
+
+def _read(p: Path) -> dict | None:
+    try:
+        return json.loads(p.read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def pending_checkin(ws: Path) -> dict | None:
+    c = _read(ws / "plan" / "checkin.json")
+    return c if c and c.get("status") == "open" else None
+
+
+def pending_hook(ws: Path) -> dict | None:
+    pv = _read(ws / "export" / "preview" / "preview.json")
+    return pv if pv and not pv.get("chosen") and len(pv.get("options") or {}) >= 2 else None
+
+
+def hook_stamp(pv: dict) -> str:
+    """Identifies one set of hook previews: a pick for an older set is never offered for a newer one."""
+    import hashlib
+
+    return hashlib.sha256(json.dumps(pv.get("options"), sort_keys=True).encode()).hexdigest()[:16]
+
+
+def hook_copy(ws: Path, option: str) -> Path | None:
+    if not HOOK_OPTION.fullmatch(option or ""):
+        return None
+    p = ws / "export" / "review" / f"hook_{option}.mp4"
+    return p if p.is_file() and not p.is_symlink() else None
+
+
+def ensure_hook_copies(ws: Path) -> list[str]:
+    """Small watermarked copies of the hook previews (the full-quality previews are never served)."""
+    pv = pending_hook(ws)
+    made = []
+    for opt in sorted((pv or {}).get("options", {})):
+        if not HOOK_OPTION.fullmatch(opt):
+            continue
+        src = ws / "export" / "preview" / f"hook_{opt}.mp4"
+        dst = ws / "export" / "review" / f"hook_{opt}.mp4"
+        if not src.is_file():
+            continue
+        if not dst.is_file() or dst.stat().st_mtime < src.stat().st_mtime:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            tmp = dst.with_name(f".hook_{opt}.tmp.mp4")
+            try:
+                _transcode(src, tmp)
+                tmp.replace(dst)
+            finally:
+                tmp.unlink(missing_ok=True)
+        made.append(opt)
+    return made
+
+
+def refresh_copies(ws: Path) -> None:
+    """Owner side only (never on a client request): remake the watermarked copies the client page may show."""
+    if (ws / FINAL).is_file():
+        ensure_review_copy(ws)
+    if pending_hook(ws):
+        ensure_hook_copies(ws)
+
+
+def client_view(ws: Path) -> dict:
+    ci, pv = pending_checkin(ws), pending_hook(ws)
+    hook = sorted(o for o in (pv or {}).get("options", {}) if hook_copy(ws, o)) if pv else []
+    return {"checkin": ci, "hook": hook if len(hook) >= 2 else [], "reel": review_copy(ws) is not None}
+
+
+def _append_choice(root: Path, ws: Path, link_id: str, entry: dict) -> str | None:
+    with _lock:
+        data = _load(root)
+        link = data.get(link_id)
+        if not link:
+            return "This link no longer works."
+        if link.get("notes", 0) >= MAX_NOTES_PER_LINK:
+            return "This link has reached its limit of answers. Ask for a new link."
+        f = ws / CHOICES
+        f.parent.mkdir(parents=True, exist_ok=True)
+        with f.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"at": time.time(), "link": link_id[:8], **entry}, ensure_ascii=False) + "\n")
+        link["notes"] = link.get("notes", 0) + 1
+        atomic_write_json(_index_path(root), data)
+    return None
+
+
+def add_checkin_answer(root: Path, ws: Path, link_id: str, yes: list[str], note: str, name: str) -> str | None:
+    ci = pending_checkin(ws)
+    if ci is None:
+        return "The story has already been settled. Thanks!"
+    ids = {q["id"] for q in ci.get("questions", [])}
+    yes = [y for y in dict.fromkeys(yes) if y]
+    if any(y not in ids for y in yes):
+        return "Those suggestions have changed. Reload the page and answer again."
+    note = (note or "").strip()
+    if len(note) > MAX_NOTE_CHARS:
+        return f"That note is too long (max {MAX_NOTE_CHARS} characters)."
+    return _append_choice(root, ws, link_id, {"kind": "checkin", "story_fp": ci.get("story_fp"), "yes": yes, "note": note,
+                                               "name": " ".join((name or "").split())[:MAX_NAME_CHARS]})
+
+
+def add_hook_pick(root: Path, ws: Path, link_id: str, option: str, name: str) -> str | None:
+    pv = pending_hook(ws)
+    if pv is None:
+        return "The look has already been picked. Thanks!"
+    if option not in (pv.get("options") or {}) or not HOOK_OPTION.fullmatch(option or ""):
+        return "Pick A or B."
+    return _append_choice(root, ws, link_id, {"kind": "hook", "stamp": hook_stamp(pv), "option": option,
+                                               "name": " ".join((name or "").split())[:MAX_NAME_CHARS]})
+
+
+def choices(ws: Path) -> list[dict]:
+    out = []
+    try:
+        for line in (ws / CHOICES).read_text(encoding="utf-8").splitlines():
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                continue
+    except OSError:
+        pass
+    return out
+
+
+def current_choices(ws: Path) -> dict:
+    """The client's latest answer to what is open right now (an answer to an older check-in or preview set is not offered)."""
+    ci, pv = pending_checkin(ws), pending_hook(ws)
+    out: dict = {"checkin": None, "hook": None}
+    for c in choices(ws):
+        if c.get("kind") == "checkin" and ci and c.get("story_fp") == ci.get("story_fp"):
+            out["checkin"] = {k: c.get(k) for k in ("at", "yes", "note", "name")}
+        if c.get("kind") == "hook" and pv and c.get("stamp") == hook_stamp(pv):
+            out["hook"] = {k: c.get(k) for k in ("at", "option", "name")}
+    return out
 
 
 def _transcode(src: Path, dst: Path) -> None:
@@ -205,6 +347,10 @@ input:focus,textarea:focus,button:focus-visible{outline:2px solid #E8A33D;outlin
 button{height:36px;padding:0 16px;border-radius:4px;font:500 13px/18px Inter,system-ui,sans-serif;cursor:pointer;border:1px solid #3A3E45;background:#1D1F23;color:#ECEDEE}
 button.primary{background:#E8A33D;color:#1A1305;border-color:transparent}.ok{color:#3CCB7F}.err{color:#F5606C}
 hr{border:0;border-top:1px solid #2A2D32;margin:24px 0}main.gone{display:block;max-width:520px;padding-top:96px}.mt{margin-top:8px}
+main.solo{grid-template-columns:minmax(0,560px)}h2{font-size:16px;line-height:24px;font-weight:600;margin:0 0 4px}
+.two{gap:12px}.two figure{margin:0;flex:1}.two figcaption{text-align:center;font-size:12px;color:#A9ACB2;margin-top:4px}
+ol.lines{margin:12px 0;padding-left:20px;display:grid;gap:6px}ol.lines .meta{display:inline-block;min-width:56px}
+label.tick{display:flex;gap:8px;align-items:flex-start;color:#ECEDEE;font-size:14px;margin:8px 0}label.tick input{width:auto;margin-top:3px}
 """
 
 _SCRIPT = """
@@ -217,28 +363,83 @@ t.focus();t.selectionStart=t.selectionEnd=i+pre.length+s.length;v.pause()});
 """
 
 
-def page(title: str, link: dict, nonce: str, link_id: str, flash: str = "", flash_ok: bool = True) -> str:
-    left_h = max(0, link["expires"] - time.time()) / 3600
-    left = f"{left_h:.0f} hours" if left_h >= 2 else "less than 2 hours"
-    msg = f'<p class="{"ok" if flash_ok else "err"}" role="status">{html.escape(flash)}</p>' if flash else ""
-    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex,nofollow"><title>Review · {html.escape(title)}</title><style nonce="{nonce}">{_STYLE}</style></head>
-<body><main>
-<section class="well" aria-label="Reel"><video id="v" src="/r/{link_id}/video" controls playsinline preload="metadata"></video></section>
-<section>
-<h1>{html.escape(title)}</h1>
-<p class="meta">Review copy (small and watermarked) · this link expires in {left}</p>
-<hr>
-<form method="post" action="/r/{link_id}/notes">
+_NAME_FIELD = (f'<label for="name">Your name (optional)</label>'
+               f'<input id="name" name="name" maxlength="{MAX_NAME_CHARS}" autocomplete="name">')
+
+
+def _checkin_block(ci: dict, link_id: str) -> str:
+    """The story in plain words, the suggestions as tick boxes (the engine's reasons stay internal), a note box."""
+    e = html.escape
+    def when(i: int, x: dict) -> str:
+        return "Opening" if i == 0 else f"{float(x.get('seconds') or 0):.0f} s"
+
+    lines = "".join(f'<li><span class="meta">{when(i, x)}</span> {e(str(x.get("text", "")))}</li>' for i, x in enumerate(ci.get("lines", [])))
+    qs = "".join(f'<label class="tick"><input type="checkbox" name="yes" value="{e(q["id"])}"> {e(str(q.get("text", "")))}</label>'
+                 for q in ci.get("questions", []))
+    return f"""<h2>Check the story</h2>
+<p class="meta">Nothing has been rendered yet. This is the order the reel will tell the story in ({ci.get("total_s", 0):.0f} s of speech).</p>
+<ol class="lines">{lines}</ol>
+<form method="post" action="/r/{link_id}/checkin">
+{f'<p class="meta mt">Suggestions (tick the ones you agree with):</p>{qs}' if qs else ''}
+<label for="cnote">Anything else to change in the story? (optional)</label>
+<textarea id="cnote" name="note" maxlength="{MAX_NOTE_CHARS}" placeholder="end on the result&#10;don't mention the price"></textarea>
+{_NAME_FIELD}
+<div class="row"><button class="primary" type="submit">Send my answers</button></div>
+</form>"""
+
+
+def _hook_block(options: list[str], link_id: str) -> str:
+    radios = "".join(f'<label class="tick"><input type="radio" name="option" value="{o}" required> Look {o}</label>' for o in options)
+    return f"""<h2>Pick the look</h2>
+<p class="meta">The opening seconds in two looks (captions and colour). The full reel will be made in the one picked.</p>
+<form method="post" action="/r/{link_id}/hook">
+{radios}
+{_NAME_FIELD}
+<div class="row"><button class="primary" type="submit">Send my pick</button></div>
+</form>"""
+
+
+def _notes_block(link_id: str) -> str:
+    return f"""<form method="post" action="/r/{link_id}/notes">
 <label for="note">Your notes, one per line. Start a line with a time to point at a moment.</label>
 <textarea id="note" name="text" maxlength="{MAX_NOTE_CHARS}" placeholder="0:12 make this faster&#10;0:31 spell the doctor's name right&#10;love the ending" required></textarea>
 <div class="row"><button type="button" id="stamp">Add time 0:00</button></div>
-<label for="name">Your name (optional)</label>
-<input id="name" name="name" maxlength="{MAX_NAME_CHARS}" autocomplete="name">
+{_NAME_FIELD}
 <div class="row"><button class="primary" type="submit">Send notes</button></div>
+</form>"""
+
+
+def page(title: str, link: dict, nonce: str, link_id: str, flash: str = "", flash_ok: bool = True, view: dict | None = None) -> str:
+    """The client page. `view` (client_view) decides what shows: the reel and a notes box once rendered; before that the
+    hook A/B pick and/or the story check-in; otherwise a note that the edit is in progress."""
+    view = view if view is not None else {"reel": True, "checkin": None, "hook": []}
+    left_h = max(0, link["expires"] - time.time()) / 3600
+    left = f"{left_h:.0f} hours" if left_h >= 2 else "less than 2 hours"
+    msg = f'<p class="{"ok" if flash_ok else "err"}" role="status">{html.escape(flash)}</p>' if flash else ""
+    if view.get("reel"):
+        media = f'<section class="well" aria-label="Reel"><video id="v" src="/r/{link_id}/video" controls playsinline preload="metadata"></video></section>'
+        what, body, script = "Review copy (small and watermarked)", _notes_block(link_id), f'<script nonce="{nonce}">{_SCRIPT}</script>'
+    else:
+        hook = view.get("hook") or []
+        media = ('<section class="well two" aria-label="The two looks">'
+                 + "".join(f'<figure><video src="/r/{link_id}/hook/{o}" controls playsinline preload="metadata"></video><figcaption>Look {o}</figcaption></figure>'
+                           for o in hook) + "</section>") if hook else ""
+        parts = [_hook_block(hook, link_id)] if hook else []
+        if view.get("checkin"):
+            parts.append(_checkin_block(view["checkin"], link_id))
+        body = "<hr>".join(parts) or '<p class="meta mt">The edit is in progress. Open this link again later to watch the reel.</p>'
+        what, script = "Before the full edit", ""
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Review · {html.escape(title)}</title><style nonce="{nonce}">{_STYLE}</style></head>
+<body><main class="{'' if media else 'solo'}">
+{media}
+<section>
+<h1>{html.escape(title)}</h1>
+<p class="meta">{what} · this link expires in {left}</p>
 {msg}
-</form>
-</section></main><script nonce="{nonce}">{_SCRIPT}</script></body></html>"""
+<hr>
+{body}
+</section></main>{script}</body></html>"""
 
 
 def gone_page(nonce: str) -> str:

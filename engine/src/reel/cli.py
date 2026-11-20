@@ -181,6 +181,22 @@ def _cmd_factory(args: argparse.Namespace) -> int:
     return 0
 
 
+def story_checkin_wanted(args: argparse.Namespace, ws, options: dict) -> bool:
+    """--story-checkin / --no-story-checkin win. Without either, the brand kit's default applies on the project's first
+    run only (a re-run of a project that already has a story never stops again), and never to a Clip Factory analysis."""
+    flag = getattr(args, "story_checkin", None)
+    if flag is not None:
+        return bool(flag)
+    if getattr(args, "mine", False) or not options.get("brand") or ws.path("plan", "story.json").exists():
+        return False
+    from reel import brief as brief_mod
+
+    try:
+        return brief_mod.load_brand(options["brand"]).story_checkin
+    except Exception:  # noqa: BLE001 — an unreadable brand kit fails later with a clear error
+        return False
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     from reel.runner import run_pipeline
     from reel.stages import EDIT_PIPELINE, PIPELINE
@@ -208,7 +224,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         carried = {k: v for k, v in json.loads(prev.read_text()).items() if k in CARRIED_OPTIONS}
         options = {**carried, **options}
     atomic_write_json(ws.path("run_options.json"), options)  # `reel revise` / `reel proof` reuse them
-    if getattr(args, "story_checkin", False):  # 3a.1: stop after the story pass; `reel checkin` answers and continues
+    if story_checkin_wanted(args, ws, options):  # 3a.1: stop after the story pass; `reel checkin` answers and continues
         from reel.stages import edit
 
         state = run_pipeline(ws, edit.checkin_pipeline(EDIT_PIPELINE), options=options, force=set(args.force or []))
@@ -727,7 +743,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--reference", help="a finished reel the client likes: its pacing, captions and colour become the style to match")
     p.add_argument("--broll", help="folder of client b-roll clips (conformed, described by Claude, offered to the Editor)")
     p.add_argument("--stock", action="store_true", help="find stock b-roll on Pexels for this talk at edit time (needs PEXELS_API_KEY)")
-    p.add_argument("--story-checkin", action="store_true", help="stop after the story pass for the owner's check-in (`reel checkin`)")
+    p.add_argument("--story-checkin", action=argparse.BooleanOptionalAction, default=None,
+                   help="stop after the story pass for the owner's check-in (`reel checkin`); default: the brand kit's "
+                        "`story_checkin`, on a project's first run only")
     p.add_argument("--mine", action="store_true", help="Clip Factory: a long recording → analysis + a ranked board of candidate reels")
     p.add_argument("--clip-length", help="(--mine) speech length per reel in seconds, e.g. 20-75 (default 20-75 or the brief's)")
     p.set_defaults(func=_cmd_run)

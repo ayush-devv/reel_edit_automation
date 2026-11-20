@@ -524,6 +524,37 @@ def test_plain_verdict_and_eta(env):
     assert pr.eta_s(ws, [{"name": "never_seen", "status": "pending"}]) is None  # < 3 samples: unknown, not a guess
 
 
+def test_a_long_recording_is_used_where_it_is(env, tmp_path):
+    """No upload, no copy: the recording on this Mac is the run's input (the 4 GB browser cap doesn't apply)."""
+    c = env["c"]
+    rec = tmp_path / "talk.mp4"
+    rec.write_bytes(b"\0" * 10)
+    (tmp_path / "notes.txt").write_text("x")
+    for bad in ("https://example.com/talk.mp4", str(tmp_path / "nope.mp4"), str(tmp_path / "notes.txt"), str(tmp_path)):
+        assert c.post("/api/projects", data={"name": "x", "source_path": bad}).status_code == 400, bad
+    both = c.post("/api/projects", data={"name": "x", "source_path": str(rec)}, files=[("files[]", ("a.mp4", b"\0", "video/mp4"))])
+    assert both.status_code == 400
+    assert c.post("/api/projects", data={"name": "x"}).status_code == 400  # neither
+    r = c.post("/api/projects", data={"name": "Talk", "source_path": str(rec), "mode": "long"})
+    assert r.status_code == 201, r.text
+    ws = env["root"] / r.json()["id"]
+    assert not list((ws / "source" / "raw").iterdir())  # nothing copied
+    argv = env["launcher"].procs[-1][0].argv
+    assert str(rec.resolve()) in argv and "--mine" in argv and "--no-story-checkin" not in argv
+    from reel.studio import projects as projects_mod
+
+    assert projects_mod.studio_meta(ws)["source_path"] == str(rec.resolve())
+
+
+def test_an_upload_too_big_is_refused_before_it_is_read(env):
+    from reel.studio import app as app_mod
+
+    app2 = app_mod.create_app(Settings(**{**env["s"].__dict__, "max_upload_bytes": 100}), launcher=env["launcher"])
+    c2 = TestClient(app2, headers={"X-Reel-Token": env["token"]})
+    r = c2.post("/api/projects", data={"name": "x"}, files=[("files[]", ("a.mp4", b"\0" * 1000, "video/mp4"))])
+    assert r.status_code == 413 and "on this Mac" in r.text
+
+
 def test_create_project_checks_the_broll_folder(env, tmp_path):
     files = {"files": ("a.mp4", b"x" * 10, "video/mp4")}
     r = env["c"].post("/api/projects", data={"name": "x", "broll_folder": str(tmp_path / "nope")}, files=files)
@@ -767,3 +798,55 @@ def test_review_link_lifecycle_and_isolation(env, monkeypatch):
     assert bare.get(expiring["path"]).status_code == 410
     monkeypatch.setattr(time, "time", real_time)
     assert c.post("/api/projects/p1/review-links", json={"hours": 0}).status_code == 400
+
+
+def test_review_link_before_the_render_shows_the_checkin_and_the_hook(env, monkeypatch):
+    """3a.1 + G1.6 on the client page: the client only suggests (recorded, stamped); the owner applies in the Studio."""
+    from reel.studio import review_links
+
+    made = []
+    monkeypatch.setattr(review_links, "_transcode", lambda src, dst: (made.append(src.name), dst.write_bytes(b"SMALL")))
+    ws = make_project(env["root"], "p2")
+    (ws / "render" / "final.mp4").unlink()
+    c, bare = env["c"], TestClient(env["app"])
+    ci = {"status": "open", "story_fp": "fp1", "summary": "s", "total_s": 21.0, "questions": [
+        {"id": "q1", "kind": "drop", "text": "Drop this 9 s line: <b>bold</b>?", "why": "engine take score"}],
+        "lines": [{"id": "k1", "seconds": 3.2, "text": "Hook <script>x</script>"}, {"id": "k2", "seconds": 9.0, "text": "Long line"}]}
+    (ws / "plan").mkdir(exist_ok=True)
+    (ws / "plan" / "checkin.json").write_text(json.dumps(ci))
+    pv_dir = ws / "export" / "preview"
+    pv_dir.mkdir(parents=True)
+    for o in "AB":
+        (pv_dir / f"hook_{o}.mp4").write_bytes(b"FULLQUALITY")
+    pv = {"frames": 90, "options": {"A": {"file": "export/preview/hook_A.mp4"}, "B": {"file": "export/preview/hook_B.mp4"}}, "chosen": None}
+    (pv_dir / "preview.json").write_text(json.dumps(pv))
+
+    assert c.get("/api/projects/p2/review-links").json()["ready"] is True
+    link = c.post("/api/projects/p2/review-links", json={"hours": 24}).json()
+    assert sorted(made) == ["hook_A.mp4", "hook_B.mp4"]  # watermarked copies; the full-quality previews are never served
+    page = bare.get(link["path"]).text
+    assert "Check the story" in page and "Pick the look" in page and "Send notes" not in page
+    assert "<script>x" not in page and "&lt;script&gt;" in page and "&lt;b&gt;" in page and "engine take score" not in page
+    assert bare.get(link["path"] + "/video").status_code == 410
+    assert bare.get(link["path"] + "/hook/A").content == b"SMALL"
+    assert bare.get(link["path"] + "/hook/C").status_code in (400, 404, 422)
+    assert bare.post(link["path"] + "/notes", data={"text": "hi"}).status_code == 400  # no reel to note yet
+
+    r = bare.post(link["path"] + "/checkin", data={"yes": ["q1"], "note": "end on the result", "name": "Priya"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].endswith("?sent=checkin")
+    assert bare.post(link["path"] + "/checkin", data={"yes": ["q9"]}).status_code == 400  # not a question on this check-in
+    assert bare.post(link["path"] + "/hook", data={"option": "B"}, follow_redirects=False).status_code == 303
+    assert bare.post(link["path"] + "/hook", data={"option": "Z"}).status_code == 400
+    got = c.get("/api/projects/p2/review-links").json()["choices"]
+    assert got["checkin"]["yes"] == ["q1"] and got["checkin"]["note"] == "end on the result" and got["hook"]["option"] == "B"
+
+    ci["story_fp"] = "fp2"  # the story changed: the old answers are not offered for the new questions
+    (ws / "plan" / "checkin.json").write_text(json.dumps(ci))
+    assert c.get("/api/projects/p2/review-links").json()["choices"]["checkin"] is None
+    ci["status"] = "answered"
+    (ws / "plan" / "checkin.json").write_text(json.dumps(ci))
+    pv["chosen"] = "A"
+    (pv_dir / "preview.json").write_text(json.dumps(pv))
+    assert bare.post(link["path"] + "/checkin", data={"yes": []}).status_code == 400  # settled
+    assert bare.get(link["path"] + "/hook/A").status_code == 410
+    assert "in progress" in bare.get(link["path"]).text  # nothing open, nothing rendered: not "expired"

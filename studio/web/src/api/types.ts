@@ -291,6 +291,10 @@ export interface Brand {
   cta_style?: string | null;
   /** How the client's posts read (copy pack). Optional: older kits have none. */
   voice?: BrandVoice;
+  /** 3c.1 beauty pass default for this client's reels. */
+  beauty?: "off" | "light";
+  /** 3a.1: New edit starts with "Check the story first" ticked for this client. */
+  story_checkin?: boolean;
 }
 
 /** engine/src/reel/brief.py BrandVoice. Hashtags are words without `#`. */
@@ -508,11 +512,18 @@ export interface ReviewNote {
   text: string;
 }
 
-/** GET /api/projects/{id}/review-links. `ready` = a review copy exists, so a link can be made. */
+/** The client's latest answers through a review link, to what is open now (an answer to an older check-in or preview is dropped). */
+export interface ClientChoices {
+  checkin: { at: number; yes: string[]; note: string; name: string } | null;
+  hook: { at: number; option: "A" | "B"; name: string } | null;
+}
+
+/** GET /api/projects/{id}/review-links. `ready` = there is something to show the client (a check-in, a hook preview or a render). */
 export interface ReviewLinks {
   links: ReviewLink[];
   notes: ReviewNote[];
   ready: boolean;
+  choices?: ClientChoices;
 }
 
 /** Current value of every guided adjustment (FR-8). */
@@ -528,6 +539,8 @@ export interface AdjustState {
   max_pause_ms: number | null;
   sfx: number;
   punch_ins: number;
+  /** 3c.1: what the last render applied. */
+  beauty?: "off" | "light";
 }
 
 /** GET /api/projects/{id}/timeline */
@@ -581,7 +594,9 @@ export type AdjustKind =
   /** C4: the kept line ids in their new order; a line left out is dropped (with what was attached to it). */
   | "story_lines"
   /** 3a.3: `{ item, remove: [[first word, last word], …] }`: cut words out of one kept line. */
-  | "story_words";
+  | "story_words"
+  /** 3c.1: "off" | "light" for this project (wins over the brief and the brand kit); only the picture re-renders. */
+  | "beauty";
 
 export interface NotesPreview {
   /** anchored[i] belongs to the i-th non-empty line sent. */

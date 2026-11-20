@@ -30,8 +30,25 @@ MAX_DETAIL_LOSS = 0.35  # warn when the face loses more than this share of its f
 CHECK_FRAMES = 8
 
 
-def mode(brief, brand) -> str:
-    """'light' or 'off'. The brief can turn it on for one reel; the brand kit for every reel of a client."""
+OVERRIDE_FILE = "beauty_override.json"  # the project's own switch (Studio → Adjust); read only here, so flipping it re-renders
+#                                        the picture without touching any plan or paid pass
+
+
+def project_override(root: Path | None) -> str | None:
+    if root is None:
+        return None
+    try:
+        v = json.loads((Path(root) / OVERRIDE_FILE).read_text()).get("mode")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return v if v in ("off", "light") else None
+
+
+def mode(brief, brand, override: str | None = None) -> str:
+    """'light' or 'off'. The project's own switch wins; else the brief can turn it on for one reel, the brand kit for every
+    reel of a client."""
+    if override in ("off", "light"):
+        return override
     if brief is not None and getattr(brief, "beauty", False):
         return "light"
     if brand is not None and getattr(brand, "beauty", "off") == "light":

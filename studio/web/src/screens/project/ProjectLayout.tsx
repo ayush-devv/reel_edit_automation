@@ -116,16 +116,73 @@ function RenameForm({ p, onDone }: { p: Project; onDone: (saved: boolean) => voi
   );
 }
 
+/** Before the render, the client can answer through a review link (check-in, hook pick). The client only suggests:
+ *  their answer shows here and the owner applies it. */
+function useClientLink(projectId: string) {
+  const api = useApi();
+  const q = useQuery(() => api.reviewLinks(projectId), [api, projectId], { intervalMs: 15000 });
+  const active = (q.data?.links ?? []).find((l) => l.state === "active");
+  return { q, active, choices: q.data?.choices };
+}
+
+function AskClient({ projectId, active, onMade }: { projectId: string; active?: { id: string; path: string }; onMade: () => void }) {
+  const api = useApi();
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  async function copy(path: string) {
+    await navigator.clipboard?.writeText(origin + path).then(() => setMsg("Link copied"), () => setMsg(origin + path));
+  }
+  return (
+    <span className="inline-flex items-center gap-2 text-meta text-fg-muted">
+      {active ? (
+        <Button variant="ghost" icon="copy" onClick={() => copy(active.path)}>Copy the client link</Button>
+      ) : (
+        <Button
+          variant="ghost"
+          icon="link"
+          busy={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              const l = await api.createReviewLink(projectId, 72);
+              await copy(l.path);
+              onMade();
+            } catch (e) {
+              setMsg(friendlyError(e));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Ask the client (3-day link)
+        </Button>
+      )}
+      {msg && <span role="status">{msg}</span>}
+    </span>
+  );
+}
+
 /** G1.6: the hook in two looks; picking one renders the full reel in that look. */
 function HookChooser({ p, onPicked }: { p: Project; onPicked: () => void }) {
   const api = useApi();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const opts = Object.entries(p.preview?.options ?? {});
+  const client = useClientLink(p.id);
+  const pick = client.choices?.hook;
   return (
     <section aria-label="Pick the hook look" className="border-b border-line-subtle px-8 py-5">
-      <p className="text-section text-fg-primary">Pick the look for this reel</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-section text-fg-primary">Pick the look for this reel</p>
+        {opts.length > 1 && <AskClient projectId={p.id} active={client.active} onMade={client.q.reload} />}
+      </div>
       <p className="mb-4 text-meta text-fg-muted">The opening seconds in {opts.length === 1 ? "the Editor's look (the brand kit fixes the style)" : "two looks"}. The full reel renders in the one you pick.</p>
+      {pick && (
+        <p className="mb-3 text-meta text-st-sendable" role="status">
+          {pick.name || "The client"} picked look {pick.option} through the review link.
+        </p>
+      )}
       <div className="flex flex-wrap gap-6">
         {opts.map(([k, o]) => (
           <figure key={k} className="w-[220px]">
@@ -169,14 +226,30 @@ function StoryCheckinPanel({ p, onDone }: { p: Project; onDone: () => void }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const client = useClientLink(p.id);
+  const said = client.choices?.checkin;
   const c = q.data;
   if (!c) return null;
   return (
     <section aria-label="Check the story" className="border-b border-line-subtle px-8 py-5">
-      <p className="text-section text-fg-primary">Check the story before the full edit</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-section text-fg-primary">Check the story before the full edit</p>
+        <AskClient projectId={p.id} active={client.active} onMade={client.q.reload} />
+      </div>
       <p className="mb-3 text-meta text-fg-muted">
         {c.summary} · {c.total_s.toFixed(0)} s of speech · nothing has been rendered yet, so changes here cost nothing.
       </p>
+      {said && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-control border border-line-subtle bg-bg-overlay px-3 py-2 text-meta" role="status">
+          <span className="text-fg-primary">
+            {said.name || "The client"} answered: {said.yes.length ? `yes to ${said.yes.length} suggestion${said.yes.length === 1 ? "" : "s"}` : "no suggestions ticked"}
+            {said.note ? <> · “{said.note}”</> : null}
+          </span>
+          <Button variant="secondary" onClick={() => { setYes(new Set(said.yes)); setNote(said.note); }}>
+            Use the client’s answers
+          </Button>
+        </div>
+      )}
       <ol className="mb-3 space-y-1" aria-label="Story lines">
         {c.lines.map((l, i) => (
           <li key={l.id} className="flex gap-3 text-meta">

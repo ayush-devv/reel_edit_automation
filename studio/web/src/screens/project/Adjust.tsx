@@ -242,6 +242,7 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
     grain: String(a.grain),
     vignette: String(a.vignette),
     pause: String(a.max_pause_ms ?? 400),
+    beauty: a.beauty === "light",
   };
   const currentTrack = a.music_track === "none" ? "No music" : lib.music.find((m) => m.id === a.music_track)?.title ?? a.music_track;
   const [v, setV] = useState(initial);
@@ -323,6 +324,10 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
           </Row>
           <Row title="Vignette" kind="vignette" value={num(v.vignette)} dirty={v.vignette !== base.vignette} ctx={ctx} onApplied={done(["vignette"])}>
             <Num label="Vignette" value={v.vignette} onChange={(x) => set("vignette", x)} min={0} max={0.7} />
+          </Row>
+          <Row title="Beauty pass" hint="Gentle skin smoothing on faces; eyes and lips stay sharp. Never for minors. Only the picture re-renders."
+               kind="beauty" value={v.beauty ? "light" : "off"} dirty={v.beauty !== base.beauty} ctx={ctx} onApplied={done(["beauty"])}>
+            <Toggle checked={v.beauty} onChange={(x) => set("beauty", x)} label="Smooth skin on this reel" />
           </Row>
         </Panel>
       </div>

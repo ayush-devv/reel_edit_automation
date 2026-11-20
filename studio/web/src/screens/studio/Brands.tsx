@@ -189,6 +189,18 @@ function Editor({ entry, isNew, onSaved }: { entry: BrandEntry; isNew: boolean; 
               ))}
             </Select>
           </Field>
+          <Field label="Beauty pass" htmlFor="b-beauty" hint="Gentle skin smoothing on faces, eyes and lips kept sharp. Never for minors.">
+            <Select id="b-beauty" value={b.beauty ?? "off"} onChange={(e) => setB({ ...b, beauty: e.target.value as "off" | "light" })}>
+              <option value="off">Off</option>
+              <option value="light">Light</option>
+            </Select>
+          </Field>
+          <Field label="New edits" htmlFor="b-checkin" hint="You can still change it per edit.">
+            <Select id="b-checkin" value={b.story_checkin ? "yes" : "no"} onChange={(e) => setB({ ...b, story_checkin: e.target.value === "yes" })}>
+              <option value="no">Run the full edit</option>
+              <option value="yes">Check the story first</option>
+            </Select>
+          </Field>
           <VoiceFields b={b} setB={setB} />
           <div className="col-span-2 flex items-center gap-3">
             <Button type="submit" variant="primary" busy={busy} disabled={!b.client.trim() || COLOR_KEYS.some(([k]) => b.colors[k] && !isHex(b.colors[k]))}>

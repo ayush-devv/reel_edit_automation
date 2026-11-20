@@ -107,6 +107,7 @@ export default function NewEdit() {
   const [longRecording, setLongRecording] = useState(false);
   const [storyCheckin, setStoryCheckin] = useState(false);
   const [matchProject, setMatchProject] = useState("");
+  const [sourcePath, setSourcePath] = useState("");
   const [dragOver, setDragOver] = useState(false);
 
   // Brief templates live in the engine (~/.config/reel/templates.json); a browser's old copy is moved there once.
@@ -174,15 +175,16 @@ export default function NewEdit() {
     setTouched(true);
     setError(null);
     if (Object.keys(errors).length) return;
-    if (!files.length) {
-      setError("Add at least one video file.");
+    const localFile = files.length ? "" : sourcePath.trim();
+    if (!files.length && !localFile) {
+      setError("Add at least one video file, or name a file on this Mac.");
       return;
     }
     setBusy(true);
     try {
       const input = { files, name: form.name.trim(), brief: toBrief(form), brand: brand || null, reference_url: refUrl.trim() || null, stock, broll_folder: brollFolder.trim() || null,
                       preview_first: previewFirst && !longRecording, mode: longRecording ? ("long" as const) : ("reel" as const),
-                      story_checkin: storyCheckin && !longRecording, match_project: matchProject || null };
+                      story_checkin: storyCheckin && !longRecording, match_project: matchProject || null, source_path: localFile || null };
       const { id } = await api.createProject(input, (loaded, total) =>
         setSent({ loaded, total }),
       );
@@ -269,6 +271,24 @@ export default function NewEdit() {
                 ))}
               </div>
             )}
+            <div className="mt-4">
+              <label htmlFor="source-path" className="mb-1.5 block text-meta text-fg-secondary">
+                Or use a file on this Mac (long recordings, any size)
+              </label>
+              <TextInput
+                id="source-path"
+                value={sourcePath}
+                disabled={files.length > 0}
+                onChange={(e) => {
+                  setSourcePath(e.target.value);
+                  const base = e.target.value.trim().split("/").pop() ?? "";
+                  if (base && !form.name) set("name", base.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " "));
+                }}
+                placeholder="/Users/you/Movies/podcast-ep12.mp4"
+                className="font-mono text-mono"
+              />
+              <p className="mt-1 text-meta text-fg-muted">Used where it is, with no upload or copy. Keep the file there until the edit is done.</p>
+            </div>
             {files.length > 0 && (
               <ul className="mt-4 divide-y divide-line-subtle border-b border-line-subtle" aria-label="Files to upload">
                 {files.map((f, i) => (
@@ -296,7 +316,15 @@ export default function NewEdit() {
 
           <Panel title="Extras">
             <div className="space-y-4">
-              <SF label="Brand kit" value={brand} onChange={setBrand} hint="Locks the brand’s colours, caption style and look.">
+              <SF
+                label="Brand kit"
+                value={brand}
+                onChange={(v) => {
+                  setBrand(v);
+                  setStoryCheckin(!!(brands.data ?? []).find((b) => b.id === v)?.brand.story_checkin); // the client's default; still changeable
+                }}
+                hint="Locks the brand’s colours, caption style and look."
+              >
                 <option value="">No brand kit</option>
                 {(brands.data ?? []).map((b) => (
                   <option key={b.id} value={b.id}>

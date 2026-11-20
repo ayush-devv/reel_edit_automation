@@ -21,7 +21,8 @@ export function screenFiles(files: File[]): { ok: File[]; rejected: { name: stri
   for (const f of files) {
     const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
     if (!(VIDEO_EXT as readonly string[]).includes(ext)) rejected.push({ name: f.name, reason: `${f.name} isn't a video (use mp4, mov, m4v, mkv or webm).` });
-    else if (f.size > MAX_BYTES) rejected.push({ name: f.name, reason: `${f.name} is larger than 4 GB.` });
+    else if (f.size > MAX_BYTES)
+      rejected.push({ name: f.name, reason: `${f.name} is larger than 4 GB. Paste its location under “Or use a file on this Mac” instead: it's used where it is, without a copy.` });
     else ok.push(f);
   }
   return { ok, rejected };
