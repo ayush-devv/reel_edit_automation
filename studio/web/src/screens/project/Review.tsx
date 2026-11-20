@@ -69,6 +69,28 @@ function VerdictCard({ p, onSeek }: { p: Project; onSeek: (t: number) => void })
             ))}
         </ul>
       )}
+      {v?.coverage && (v.coverage.not_measured.length > 0 || v.coverage.partial.length > 0) && (
+        <div className="mt-4" aria-label="Checks that couldn't run">
+          <p className="text-meta text-st-hold">Couldn’t check — look at these yourself:</p>
+          <ul className="mt-1 space-y-1 text-meta text-fg-secondary">
+            {[...v.coverage.not_measured, ...v.coverage.partial].map((x) => (
+              <li key={x.gate}>
+                <span className="text-fg-primary">{gateLabel(x.gate)}</span>: {x.why}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {v?.coverage && (
+        <details className="mt-3 text-meta text-fg-muted">
+          <summary className="cursor-pointer select-none">What no check looks at</summary>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {v.coverage.never.map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+        </details>
+      )}
       {v && (v.reasons.length > 0 || v.warnings.length > 0) && (
         <details className="mt-4 text-meta text-fg-muted">
           <summary className="cursor-pointer select-none">Details (the engine’s wording)</summary>

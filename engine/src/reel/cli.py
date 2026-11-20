@@ -295,6 +295,13 @@ def _print_verdict(ws, loops: list | None = None) -> None:
         print("\nfix loops: " + " → ".join(f"{h['status']}" + (f" (revised: {h['revision']})" if h.get("revision") else "") for h in loops))
     if v.exists():
         print("\n" + v.read_text().split("## Gates")[0].strip())
+        from reel import coverage
+
+        rep = coverage.report(ws.root)
+        if rep:  # 4.2: what the checks couldn't or never look at
+            for line in coverage.lines(rep):
+                print(f"  not checked: {line}")
+            print("  never checked by any gate: " + "; ".join(rep["never"]))
         print(f"\nfull report: {v}")
 
 

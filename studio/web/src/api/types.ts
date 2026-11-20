@@ -143,6 +143,15 @@ export interface Gate {
 }
 
 /** One quality check that didn't pass, in plain words (engine reel.verdict_plain). `at` = timecodes "m:ss.ss". */
+/** 4.2: what the verdict did not check. `not_measured`: ran but couldn't measure (never a pass); `partial`: skipped some items;
+ *  `never`: what no gate looks at. */
+export interface Coverage {
+  not_measured: { gate: string; why: string }[];
+  partial: { gate: string; skipped: number; why: string }[];
+  never: string[];
+  reviewer: boolean;
+}
+
 export interface PlainCheck {
   gate: string;
   status: "fail" | "warn";
@@ -193,7 +202,7 @@ export interface Project extends ProjectSummary {
   brand: string | null;
   stages: Stage[];
   decisions: Decision[];
-  verdict_detail: { verdict: string; reasons: string[]; warnings: string[]; gates: Gate[]; plain?: PlainCheck[] } | null;
+  verdict_detail: { verdict: string; reasons: string[]; warnings: string[]; gates: Gate[]; plain?: PlainCheck[]; coverage?: Coverage | null } | null;
   proof: ProofWord[];
   review: { summary: string; sendable: boolean | null; strengths: string[]; issues: ReviewIssue[];
             /** 3b.1: the Reviewer's answers to the rubric fixed from the brief before the edit (older reviews: absent). */

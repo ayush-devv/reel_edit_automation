@@ -1241,6 +1241,16 @@ Don't put build days on platform assumptions. Check against Meta's and Google's 
 - Every verdict lists the gates that **could not measure** (no face found, OCR failed, no reference) as Hold-worthy, never as a pass, and a fixed list of things gates **never** check ("music taste", "joke timing", "whether the story is interesting").
 - The Studio summary and the revise reply are built only from the QA results (already true since 3b: `with_measured_verdict`); this adds the "not checked" block to both.
 
+**As built (2026-11-21):**
+- **Code:** `reel/coverage.py`, decided only from `qa/gates.json` and `qa/review.json`.
+- **Where it shows:**
+  - Studio's verdict carries `coverage`;
+  - Review shows "Couldn't check — look at these yourself" and a "What no check looks at" list;
+  - the revise reply adds "N check(s) couldn't run fully";
+  - `reel run` prints both lists.
+- **No re-buy:** it lives outside `verdict.py`, `qa.py` and `cuts.py`, which the QA stage fingerprints. Editing those would re-buy a Reviewer call on every project's next run, and a test guards against it.
+- **Unchanged on purpose:** the Sendable/Hold decision itself. The unmeasured gates already return `ok=False` in warn mode, so they show as warnings, never as passes. Making them blocking is a gate-mode switch in the Quality lab.
+
 #### 4.3 Review links outside this Mac (E3; about 1.5–2 days after the owner chooses)
 
 A tunnel to port 8765 would expose the whole Studio API behind one token. Two safer options:

@@ -401,8 +401,11 @@ def verdict_detail(ws: Path) -> dict | None:
     for g in raw:
         status = "pass" if g.get("ok") else ("fail" if g.get("mode") == "block" else "warn")
         gates.append({"name": g.get("gate"), "status": status, "detail": g.get("detail", ""), "measured": g.get("measured") or {}})
+    from reel import coverage
+
     return {"verdict": v.get("status"), "reasons": v.get("reasons", []), "warnings": v.get("warnings", []), "gates": gates,
-            "plain": verdict_plain.explain(raw)}  # one plain sentence per check that didn't pass (UI plan A1)
+            "plain": verdict_plain.explain(raw),  # one plain sentence per check that didn't pass (UI plan A1)
+            "coverage": coverage.report(ws)}  # 4.2: what wasn't (or couldn't be) checked
 
 
 def review_view(ws: Path) -> dict | None:
@@ -533,11 +536,14 @@ def with_measured_verdict(ws: Path, reply: str) -> str:
     v = read_json(ws / "qa" / "verdict.json")
     if not v or v.get("status") not in ("sendable", "hold"):
         return reply
+    from reel import coverage
+
     if v["status"] == "sendable":
         tail = "QA after the change: Sendable" + (f" ({len(v.get('warnings', []))} warning(s))" if v.get("warnings") else "")
     else:
         reasons = v.get("reasons", [])
         tail = f"QA after the change: Hold, {len(reasons)} reason(s): " + "; ".join(r.split(":")[0] for r in reasons[:3])
+    tail += coverage.reply_tail(ws)  # 4.2: a pass never hides a check that couldn't run
     return f"{reply} · {tail}" if reply else tail
 
 
