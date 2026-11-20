@@ -12,13 +12,13 @@ This file ties all the plans together and holds the implementation plans that we
 | Group | What | Size | Plan status |
 |---|---|---|---|
 | **1** | Before the first paying client | about 6–8 days | **Built** (G1.1–G1.8, commits `00cdf10` … `6ab7999`) |
-| **2** | Growth: Clip Factory, asset search index, UI phases 3–4, free-model listening test (+ two small additions from the harness comparison) | about 8–10.5 days as planned; 7–9.5 without the additions | **Built, not committed** (see "Group 2 as built"); real-project checks wait on owner input |
-| **3a** | Client-facing: story check-in, per-client style memory, word-level text edits | about 4.5–5.5 days | **Detailed below** |
-| **3b** | Proving quality: brief rubric, pairwise judge, revision evals, verdict-checked replies, gold-pair tooling | about 3–3.5 days | **Detailed below** |
-| **3c** | Free generative assets: beauty pass now; SFX, music, voice, dubbing, lip-sync gated by the listening test | beauty pass 1–1.5 days; the rest 5–8 once models clear | **Detailed below** (generative items as gated outlines) |
-| 4 | Later: beat-synced montage, publishing, Resolve, Epidemic | 5 days or more | To write before building |
+| **2** | Growth: Clip Factory, asset search index, UI phases 3–4, free-model listening test (+ two small additions from the harness comparison) | about 8–10.5 days as planned; 7–9.5 without the additions | **Built** (`476fcbf`); real-project checks wait on owner input |
+| **3a** | Client-facing: story check-in, per-client style memory, word-level text edits | about 4.5–5.5 days | **Built** (`818497e`, client-link and brand-default additions `f50fa59`) |
+| **3b** | Proving quality: brief rubric, pairwise judge, revision evals, verdict-checked replies, gold-pair tooling | about 3–3.5 days | **Built** (`9e9bb3d`) |
+| **3c** | Free generative assets: beauty pass now; SFX, music, voice, dubbing, lip-sync gated by the listening test | beauty pass 1–1.5 days; the rest 5–8 once models clear | **Beauty pass built** (`9e9bb3d`, switch `f50fa59`); voice cleared (Chatterbox, Hindi/English); **dub spike built** (`4dba0ee`); SFX/music/cloning/lip-sync still gated |
+| **4** | Trust and reach: cost guard, honest verdict, review links outside the Mac, performance loop, publishing | about 8–11 days, after a platform research spike | **Planned** ("Group 4" at the end of this file) |
 
-Done so far: the licence gate (asset-library phase A) and all of Group 1.
+Done so far: the licence gate (asset-library phase A) and Groups 1–3, apart from the owner-gated items. All of it is on `engine/licence-gate`, pushed to GitHub, not merged.
 
 ---
 
@@ -26,7 +26,7 @@ Done so far: the licence gate (asset-library phase A) and all of Group 1.
 
 ### Status (2026-11-20): all eight items built and tested
 
-The work is on branch `engine/licence-gate`, committed per item, not pushed.
+The work is on branch `engine/licence-gate`, committed per item and pushed to GitHub (not merged).
 
 **Still open, and needing the owner:**
 - **G1.4 listening check.** The 33 tracks were re-measured with Beat This!; BPM now matches the publisher's listed tempo far more often. Nobody has listened to a drop landing after a hook yet.
@@ -1153,3 +1153,115 @@ Set-up lives outside the repo, in `~/.cache/reel/generators/<model>/` (`gen.py` 
 - pairwise picks (3b.2);
 - model downloads and listening (3c.2–3c.5);
 - speaker consent for voice cloning (3c.4).
+
+---
+
+## Group 4: trust and reach (plan, 2026-11-20)
+
+### The binding constraint first
+
+The harness comparison's verdict still holds: **our lead is in the machinery, not in the evidence.** On disk today:
+- zero owner labels (`qa/owner_label.json`);
+- 6 English gold pairs, no Hindi pair;
+- 0 pairwise picks.
+
+With 6 pairs, `improve`'s permutation test can't tell a real gain from noise, and the Hindi check never runs. **No Group 4 feature fixes this; only owner time does.** So anything whose value has to be proven by evals is gated on that data (listed under "Gated" below). The owner's 1–2 hours of labels and gold pairs are worth more to quality than any item here.
+
+### Where the remaining gaps are
+
+The harness comparison's ranked list (§3) is mostly built: story check-in, client style memory, Clip Factory, word-level edits; and from §4, the pacing gates, pairwise judge, rubric and revision evals. What's left:
+
+| Gap (§3 rank) | Why it matters | State |
+|---|---|---|
+| Review links outside this Mac (#1, score 20) | The client is on a phone; today notes travel by WhatsApp screenshot | Owner decision (E3) |
+| Cost shown before a run, with a cap (#6) + quote → approve for paid calls (§4 idea 11) | Paid generative providers are next; nothing stops a runaway bill | Not built |
+| An honest verdict: what was *not* checked (§4 idea 6) | Timeline-Bench: 93% of agent runs claimed success, including 95% of failures | Partly ("not measured" fails some gates) |
+| Learning from post performance (#9) | **Nobody has this.** Instagram's API exposes per-reel retention data | Not built; needs an account connection |
+| Publish and schedule (#10), trial reels for a real-audience A/B (#12) | Table stakes at OpusClip, Submagic, Vizard | Not built; same connection |
+
+### Plan, in order
+
+#### 4.0 Platform research spike (half a day; no code)
+
+Don't put build days on platform assumptions. Check against Meta's and Google's current developer docs, and record the answers here:
+- **Instagram (Graph API, Instagram Login):**
+  - Can our app read insights and publish for **clients'** professional accounts without App Review / Advanced Access, or only for accounts with a role on the app (testers)?
+  - Which per-reel metrics come back (plays, reach, average watch time, `reels_skip_rate`)?
+  - Is trial-reel publishing (`trial_params`) open to this kind of app?
+  - Token lifetimes and refresh.
+- **YouTube Data API:** do uploads from an unaudited project stay private until Google's compliance audit? What are the quota costs of an upload and an analytics read?
+- **Outcome:** a go/no-go and a size for 4.4–4.6. If client accounts need App Review, the order below changes: tester roles first (each client added by hand), App Review only when there are enough clients to justify it.
+
+#### 4.1 Cost guard (about 1 day, no owner input) — build first
+
+- **Before a run:** New edit shows an estimate for this edit (Claude passes from `costs.per_reel_estimate`'s history, plus any paid generator), and the month so far against a cap set in Settings.
+- **Cap:** past the monthly cap, a new run asks for an explicit "spend anyway" (never a silent stop mid-edit; an edit in progress always finishes).
+- **Quote → approve for paid calls** (any generator with `paid: true`): one approval bound to the call's input hash, and a content-keyed ledger (`~/.config/reel/paid_ledger.jsonl`), so an identical request is never bought twice. This must exist before any paid provider ships.
+- **Tests:** the estimate from fixtures; the cap prompt; a repeated paid request served from the ledger; an approval for one hash refused for another.
+
+#### 4.2 "What was not checked" in the verdict (about half a day)
+
+- Every verdict lists the gates that **could not measure** (no face found, OCR failed, no reference) as Hold-worthy, never as a pass, and a fixed list of things gates **never** check ("music taste", "joke timing", "whether the story is interesting").
+- The Studio summary and the revise reply are built only from the QA results (already true since 3b: `with_measured_verdict`); this adds the "not checked" block to both.
+
+#### 4.3 Review links outside this Mac (E3; about 1.5–2 days after the owner chooses)
+
+A tunnel to port 8765 would expose the whole Studio API behind one token. Two safer options:
+- **(a) A client-only listener:** a second server on its own port that serves **only** `/r/*` (page, watermarked media, the three form posts), with the owner's tunnel (Cloudflare Tunnel or Tailscale Funnel) pointed at that port alone. Free, but the Mac must be on when the client looks.
+- **(b) Static upload:** on "Share", the small watermarked copies and a self-contained page go to object storage (e.g. Cloudflare R2) behind signed, expiring URLs; the client's answers come back through a tiny form endpoint. Works with the Mac off, but costs a little, puts client footage on a third-party host, and needs a small serverless function for the answers.
+- **Either way:**
+  - **Frame-accurate comments:** tap the video to pin a note at a frame. This extends the existing "Add time" button.
+  - **Rate limits:** the per-link answer cap stays.
+  - **A kill switch:** "Stop sharing" in Settings.
+- **Recommendation:** (a). It keeps footage on the Mac, and the engine side is small.
+
+#### 4.4 Performance loop: read-only insights (about 3 days; after 4.0)
+
+- **Connect:** the owner connects a client's Instagram professional account (and optionally YouTube) once; tokens live in the macOS Keychain, never in a project.
+- **Match:** a delivered reel (3a.2's `delivered_at`) is matched to its post (by caption text and time, confirmed by the owner once).
+- **Read:** daily for the first 7 days, then weekly: plays, reach, average watch time, skip rate.
+- **Use it, honestly labelled as correlation, not proof:**
+  - a per-client report (which hooks, lengths and paces held viewers);
+  - the client style card gains "what worked";
+  - the Editor's pack gets the client's best-retaining reels as references.
+- **Never:** automatic changes to the engine from a handful of posts.
+
+#### 4.5 Publish and schedule (about 2–3 days; after 4.4's connection)
+
+- "Post" or "Schedule" from Deliver: the package's reel, cover and copy pack (caption, hashtags, first comment) go out through the official Instagram and YouTube APIs.
+- **The owner presses the button; never automatic.** A failed post says why and keeps the package ready to post by hand.
+
+#### 4.6 Trial reels (about 1 day; after 4.5, if 4.0 says the API allows it)
+
+The hook A/B (G1.6) shown to a real audience. Both versions are posted as Instagram trial reels to non-followers. 4.4 reads both, and the owner sees which held viewers longer. It's a small sample, so it's shown as a hint, never as a verdict.
+
+### Gated or later
+
+| Item | Waiting on |
+|---|---|
+| Story-order sampling (2–3 candidate orders, the pairwise judge picks; §4 idea 10) | Evals that can show a gain: the gold data above |
+| Generated SFX / music / cloned voice / lip-sync (3c.2–3c.5) | Listening tests and consent (owner) |
+| Beat-grid montage mode (gap plan #12) | A client asking for product montages |
+| Epidemic Sound Partner API | A subscription decision (its free tier can't publish) |
+| Eye-contact correction | Licence research first: no commercial-safe model is known yet |
+| "Resolve" | No written plan existed. Defined here as: check that the existing FCPXML/OTIO package imports cleanly into DaVinci Resolve. A half-day check, whenever the owner uses Resolve |
+
+### Loose ends carried over
+
+- Dubs: on-screen titles aren't translated (3c.4a).
+- Eye brightening from eye landmarks (3c.1).
+- Owner tasks:
+  - the voice-cloning test;
+  - the Stable Audio sign-ups;
+  - the G1.4 music-drop listen;
+  - the Clip Factory real-recording check.
+- The ACE-Step Mac-size check (30 min).
+
+### Owner decisions for Group 4
+
+1. **Build 4.1 (cost guard) first?** It needs nothing from you.
+2. **A monthly AI spend cap:** what amount?
+3. **E3:** option (a), a client-only listener plus your own tunnel; option (b), static upload to a host; or not yet.
+4. **Instagram and YouTube:** do you want the performance loop and publishing at all? If so, you create the Meta and Google developer apps yourself. Each client also connects their own account and agrees in writing.
+
+**Group 4 total:** about 8–11 days, plus the half-day spike. That's 4.1–4.3 in about 3–3.5 days, and 4.4–4.6 in about 6–7 days once the spike says go.
