@@ -1192,6 +1192,29 @@ Don't put build days on platform assumptions. Check against Meta's and Google's 
 - **YouTube Data API:** do uploads from an unaudited project stay private until Google's compliance audit? What are the quota costs of an upload and an analytics read?
 - **Outcome:** a go/no-go and a size for 4.4–4.6. If client accounts need App Review, the order below changes: tester roles first (each client added by hand), App Review only when there are enough clients to justify it.
 
+**Spike results (read 2026-11-21 from the vendors' own docs; quotes are theirs)**
+
+| Question | Answer | Source |
+|---|---|---|
+| Clients' Instagram accounts without App Review? | **Only accounts the owner "own[s] or manage[s]", added to the app in the App Dashboard (Standard Access).** "Advanced Access is the access level required if your app serves Instagram professional accounts that you don't own or manage"; "Your app must complete Meta App Review to be granted Advanced Access." | developers.facebook.com/docs/instagram-platform/overview; …/instagram-api-with-instagram-login/business-login |
+| Account types | Professional accounts only ("a business or creator"); Instagram Login works without a linked Facebook Page. Never personal accounts | …/instagram-platform/overview; …/insights |
+| Per-reel metrics | `views`, `reach`, `ig_reels_avg_watch_time`, `ig_reels_video_view_total_time`, **`reels_skip_rate`** ("viewers skipped during the first 3 seconds"; estimated, in development), `likes`, `comments`, `saved`, `shares`, `total_interactions`. Permission: `instagram_business_manage_insights` | …/reference/instagram-media/insights; …/insights |
+| Publishing reels | `media_type=REELS`; permission `instagram_business_content_publish`. **"The media must be hosted on a publicly accessible server at the time of the attempt"**: a file on this Mac can't be posted directly | …/content-publishing |
+| Trial reels | Exist: "reels that are only shared to non-followers", via `trial_params` with `graduation_strategy` `MANUAL` or `SS_PERFORMANCE` | …/content-publishing |
+| Posting limits | "100 API-published posts within a 24-hour moving period" (the carousel section says 50; the docs don't reconcile them) | …/content-publishing |
+| Tokens | Long-lived token "valid for 60 days", refreshable once at least 24 hours old; expires if not refreshed in 60 days | …/business-login |
+| Redirect URI | Must match exactly; **HTTPS or localhost: not stated (unverified)**, examples use HTTPS | …/business-login |
+| YouTube uploads from an unaudited project | **"Videos uploaded from unverified API projects are not restricted to private viewing mode."** (Some uploads may still default to private by the creator's account settings.) This contradicts the older rule we expected | developers.google.com/youtube/v3/docs/videos/insert |
+| YouTube quota | "100 `videos.insert` calls" a day by default; an upload costs 1 unit in its own bucket; reads usually 1 unit of 10,000/day | developers.google.com/youtube/v3/getting-started |
+
+**Go / no-go:**
+- **4.4 insights: go**, under Standard Access. The owner creates one Meta app and adds each client's professional account to it ("accounts you manage"). App Review only if the client list outgrows that. The connector is the owner's to switch on; the hand-entry path below works without it.
+- **4.5 publishing:**
+  - **Instagram needs a public URL for the video**, so it depends on E3: a temporary public URL for the one file, through the client-only listener plus a tunnel, or a static host.
+  - **YouTube is direct upload**, and it isn't forced private.
+  - Both need the owner's developer apps.
+- **4.6 trial reels: the API exists.** It comes after 4.5.
+
 #### 4.1 Cost guard (about 1 day, no owner input) — build first
 
 - **Before a run:** New edit shows an estimate for this edit (Claude passes from `costs.per_reel_estimate`'s history, plus any paid generator), and the month so far against a cap set in Settings.
