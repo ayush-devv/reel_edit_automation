@@ -1,7 +1,7 @@
 import type { ProjectSummary } from "../api/types";
 
 /** The badge a project shows (design system "Status badge"). */
-export type Badge = "hold" | "failed" | "sendable" | "editing" | "queued" | "delivered" | "draft";
+export type Badge = "hold" | "failed" | "sendable" | "editing" | "queued" | "delivered" | "draft" | "source";
 
 export function badgeOf(p: Pick<ProjectSummary, "status" | "delivered_at">): Badge {
   // Same rule as the API's attention order: delivered counts once the edit is finished.
@@ -19,7 +19,7 @@ export function badgeOf(p: Pick<ProjectSummary, "status" | "delivered_at">): Bad
 }
 
 // FR-1: "needs me first" — Hold, Failed, Sendable not yet delivered, Editing, (Queued, Draft), Delivered.
-const RANK: Record<Badge, number> = { hold: 0, failed: 1, sendable: 2, editing: 3, queued: 4, draft: 5, delivered: 6 };
+const RANK: Record<Badge, number> = { hold: 0, source: 1, failed: 1, sendable: 2, editing: 3, queued: 4, draft: 5, delivered: 6 };
 
 export function attentionRank(p: Pick<ProjectSummary, "status" | "delivered_at">): number {
   return RANK[badgeOf(p)];
@@ -35,6 +35,7 @@ export const STAGE_LABEL: Record<string, string> = {
   mezzanine: "Mezzanine",
   perception: "Perception",
   tables: "Tables",
+  mine: "Find reels",
   stock: "Stock b-roll",
   broll: "B-roll",
   reference: "Reference",
@@ -55,6 +56,7 @@ export const STAGE_PLAIN: Record<string, string> = {
   mezzanine: "Mezzanine: converting footage to a steady edit-friendly format",
   perception: "Perception: transcribing speech and finding faces, shots and beats",
   tables: "Tables: building the word and shot tables the Editor reads",
+  mine: "Find reels: the Clip Miner is reading the whole recording for standalone moments",
   stock: "Stock b-roll: finding cutaways for this talk on Pexels",
   broll: "B-roll: matching your b-roll clips to what is said",
   reference: "Reference: studying the reference reel the client likes",

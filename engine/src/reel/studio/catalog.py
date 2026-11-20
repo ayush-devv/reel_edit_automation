@@ -156,7 +156,29 @@ def lab(settings) -> dict:
             for i, r in enumerate(_jsonl(settings.scoreboard)) if isinstance(r.get("mean_primary"), (int, float))]
     return {"gold": gold, "gold_pairs": [{k: p[k] for k in ("id", "split", "language", "source")} for p in pairs],
             "release_locked": locked, "lock_reason": reason or None, "calibration": calibration(settings),
-            "improve_history": [_improve_row(e) for e in _jsonl(settings.improve_log)], "runs": runs}
+            "improve_history": [_improve_row(e) for e in _jsonl(settings.improve_log)], "runs": runs, "bakeoff": bakeoff()}
+
+
+def bakeoff_paths() -> tuple[Path, Path]:
+    from reel import config
+
+    return config.REPO_ROOT / "samples" / "hinglish", config.REPO_ROOT / "analysis" / "bakeoff"
+
+
+def bakeoff() -> dict:
+    """C5: the latest speech-to-text bake-off result and which engine each language uses today."""
+    from reel import config
+
+    samples, out = bakeoff_paths()
+    runs = sorted(out.glob("*/results.json")) if out.is_dir() else []
+    latest = None
+    if runs:
+        try:
+            latest = {"at": runs[-1].parent.name, "summary": json.loads(runs[-1].read_text()).get("summary")}
+        except (OSError, ValueError):
+            latest = None
+    n = sum(1 for d in samples.iterdir() if d.is_dir()) if samples.is_dir() else 0
+    return {"engines_now": dict(config.ASR_ENGINES), "samples": n, "latest": latest}
 
 
 IMPROVE_OUTCOME = {"accepted": "accepted", "rejected": "rejected", "invalid proposal": "invalid", "dry-run": "dry_run"}
@@ -190,13 +212,14 @@ def calibration(settings) -> dict | None:
     if not rep.get("labels") and not auto.get("gates"):
         return None
     gates: dict[str, dict] = {}
+    modes = config.gate_modes()
     for name, d in (auto.get("gates") or {}).items():
         fa, good = d.get("false_alarms"), d.get("known_good") or 0
-        gates[name] = {"name": name, "mode": d.get("mode_now") or config.QA_GATES.get(name, "warn"),
+        gates[name] = {"name": name, "mode": modes.get(name, d.get("mode_now") or "warn"),
                        "false_alarm_rate": round(fa / good, 3) if fa is not None and good else None,
                        "catch_rate": d.get("catch_rate"), "promote_to_block": bool(d.get("promote_to_block"))}
     for name, d in (rep.get("gates_failing_on_sendable") or {}).items():  # the owner's labels win over the automatic estimate
-        gates.setdefault(name, {"name": name, "mode": config.QA_GATES.get(name, "warn"), "catch_rate": None, "promote_to_block": False})
+        gates.setdefault(name, {"name": name, "mode": modes.get(name, "warn"), "catch_rate": None, "promote_to_block": False})
         gates[name]["false_alarm_rate"] = d.get("fp_rate")
     reviewer = rep.get("reviewer") or {}
     return {"agreement": reviewer.get("accuracy"), "n_labels": rep.get("labels", 0), "trusted": bool(reviewer.get("trust_ready")),

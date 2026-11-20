@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useApi } from "../api/context";
+import { useStatusNotifications } from "../hooks/notify";
 import { useStatus } from "../hooks/status";
 import { useQuery } from "../hooks/useQuery";
 import { STAGE_LABEL } from "../lib/status";
@@ -190,6 +191,7 @@ function TokenMissing() {
 
 export function Shell({ children }: { children?: ReactNode }) {
   const { engine } = useStatus();
+  useStatusNotifications();
   const loc = useLocation();
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => {

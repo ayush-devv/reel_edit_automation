@@ -49,6 +49,7 @@ def run_gates(ws: Workspace, tl: Timeline, story: StoryPlan, brief: brief_mod.Br
     fin = FinishPlan.model_validate_json(fin_file.read_text()) if fin_file.exists() else None
     results = [*qa.frame_and_loudness(tl, final), qa.proof_words(proof, confirmed_words(ws)), qa.brief_compliance(tl, kept_text, brief),
                qa.numbers_match(fin, story, project.word_table(ws)),
+               qa.broll_repeat(fin, project.indexes(ws).broll),
                qa.dead_air(tl), qa.reading_speed(tl), qa.face_cut(tl, faces), *qa.caption_pixels(tl, base, ov, faces, safe, flashes),
                *qa.frozen_and_black(tl, final, dips)]
     return qa.apply_modes(results)
@@ -60,8 +61,45 @@ def cut_checks(ws: Workspace, tl: Timeline) -> tuple[list[qa.GateResult], list[s
     return qa.apply_modes(gates), report["review_strips"]
 
 
+def pace_numbers(ws: Workspace, tl: Timeline, options: dict) -> dict:
+    """Pace of our render and of the reference reel, measured the same way (qa.measure_pace), plus the exact
+    timeline counts. A measurement that fails is recorded as such: it never passes silently."""
+    out: dict = {"timeline": qa.timeline_changes(tl), "speech_share": qa.speech_share(tl)}
+    try:
+        out["ours"] = qa.measure_pace(ws.path("render", "final.mp4"))
+        ref = options.get("reference")
+        out["reference"] = qa.measure_pace(Path(ref)) if ref and Path(ref).exists() else None
+    except Exception as exc:  # noqa: BLE001 — scenedetect missing or an unreadable file: report, don't crash QA
+        out["error"] = f"{type(exc).__name__}: {exc}"
+    return out
+
+
+def pace_results(pace: dict) -> list[qa.GateResult]:
+    if "ours" not in pace:
+        why = f"not measured ({pace.get('error', 'unknown error')})"
+        return qa.apply_modes([qa.GateResult("pace", False, detail=why), qa.GateResult("static_stretch", False, detail=why)])
+    return qa.apply_modes(qa.pace_gates(pace["ours"], pace.get("reference")))
+
+
+def pace_lines(pace: dict | None, gates: list[qa.GateResult]) -> list[str]:
+    if not pace:
+        return []
+    lines = ["", "## Pace (measured on the final render; judge pacing, story and shot choice, not only defects)", ""]
+    ours, ref, t = pace.get("ours"), pace.get("reference"), pace["timeline"]
+    if ours:
+        lines.append(f"- Scene cuts: {ours['cuts_per_min']} per minute; longest stretch with no cut {ours['longest_static_s']} s"
+                     + (f" (reference reel: {ref['cuts_per_min']} per minute, longest {ref['longest_static_s']} s)" if ref else ""))
+    lines.append(f"- Timeline picture changes: {t['cuts']} cuts, {t['punch_ins']} punch-in changes, {t['pip_changes']} picture-in-picture "
+                 f"in/outs = {t['changes_per_min']} per minute; longest unchanged {t['longest_unchanged_s']} s")
+    lufs = next((g.measured.get("lufs") for g in gates if g.gate == "loudness" and g.measured.get("lufs") is not None), None)
+    if lufs is not None:
+        lines.append(f"- Integrated loudness {lufs:.1f} LUFS")
+    lines.append(f"- Speech on screen {int(pace['speech_share'] * 100)} % of the reel; silent {100 - int(pace['speech_share'] * 100)} %")
+    return lines
+
+
 def review_input(ws: Workspace, tl: Timeline, story: StoryPlan, brief, gates: list[qa.GateResult], sheet_paths: list[Path],
-                 cut_strips: list[str] | None = None) -> str:
+                 cut_strips: list[str] | None = None, pace: dict | None = None) -> str:
     fps = tb.parse_rate(tl.fps)
     hook = next((h for h in story.hook_options if h.id == story.hook), None)
     lines = ["# Review input", "", "## Brief", "", json.dumps(brief.model_dump(exclude_none=True), ensure_ascii=False, indent=1) if brief else "No brief.", "",
@@ -75,6 +113,7 @@ def review_input(ws: Workspace, tl: Timeline, story: StoryPlan, brief, gates: li
         lines += [f"  - {qa.tc(p.start_f, fps)} " + " ".join(("*" + w.text + "*") if w.emph else w.text for w in p.words) for p in tl.captions.pages]
     lines += ["", f"## Look: {tl.grade.look} at {tl.grade.strength}", "", "## Automatic QA", "", "| gate | result | mode | detail |", "|---|---|---|---|"]
     lines += [f"| {g.gate} | {'pass' if g.ok else 'FAIL'} | {g.mode} | {g.detail} {(' at ' + ', '.join(g.at[:6])) if g.at else ''} |" for g in gates]
+    lines += pace_lines(pace, gates)
     lines += ["", "## Contact sheets of the final render (one frame per second, labelled with the timecode)", ""]
     lines += [f"- {p.relative_to(ws.root)}" for p in sheet_paths]
     if cut_strips:
@@ -134,6 +173,22 @@ def verdict_md(v: dict, gates: list[qa.GateResult], review: Review | None, proof
     return "\n".join(lines) + "\n"
 
 
+def recompute(ws: Workspace) -> dict | None:
+    """Re-decide the verdict from the stored gate results and review with today's gate modes: switching a gate between
+    warn and block (Quality lab, C3) needs no new measurement and no Reviewer call. None when QA never ran."""
+    gp, rp = ws.path("qa", "gates.json"), ws.path("qa", "review.json")
+    if not gp.exists():
+        return None
+    gates = qa.apply_modes([qa.GateResult(**g) for g in json.loads(gp.read_text())])
+    review = Review.model_validate_json(rp.read_text()) if rp.exists() else None
+    v = decide_verdict(gates, review)
+    proof_open = next((g.measured.get("open", []) for g in gates if g.gate == "proof_words"), [])
+    atomic_write_json(gp, [g.as_dict() for g in gates])
+    atomic_write_json(ws.path("qa", "verdict.json"), v | {"proof_open": proof_open})
+    atomic_write_bytes(ws.path("qa", "verdict.md"), verdict_md(v, gates, review, proof_open).encode())
+    return v
+
+
 def run(ws: Workspace, options: dict, caller=claude_call.call) -> dict:
     tl = Timeline.model_validate_json(ws.path("timeline", "timeline.json").read_text())
     story = project.load_json_model(StoryPlan, ws.path("plan", "story.json"))
@@ -141,8 +196,11 @@ def run(ws: Workspace, options: dict, caller=claude_call.call) -> dict:
     gates = run_gates(ws, tl, story, brief)
     cut_gates, strips = cut_checks(ws, tl)
     gates += cut_gates
+    pace = pace_numbers(ws, tl, options)
+    gates += pace_results(pace)
+    atomic_write_json(ws.path("qa", "pace.json"), pace)
     sheet_paths = final_sheets(ws, tl)
-    atomic_write_bytes(ws.path("qa", "review_input.md"), review_input(ws, tl, story, brief, gates, sheet_paths, strips).encode())
+    atomic_write_bytes(ws.path("qa", "review_input.md"), review_input(ws, tl, story, brief, gates, sheet_paths, strips, pace).encode())
     review = None
     if not options.get("skip_review"):
         d = decide.decide(caller, ws, label="review", prompt=REVIEW_PROMPT, model=Review, persona=REVIEWER_PERSONA,

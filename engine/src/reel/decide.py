@@ -54,14 +54,27 @@ class Inputs:
     brand: brief_mod.Brand | None
     vad: dict[str, list[list[int]]] | None = None
     scenes: dict[str, list[int]] | None = None
+    window: list[tuple[str, int, int]] | None = None  # Clip Factory reel: the part of the recording it may use
 
     @property
     def source_s(self) -> float:
+        if self.window is not None:  # a reel from a long recording: its own part, not the whole hour
+            from reel.clipfactory import window_seconds
+
+            return window_seconds(self.words, self.window)
         return sum(c.duration_us for c in self.clips.values()) / 1e6
+
+    def window_words(self) -> list:
+        if self.window is None:
+            return self.words.words
+        return [w for w in self.words.words if any(w.clip == c and lo <= w.i <= hi for c, lo, hi in self.window)]
+
+    def story_issues(self, plan: StoryPlan) -> list[Issue]:
+        return validate_story(plan, self.words, set(self.clips), self.kids, window=self.window)
 
 
 def load_inputs(ws: Workspace, brief_path: str | None = None, brand_path: str | None = None) -> Inputs:
-    from reel import licences
+    from reel import clipfactory, licences
 
     brief = brief_mod.load_brief(brief_path)
     idx = project.indexes(ws)
@@ -70,7 +83,7 @@ def load_inputs(ws: Workspace, brief_path: str | None = None, brand_path: str | 
     return Inputs(ws=ws, words=project.word_table(ws), clips=project.clip_infos(ws), fps=project.project_fps(ws),
                   idx=idx, kids=knowledge.node_ids(), edges=project.edges(ws),
                   brief=brief, brand=brief_mod.load_brand(brand_path),
-                  vad=project.vad_speech(ws), scenes=project.scene_cuts(ws))
+                  vad=project.vad_speech(ws), scenes=project.scene_cuts(ws), window=clipfactory.load_window(ws))
 
 
 def _allowed(idx, items: dict[str, dict]) -> dict[str, dict]:
@@ -190,7 +203,7 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
     from reel import lottie as lottie_mod
 
     summary = inp.ws.path("tables", "summary.md")
-    talk = (summary.read_text() if summary.exists() else "") + " " + " ".join(w.text for w in inp.words.words)
+    talk = (summary.read_text() if summary.exists() else "") + " " + " ".join(w.text for w in inp.window_words())
     lottie = lottie_mod.menu(_allowed(inp.idx, inp.idx.lottie), talk)  # our pack + the icons that match this talk
     if not lottie:
         lines += ["Empty — no lottie graphics.", ""]
@@ -198,14 +211,30 @@ def finish_pack(inp: Inputs, story: StoryPlan) -> str:
         lines.append(f"- `{lid}` {a.get('name', '')} — {a.get('description', '')} ({a.get('duration_ms', 0) / 1000:.1f} s, {a.get('aspect', '?')}; "
                      f"tags: {', '.join(a.get('tags', [])[:6])}; {a.get('source', '')})")
     lines.append("")
-    lines += ["## B-roll (cutaways over the voice; `full` replaces the picture, `pip` = picture-in-picture card)", ""]
+    lines += ["## B-roll (cutaways over the voice; `full` replaces the picture, `pip` = picture-in-picture card). "
+              "Ranked by how well each clip's description matches your kept lines; “suits” names the lines it fits best.", ""]
     broll = _allowed(inp.idx, inp.idx.broll)
     if not broll:
         lines += ["Empty — use none.", ""]
-    for bid, b in broll.items():
-        lines.append(f"- `{bid}` {b.get('duration_ms', 0) / 1000:.1f} s · {b.get('shot', '?')}, {b.get('motion', '?')}, {b.get('mood', '')} — "
-                     f"{b.get('description', b.get('name', ''))} ({b.get('source', 'library')})")
+    from reel import asset_search
+    from reel.clipfactory import batch_broll
+
+    by = inp.words.by_index()
+    kept = [(it.id, " ".join(by[i].text for i in range(it.word_start, it.word_end + 1) if i in by)) for it in story.items]
+    for r in asset_search.rank_broll(broll, kept, batch_used=batch_broll(inp.ws)):
+        b = broll[r["id"]]
+        notes = ([f"suits {', '.join(r['for'])}"] if r["for"] else []) + ([f"near-duplicate of `{r['same_as']}`: use one, not both"] if r["same_as"] else []) \
+            + (["already used in a sibling reel from this recording"] if r["batch_used"] else [])
+        lines.append(f"- `{r['id']}` {b.get('duration_ms', 0) / 1000:.1f} s · {b.get('shot', '?')}, {b.get('motion', '?')}, {b.get('mood', '')} — "
+                     f"{b.get('description', b.get('name', ''))} ({b.get('source', 'library')})" + (f" — {'; '.join(notes)}" if notes else ""))
     lines.append("")
+    from reel.clipfactory import batch_style
+
+    style = batch_style(inp.ws)
+    if style and not (inp.brand and inp.brand.caption_family and inp.brand.look):
+        lines += ["# This reel is one of a set from the same recording", "",
+                  f"Its sibling `{style['from']}` uses caption family `{style['caption_family']}` and look `{style['look']}`. Keep both so the set "
+                  "looks like one series, unless this footage really differs (then say why in your plan's reasons).", ""]
     ref = inp.ws.path("context", "reference_style.md")
     if ref.exists():
         lines += [ref.read_text(), ""]
@@ -287,7 +316,7 @@ REVISION_PROMPT = ("The owner asked for a revision:\n\n\"{request}\"\n\nCurrent 
 
 
 def _check_story(inp: Inputs):
-    return lambda plan: validate_story(plan, inp.words, set(inp.clips), inp.kids)
+    return inp.story_issues
 
 
 def _check_finish(inp: Inputs, story: StoryPlan):
@@ -342,7 +371,11 @@ def finish_pass(inp: Inputs, caller: Caller = claude_call.call) -> dict:
     story = project.load_json_model(StoryPlan, ws.path("plan", "story.json"))
     knowledge.write_library(ws)
     atomic_write_bytes(ws.path("context", "finish_context.md"), finish_pack(inp, story).encode())
-    d = decide(caller, ws, label="finish", prompt=FINISH_PROMPT, model=FinishPlan, persona=FINISH_PERSONA, effort=FINISH_EFFORT,
+    from reel import adjustments
+
+    # a re-run finish pass (after a story-line edit, a retry) keeps the owner's hand settings too, not only revisions
+    prompt = FINISH_PROMPT + adjustments.prompt_lines(adjustments.active(ws, None))
+    d = decide(caller, ws, label="finish", prompt=prompt, model=FinishPlan, persona=FINISH_PERSONA, effort=FINISH_EFFORT,
                check=_check_finish(inp, story))
     fin: FinishPlan = d.plan
     atomic_write_json(ws.path("plan", "finish.json"), fin.model_dump(mode="json"))
@@ -364,22 +397,27 @@ def _patched(story: StoryPlan, rev: Revision) -> tuple[StoryPlan, list[Issue]]:
 
 def revise(inp: Inputs, request: str, caller: Caller = claude_call.call) -> dict:
     """Chat revision on the finish session (it has seen the story, the read-back and the finish context)."""
+    from reel import adjustments
+
     ws = inp.ws
     session = _sessions(ws).get("finish")
     story = project.load_json_model(StoryPlan, ws.path("plan", "story.json"))
+    fin_file = ws.path("plan", "finish.json")
+    adjusted = adjustments.active(ws, project.load_json_model(FinishPlan, fin_file) if fin_file.exists() else None)
 
     def check(rev: Revision) -> list[Issue]:
         new_story, issues = _patched(story, rev)
         issues = [Issue(i.code, f"story_patch.{i.path}", i.message, i.fix, i.severity) for i in issues]
         if errors(issues):
             return issues
-        issues += [Issue(i.code, f"story_patch→{i.path}", i.message, i.fix, i.severity) for i in validate_story(new_story, inp.words, set(inp.clips), inp.kids)]
+        issues += [Issue(i.code, f"story_patch→{i.path}", i.message, i.fix, i.severity) for i in inp.story_issues(new_story)]
         if errors(issues):
             return issues
+        issues += adjustments.reverted(adjusted, rev.finish, request)  # warnings: the owner sees them, the Editor isn't forced
         return issues + [Issue(i.code, f"finish.{i.path}", i.message, i.fix, i.severity) for i in _check_finish(inp, new_story)(rev.finish)]
 
-    d = decide(caller, ws, label="revision", prompt=REVISION_PROMPT.format(request=request, readback=readback(inp, story)),
-               model=Revision, persona=FINISH_PERSONA, effort=FINISH_EFFORT, check=check, resume=session)
+    prompt = REVISION_PROMPT.format(request=request, readback=readback(inp, story)) + adjustments.prompt_lines(adjusted)
+    d = decide(caller, ws, label="revision", prompt=prompt, model=Revision, persona=FINISH_PERSONA, effort=FINISH_EFFORT, check=check, resume=session)
     rev: Revision = d.plan
     new_story, _ = _patched(story, rev)
     hist = ws.path("plan", "history")
@@ -393,4 +431,6 @@ def revise(inp: Inputs, request: str, caller: Caller = claude_call.call) -> dict
     atomic_write_bytes(ws.path("plan", "story_readback.txt"), readback(inp, new_story).encode())
     atomic_write_json(ws.path("plan", "finish.json"), rev.finish.model_dump(mode="json"))
     _save_session(ws, "finish", d.session_id)
-    return {"reply": rev.reply, "ops": len(rev.story_patch.ops), "calls": d.calls, "cost_usd": d.cost_usd}
+    kept_warnings = [w.message for w in d.warnings if w.code == "adjustment_reverted"]
+    return {"reply": rev.reply, "ops": len(rev.story_patch.ops), "calls": d.calls, "cost_usd": d.cost_usd,
+            **({"warnings": kept_warnings} if kept_warnings else {})}

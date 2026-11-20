@@ -30,7 +30,8 @@ from reel.workspace import Workspace, atomic_write_bytes, atomic_write_json
 
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".mkv", ".webm"}  # FR-2
 ADJUST_KINDS = ("caption_family", "caption_token", "look", "look_strength", "music_track", "music_gain_db", "sfx_off",
-                "punch_ins_off", "grain", "vignette", "max_pause_ms")
+                "punch_ins_off", "grain", "vignette", "max_pause_ms", "story_lines")
+STORY_KINDS = ("max_pause_ms", "story_lines")  # adjustments that change plan/story.json
 PROJECT_JOBS = ("run", "retry", "revise", "notes", "proof", "adjust", "restore", "deliver")
 GLOBAL_SLOTS = ("_lab", "_library")  # job slots that are not projects
 
@@ -92,6 +93,22 @@ class PreviewChoice(BaseModel):
 
 class TemplatesBody(BaseModel):
     templates: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+class VoteBody(BaseModel):
+    pair: str = Field(min_length=1, max_length=80)
+    choice: Literal["A", "B", "tie"]
+    usable_a: bool = False
+    usable_b: bool = False
+
+
+class GateModeBody(BaseModel):
+    mode: Literal["warn", "block"]
+
+
+class MakeClipsBody(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=20)
+    run: bool = True  # queue an edit of each new reel
 
 
 class LabelBody(BaseModel):
@@ -293,7 +310,11 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
                 "stock": str(form.get("stock") or "").strip().lower() in ("1", "true", "on"),
                 "preview_first": str(form.get("preview_first") or "").strip().lower() in ("1", "true", "on"),
                 "broll": broll_folder}
-        job = submit(pid, "run", cli(*_run_args(ws, opts)), ws=ws, est_gb=estimate_run_gb(footage or None), label="Edit")
+        if str(form.get("mode") or "").strip() == "long":  # Clip Factory (G2.2): analyse once, then a board of candidate reels
+            opts = {k: v for k, v in opts.items() if k != "preview_first"} | {"mine": True}
+            projects.update_studio_meta(ws, kind="source")
+        job = submit(pid, "run", cli(*_run_args(ws, opts)), ws=ws, est_gb=estimate_run_gb(footage or None),
+                     label="Find reels" if opts.get("mine") else "Edit")
         return {"id": pid, "job": job}
 
     @app.get("/api/projects/{pid}")
@@ -359,10 +380,10 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
     def retry(pid: str, body: RetryBody | None = None):
         ws = ws_of(pid)
         stage = body.stage if body else None
-        if stage and stage not in projects.STAGES:
+        if stage and stage not in (*projects.STAGES, "mine"):
             raise ApiError(400, f"unknown stage {stage!r}", projects.STAGES)
         opts = projects.read_json(ws / "run_options.json")
-        if not opts or not opts.get("input"):
+        if not opts or not (opts.get("input") or opts.get("parent")):
             raise ApiError(400, "this project has never been started (no run_options.json)")
         busy(pid, ws)
         footage = projects.studio_meta(ws).get("footage_s")
@@ -475,9 +496,19 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         busy(pid, ws)
         story, fin, note = _apply_adjust(ws, body.kind, body.value)
         baseline(ws)
-        if body.kind == "max_pause_ms":  # only then: a re-dumped story.json changes bytes, which the finish stage fingerprints
+        if body.kind in STORY_KINDS:  # only then: a re-dumped story.json changes bytes, which the finish stage fingerprints
             atomic_write_json(ws / "plan" / "story.json", story.model_dump(mode="json"))
+            if body.kind == "story_lines":  # the Reviewer reads the read-back: keep it in step with the new order
+                from reel import decide
+
+                try:
+                    atomic_write_bytes(ws / "plan" / "story_readback.txt", decide.readback(decide.load_inputs(Workspace(ws)), story).encode())
+                except Exception:  # noqa: BLE001 — a stale read-back must never fail the owner's edit
+                    import logging
+
+                    logging.getLogger(__name__).exception("story read-back not refreshed for %s", pid)
         atomic_write_json(ws / "plan" / "finish.json", fin.model_dump(mode="json"))
+        _log_adjustment(ws, body.kind, body.value)
         change = f"{body.kind.replace('_', ' ')} → {_show(body.value)}"
         job = submit(pid, "adjust", cli("rerun", "--project", ws, "--from", "compile"), ws=ws, est_gb=estimate_render_gb(reel_s(ws)),
                      label=f"Manual: {change}", after={"snapshot": "Manual", "reply": change})
@@ -540,6 +571,33 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
                         z.write(f, f"{pid}/{f.relative_to(pkg)}", compress_type=zipfile.ZIP_DEFLATED if packed else zipfile.ZIP_STORED)
         return FileResponse(tmp, media_type="application/zip", filename=f"{pid}-package.zip",
                             background=BackgroundTask(lambda: tmp.unlink(missing_ok=True)))
+
+    # -------------------------------------------------------------- Clip Factory (G2.2)
+
+    @app.get("/api/projects/{pid}/clips")
+    def clips_board(pid: str):
+        ws = ws_of(pid)
+        try:
+            return projects.clips_view(ws, s.projects_root, mgr.project_state)
+        except FileNotFoundError as exc:
+            raise ApiError(404, "no candidates yet: the recording is still being analysed, or this is not a long recording") from exc
+
+    @app.post("/api/projects/{pid}/clips/make")
+    def clips_make(pid: str, body: MakeClipsBody):
+        from reel import clipfactory
+
+        ws = ws_of(pid)
+        busy(pid, ws, toolchain=body.run)
+        try:
+            made = clipfactory.spawn(Workspace(ws), body.ids)
+        except ValueError as exc:
+            raise ApiError(400, str(exc)) from exc
+        jobs = []
+        for root in made:
+            if body.run and mgr.active(root.name) is None:
+                jobs.append(submit(root.name, "run", cli(*_run_args(root, projects.read_json(root / "run_options.json") or {})), ws=root,
+                                   est_gb=estimate_render_gb(None), label="Edit"))
+        return {"made": [p.name for p in made], "jobs": jobs}
 
     @app.post("/api/projects/{pid}/label", status_code=204)
     def label(pid: str, body: LabelBody):
@@ -612,9 +670,15 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
         return catalog.lab(s)
 
     @app.post("/api/lab/{action}")
-    def lab_action(action: Literal["eval", "calibrate", "improve"], body: LabBody | None = None):
+    def lab_action(action: Literal["eval", "calibrate", "improve", "bakeoff"], body: LabBody | None = None):
         body = body or LabBody()
         log = s.projects_root / ".studio_logs" / "lab.log"
+        if action == "bakeoff":  # C5: which speech-to-text engine transcribes the owner's Hinglish clips best (ADR-0007)
+            samples, out = catalog.bakeoff_paths()
+            if not samples.is_dir():
+                raise ApiError(400, f"no bake-off clips in {samples}", hint="Add <name>/clip.mp4 + transcript.txt for each Hinglish sample.")
+            return {"job": submit("_lab", "bakeoff", cli("bakeoff", "--samples", samples, "--out", out), est_gb=ESTIMATE_GB.get("bakeoff", 4.0),
+                                  log=log, label="Speech-to-text bake-off")}
         if action == "eval":
             holdout = body.release or body.set == "holdout"
             if holdout:
@@ -628,6 +692,77 @@ def create_app(settings: Settings | None = None, launcher=None) -> FastAPI:
                                   label="Calibrate")}
         args = ["improve", "--budget", body.budget, "--runs", body.runs, "--rounds", body.rounds] + (["--dry-run"] if body.dry_run else [])
         return {"job": submit("_lab", "improve", cli(*args), est_gb=ESTIMATE_GB["improve"], log=log, label=f"Improve (budget {body.budget})")}
+
+    @app.put("/api/lab/gates/{gate}")
+    def set_gate_mode(gate: str, body: GateModeBody):
+        """C3: switch a QA gate between warn and block. Block only when calibration cleared it (or the code already
+        blocks it); every project's verdict is re-decided from its stored gate results, with no Reviewer call."""
+        from reel import verdict as verdict_mod
+        from reel.licences import config_dir
+
+        if gate not in config.QA_GATES:
+            raise ApiError(404, f"no gate {gate!r}", sorted(config.QA_GATES))
+        cal = {g["name"]: g for g in ((catalog.calibration(s) or {}).get("gates") or [])}
+        if body.mode == "block" and config.QA_GATES[gate] != "block" and not (cal.get(gate) or {}).get("promote_to_block"):
+            raise ApiError(409, f"calibration hasn't cleared {gate} to block yet",
+                           hint="Run Calibrate in the Quality lab; a gate blocks only after it shows few false alarms on good reels.")
+        f = config_dir() / config.GATE_OVERRIDES_FILE
+        cur = config.gate_overrides()
+        if body.mode == config.QA_GATES[gate]:
+            cur.pop(gate, None)
+        else:
+            cur[gate] = body.mode
+        f.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(f, cur)
+        f.chmod(0o600)
+        n, skipped = 0, []
+        for ws in projects.list_dirs(s.projects_root):
+            if mgr.active(ws.name) is not None:
+                continue
+            try:  # one old or malformed project must not fail the switch for the rest
+                n += verdict_mod.recompute(Workspace(ws)) is not None
+            except Exception:  # noqa: BLE001
+                skipped.append(ws.name)
+        return {"gate": gate, "mode": body.mode, "recomputed": n, **({"skipped": skipped} if skipped else {})}
+
+    # -------------------------------------------------------------- listening test (G2.5)
+
+    @app.get("/api/listening/{kind}")
+    def listening(kind: Literal["sfx", "music", "voice"]):
+        from reel import listen
+
+        pairs = listen.blind(kind)
+        try:
+            summ = listen.summary(kind) if pairs else None
+        except (OSError, ValueError):
+            summ = None
+        return {"set": kind, "pairs": pairs, "summary": summ, "prompts": len(listen.PROMPTS[kind])}
+
+    @app.post("/api/listening/{kind}/prepare")
+    def listening_prepare(kind: Literal["sfx", "music", "voice"]):
+        log = s.projects_root / ".studio_logs" / "lab.log"
+        return {"job": submit("_lab", "listen", cli("listen", "prepare", "--set", kind), est_gb=ESTIMATE_GB.get("listen", 8.0), log=log,
+                              label=f"Listening test: render {kind}")}
+
+    @app.post("/api/listening/{kind}/vote", status_code=204)
+    def listening_vote(kind: Literal["sfx", "music", "voice"], body: VoteBody):
+        from reel import listen
+
+        try:
+            listen.vote(kind, body.pair, body.choice, body.usable_a, body.usable_b)
+        except (listen.ListenError, FileNotFoundError) as exc:
+            raise ApiError(400, str(exc)) from exc
+        return Response(status_code=204)
+
+    @app.get("/api/listening/{kind}/media/{path:path}")
+    def listening_media(kind: Literal["sfx", "music", "voice"], path: str):
+        from reel import listen
+
+        base = (listen.ROOT / kind).resolve()
+        f = (listen.ROOT / path).resolve()
+        if "\x00" in path or not f.is_relative_to(base) or not f.is_file() or f.suffix.lower() not in (".wav", ".mp3", ".ogg", ".flac", ".m4a", ".aiff"):
+            raise ApiError(404, "no such listening file")
+        return FileResponse(f)
 
     @app.get("/api/costs")
     def cost_summary(days: int = 30):
@@ -810,9 +945,26 @@ def _show(value) -> str:
     return str(value)
 
 
+def _log_adjustment(ws: Path, kind: str, value) -> None:
+    """Kept adjustments (G2.4): a later chat revision is told about them and warns if it undoes one."""
+    from reel import adjustments
+
+    adjustments.log(Workspace(ws), kind, value)
+
+
 def _run_args(ws: Path, opts: dict, force: str | None = None) -> list[str]:
     """`reel run` arguments that reproduce the stored options (run rewrites run_options.json from its argv)."""
+    if opts.get("parent"):  # a Clip Factory reel project: edit stages only, options kept in its run_options.json
+        args = ["run", "--project", str(ws)]
+        if opts.get("skip_review"):
+            args.append("--skip-review")
+        return args + (["--force", force] if force else [])
     args = ["run", opts["input"], "--project", str(ws)]
+    if opts.get("mine"):
+        args.append("--mine")
+        if opts.get("clip_target_s"):
+            lo, hi = opts["clip_target_s"]
+            args += ["--clip-length", f"{lo:g}-{hi:g}"]
     for key, flag in (("fps", "--fps"), ("encoder", "--encoder"), ("language", "--language"), ("brief", "--brief"), ("brand", "--brand"),
                       ("asr_repo", "--asr-repo"), ("broll", "--broll"), ("reference", "--reference")):
         if opts.get(key):
@@ -933,12 +1085,26 @@ def _apply_adjust(ws: Path, kind: str, value):
         if v != int(v):
             raise ApiError(400, "max_pause_ms takes whole milliseconds")
         story.max_pause_ms = int(v)
+    elif kind == "story_lines":  # C4: drop or reorder kept lines; attached finish elements of dropped lines go too
+        from reel import story_edit
+
+        if not (isinstance(value, list) and all(isinstance(v, str) for v in value)):
+            raise ApiError(400, "story_lines takes the kept line ids in their new order")
+        try:
+            story, fin, meta = story_edit.reorder(story, fin, value)
+        except story_edit.StoryEditError as exc:
+            raise ApiError(400, str(exc)) from exc
+        note = story_edit.summary(meta)
 
     words = project.word_table(w)
     manifest = projects.read_json(ws / "source" / "manifest.json", {}) or {}
-    issues = validate_story(story, words, {c["id"] for c in manifest.get("clips", [])}) if kind == "max_pause_ms" else []
+    from reel.clipfactory import load_window
+
+    issues = (validate_story(story, words, {c["id"] for c in manifest.get("clips", [])}, window=load_window(w))
+              if kind in STORY_KINDS else [])
     if not errors(issues):
         issues += validate_finish(fin, story, words, idx)
     if errors(issues):
-        raise ApiError(422, "the engine's validator refused this change", None, issues=[i.as_dict() for i in errors(issues)])
+        raise ApiError(422, "the engine's validator refused this change", None, issues=[i.as_dict() for i in errors(issues)],
+                       **({"hint": "This change needs the Editor: describe it in Revise instead."} if kind == "story_lines" else {}))
     return story, fin, note

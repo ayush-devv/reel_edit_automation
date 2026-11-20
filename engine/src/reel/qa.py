@@ -588,7 +588,93 @@ def frame_and_loudness(tl: Timeline, final: Path) -> list[GateResult]:
                        measured={"lufs": m["input_i"], "true_peak": m["input_tp"]})]
 
 
+def broll_repeat(fin, pool: dict[str, dict]) -> GateResult:
+    """The same cutaway twice in one reel, or two cutaways whose descriptions say nearly the same (G2.3)."""
+    from reel.asset_search import NEAR_DUPLICATE, near_duplicates
+
+    used = [b.asset for b in (fin.broll if fin else [])]
+    twice = sorted({a for a in used if used.count(a) > 1})
+    in_use = {a: pool[a] for a in set(used) if a in pool}
+    twins = [(a, b) for a, b, _c in near_duplicates(in_use, NEAR_DUPLICATE)]
+    problems = [f"{a} used {used.count(a)}×" for a in twice] + [f"{a} ≈ {b}" for a, b in twins]
+    return GateResult("broll_repeat", not problems, detail="; ".join(problems) or f"{len(set(used))} distinct cutaway(s)", fixable=True,
+                      fix_hint="Swap the repeat for a different clip that suits the line, or drop it.", measured={"twice": twice, "twins": twins})
+
+
+# ------------------------------------------------------------------ pacing (G2.1)
+# One measuring method for our render and for any reel we compare it with: scene cuts on pixels, the function
+# reference.measure_style already uses. It misses punch-ins and same-framing jump cuts on both sides alike.
+# Pro finals measured this way on 2026-11-20 spread from 1.6 to 32 cuts/min (samples/gold), so there is no
+# useful fixed band: the gates judge pace only against the project's own reference reel.
+PACE_TOLERANCE = 0.35  # cuts/min may differ from the reference by ±35 %
+STATIC_RATIO_MAX = 1.5  # longest stretch without a cut may be at most 1.5× the reference's
+
+
+def pace_profile(cuts_s: list[float], dur_s: float) -> dict:
+    """Cuts/min and the longest stretch with no cut, from cut times in seconds."""
+    cuts = sorted(c for c in cuts_s if 0.0 < c < dur_s)
+    edges = [0.0, *cuts, dur_s]
+    longest = max((b - a for a, b in zip(edges, edges[1:])), default=dur_s)
+    return {"cuts": len(cuts), "duration_s": round(dur_s, 2), "cuts_per_min": round(len(cuts) / max(dur_s, 1e-6) * 60, 1),
+            "longest_static_s": round(longest, 2)}
+
+
+def measure_pace(video: Path) -> dict:
+    from reel.perception.visual import scene_cuts
+    from reel.probe import probe
+
+    return pace_profile([c / 1e6 for c in scene_cuts(video)], probe(video).duration_s)
+
+
+def timeline_changes(tl: Timeline) -> dict:
+    """Exact picture changes the compiled timeline makes (for the Reviewer; not a gate): cuts between video
+    clips, punch-in scale changes and picture-in-picture entries/exits."""
+    fps = tb.parse_rate(tl.fps)
+    cuts = sorted(v.at_f for v in tl.video if v.at_f > 0)
+    punches = sorted({v.at_f + k.f for v in tl.video for a, k in zip(v.scale, v.scale[1:]) if abs(k.v - a.v) > 1e-3})
+    pips = sorted({f for p in tl.pips for f in (p.start_f, p.end_f) if 0 < f < tl.duration_f})
+    changes = sorted(set(cuts) | set(punches) | set(pips))
+    dur_s = float(Fraction(tl.duration_f) / fps)
+    prof = pace_profile([float(Fraction(f) / fps) for f in changes], dur_s)
+    return {"cuts": len(cuts), "punch_ins": len(punches), "pip_changes": len(pips), "changes_per_min": prof["cuts_per_min"],
+            "longest_unchanged_s": prof["longest_static_s"]}
+
+
+def speech_share(tl: Timeline) -> float:
+    """Share of the output with a caption word on screen (the words that are spoken)."""
+    spans = sorted((w.start_f, w.end_f) for p in (tl.captions.pages if tl.captions else []) for w in p.words)
+    covered, end = 0, 0
+    for s, e in spans:
+        s = max(s, end)
+        if e > s:
+            covered += e - s
+            end = e
+    return round(covered / max(tl.duration_f, 1), 3)
+
+
+def pace_gates(ours: dict, ref: dict | None) -> list[GateResult]:
+    """`pace` and `static_stretch` against the reference reel; without one both pass and only report."""
+    if not ref or not ref.get("duration_s"):
+        note = "no reference reel: reported, not judged"
+        return [GateResult("pace", True, detail=f"{ours['cuts_per_min']} cuts/min ({note})", measured={"ours": ours}),
+                GateResult("static_stretch", True, detail=f"longest {ours['longest_static_s']} s without a cut ({note})", measured={"ours": ours})]
+    lo, hi = ref["cuts_per_min"] * (1 - PACE_TOLERANCE), ref["cuts_per_min"] * (1 + PACE_TOLERANCE)
+    pace_ok = lo <= ours["cuts_per_min"] <= hi
+    slower = ours["cuts_per_min"] < lo
+    ceiling = ref["longest_static_s"] * STATIC_RATIO_MAX
+    static_ok = ours["longest_static_s"] <= ceiling
+    m = {"ours": ours, "reference": ref}
+    return [GateResult("pace", pace_ok, detail=f"{ours['cuts_per_min']} cuts/min vs reference {ref['cuts_per_min']} (allowed {lo:.1f}–{hi:.1f})",
+                       fixable=True, measured=m,
+                       fix_hint=("Cut faster: tighten pauses, add punch-ins or b-roll on long lines." if slower
+                                 else "Let lines breathe: fewer punch-ins and cutaways.")),
+            GateResult("static_stretch", static_ok, detail=f"longest {ours['longest_static_s']} s without a cut (reference {ref['longest_static_s']} s, "
+                       f"ceiling {ceiling:.1f} s)", fixable=True, measured=m,
+                       fix_hint="Break the longest unchanged stretch with a punch-in, b-roll or a cut.")]
+
+
 def apply_modes(results: list[GateResult]) -> list[GateResult]:
+    modes = config.gate_modes()  # code defaults + the owner's Quality-lab switches
     for r in results:
-        r.mode = config.QA_GATES.get(r.gate, r.mode)
+        r.mode = modes.get(r.gate, r.mode)
     return results

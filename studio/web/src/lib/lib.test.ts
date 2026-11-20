@@ -5,6 +5,8 @@ import { EMPTY_FORM, formErrors, toBrief } from "./brief";
 import { parseNotes } from "./notes";
 import { screenFiles } from "./pendingFiles";
 import { badgeOf, sortByAttention } from "./status";
+import { beatLabel } from "./format";
+import { changes } from "../hooks/notify";
 
 const P = (id: string, status: ProjectSummary["status"], extra: Partial<ProjectSummary> = {}): ProjectSummary => ({
   id,
@@ -96,6 +98,27 @@ describe("brief form → engine Brief", () => {
     expect(Object.keys(b)).not.toContain("genre");
     expect(formErrors({ ...EMPTY_FORM })).toHaveProperty("name");
     expect(formErrors({ ...EMPTY_FORM, name: "x", minLen: "60", maxLen: "30" })).toHaveProperty("maxLen");
+  });
+});
+
+describe("beat names (A3) and notifications (E2)", () => {
+  it("shows the Editor's beat ids as words", () => {
+    expect(beatLabel("cta")).toBe("Call to action");
+    expect(beatLabel("beat.proof")).toBe("Proof");
+    expect(beatLabel("setup ")).toBe("Setup");
+    expect(beatLabel("set_up_the_problem")).toBe("Set up the problem");
+    expect(beatLabel(null)).toBe("Line");
+  });
+
+  it("notifies only on a change into a status that needs the owner", () => {
+    const prev = new Map<string, ProjectSummary["status"]>([["a", "running"], ["b", "running"], ["c", "hold"]]);
+    const now = [P("a", "sendable"), P("b", "running"), P("c", "hold"), P("d", "failed")];
+    expect(changes(prev, now).map((x) => [x.p.id, x.text])).toEqual([["a", "is Sendable"]]); // d is new: no history, no alert
+    expect(changes(new Map([["s", "running"]]), [P("s", "source")])[0].text).toMatch(/reels ready/);
+  });
+
+  it("a long recording waiting for picks needs the owner", () => {
+    expect(badgeOf(P("s", "source"))).toBe("source");
   });
 });
 

@@ -44,6 +44,11 @@ const TABS: { to: string; label: string; icon: IconName }[] = [
   { to: "adjust", label: "Adjust", icon: "sliders" },
   { to: "deliver", label: "Deliver", icon: "download" },
 ];
+/** A long recording (Clip Factory source) has no edit of its own: watch the analysis, then pick reels. */
+const SOURCE_TABS: typeof TABS = [
+  { to: "live", label: "Live", icon: "sparkle" },
+  { to: "clips", label: "Clips", icon: "film" },
+];
 
 /** FR-3: compact strip of every running edit; click to switch the view. */
 function RunningStrip({ current }: { current: string }) {
@@ -188,6 +193,14 @@ export default function ProjectLayout() {
                 Projects
               </Link>
               <Icon name="chevron" size={16} className="shrink-0 text-fg-muted" />
+              {p.parent && (
+                <>
+                  <Link to={`/p/${p.parent}/clips`} className="text-body text-fg-secondary hover:text-fg-primary">
+                    Long recording
+                  </Link>
+                  <Icon name="chevron" size={16} className="shrink-0 text-fg-muted" />
+                </>
+              )}
               {renaming ? (
                 <RenameForm
                   p={p}
@@ -215,7 +228,7 @@ export default function ProjectLayout() {
           </header>
           {p.status === "awaiting_choice" && p.preview && <HookChooser p={p} onPicked={live.reload} />}
           <nav aria-label="Project" className="flex h-11 shrink-0 gap-2 border-b border-line-subtle px-6">
-            {TABS.map((t) => (
+            {(p.kind === "source" ? SOURCE_TABS : TABS).map((t) => (
               <NavLink
                 key={t.to}
                 to={t.to}

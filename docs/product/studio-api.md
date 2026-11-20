@@ -123,6 +123,14 @@ type JobRef = { job: Job };   // what every POST that starts work returns; SSE `
 | PUT | /api/brands/{id} | the bare `Brand` | `{ id, brand }`; stored in `brands/<id>.json` |
 | GET | /api/lab | — | `Lab` (below, FR-11) |
 | POST | /api/lab/{action} | `eval` \| `calibrate` \| `improve`; optional body `{ set?: "tuning" \| "holdout", release?: boolean, budget?: int, runs?, rounds?, dry_run? }` | `JobRef`. The release check (`release: true` or `set: "holdout"`) is refused with **409** `{ error: <lock reason>, detail: {release_locked: true} }` while locked (ADR-0031: holdout < 6 reels or < 2 Hinglish). `budget` counts **reel runs** (edits of one gold reel), not dollars |
+| POST | /api/lab/bakeoff | — | `JobRef` (`reel bakeoff` on `samples/hinglish/`, C5); 400 when there are no sample clips. `Lab.bakeoff` = `{ engines_now, samples, latest: {at, summary} \| null }` |
+| PUT | /api/lab/gates/{gate} | `{ mode: "warn" \| "block" }` | `{ gate, mode, recomputed }` (C3). Block only when calibration's `promote_to_block` is true (or the code already blocks it), else **409**. Stored in `~/.config/reel/gates.json`; every idle project's verdict is re-decided from its stored `qa/gates.json` + `qa/review.json`, with **no Reviewer call** |
+| GET | /api/projects/{id}/clips | — | Clip Factory board (G2.2): `{ source_s, yield_cap, target_s, score_label: "Editor's estimate", score_rule, candidates: {id, rank, title, hook_text, family, scores, score, duration_s, status, why, reason, standalone_risks, warnings, excerpt, project: {id, status} \| null}[], estimate_per_reel: {low_usd, high_usd, from_edits} \| null }`. 404 before the source is mined |
+| POST | /api/projects/{id}/clips/make | `{ ids: string[], run?: boolean = true }` | `{ made: string[], jobs: Job[] }`: one reel project per candidate (`<source>__<id>`, files shared by hard link), each edit queued when `run`. Picks are logged to `mine/picks.jsonl` |
+| GET | /api/listening/{set} | `set` = `sfx \| music \| voice` | `{ set, prompts, pairs: {id, prompt, A, B, done}[], summary }` (G2.5): blind pairs, no model names; `summary` names models only with their votes |
+| POST | /api/listening/{set}/prepare | — | `JobRef` (`reel listen prepare`) |
+| POST | /api/listening/{set}/vote | `{ pair, choice: "A" \| "B" \| "tie", usable_a, usable_b }` | 204 |
+| GET | /api/listening/{set}/media/{path} | `?token=` | a rendered file of that set only |
 | GET | /api/costs | `?days=30` | `{ total_usd, calls, by_project: {id, usd}[], by_day: {date, usd}[] }`: `by_day` lists every day of the window, oldest first, zeros included (FR-12) |
 | GET | /api/settings | — | `Settings` (below) |
 | PUT | /api/settings | `Settings` (+ write-only `pexels_key`) | the saved `Settings` |
@@ -155,8 +163,11 @@ type TimelineView = {
 | `grain` | number 0–0.6 |
 | `vignette` | number 0–0.7 |
 | `max_pause_ms` | integer: 0, or 300–3000 (a **story** setting, `plan/story.json`, validated with `validate_story` too) |
+| `story_lines` | the kept item ids in their new order; an id left out is dropped (C4). Finish elements bound to a dropped item go with it (`note` counts them); whole-reel graphics move to the new opener; 422 with `hint` "describe it in Revise" when the finish no longer fits |
 
-Numbers must be JSON numbers (a string is 400). Not available yet: story-list adjustments (reorder, remove, restore, trim lines; AC-12).
+Numbers must be JSON numbers (a string is 400). Every applied adjustment is logged to `plan/adjustments.jsonl`; a later chat revision is told to keep the ones still in force and warns (`adjustment_reverted`) when it changes one the request doesn't mention. Not available yet: trimming inside a line (AC-12).
+
+`POST /api/projects` also takes `mode=long`: a long recording that is analysed once and mined (`reel run --mine`); the project's `kind` is `source`, its status `source` once the board is ready. Reel projects made from it have `kind: "clip"` and `parent`.
 
 ### Package (FR-9)
 `PackageFile = { path, label, kind, bytes, thumb }`:
@@ -223,10 +234,8 @@ Scores: the engine's primary score is 0–100; the API divides by 100.
 
 ## Not available yet
 The web app shows these as "not available yet"; no endpoint exists:
-- review links (FR-9, AC-13);
+- review links that work outside this Mac (the studio binds 127.0.0.1; ui-backend-plan E3 is the owner's decision);
 - "Open in Finder" / "Open in Final Cut Pro" (the web app offers "Copy path");
-- switching a gate between warn and block (FR-11; `config.QA_GATES` stays the owner's switch);
-- story-list adjustments (FR-8 / AC-12);
 - b-roll files on project create (FR-2);
 - a server-side `eta_s` (always `null`);
 - the improve log has no timestamps yet (`at: null`), and the library indexer does not report unreadable files yet (`unreadable: []`).

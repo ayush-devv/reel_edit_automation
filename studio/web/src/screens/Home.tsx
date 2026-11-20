@@ -22,8 +22,9 @@ import type { WallItem } from "../three/ReelWall";
 
 const ReelWall = lazy(() => import("../three/ReelWall"));
 
-const BADGE_WORD: Record<Badge, string> = { hold: "Hold", failed: "Failed", sendable: "Sendable", editing: "Editing", queued: "Queued", delivered: "Delivered", draft: "Draft" };
+const BADGE_WORD: Record<Badge, string> = { hold: "Hold", failed: "Failed", sendable: "Sendable", editing: "Editing", queued: "Queued", delivered: "Delivered", draft: "Draft", source: "Pick reels" };
 const BADGE_COLOR: Record<Badge, string> = {
+  source: color.status.hold,
   hold: color.status.hold,
   failed: color.status.fail,
   sendable: color.status.sendable,

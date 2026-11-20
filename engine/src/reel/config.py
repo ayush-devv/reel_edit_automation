@@ -92,7 +92,30 @@ QA_GATES = {
     "safe_zone": "warn", "reading_speed": "warn", "face_cut": "warn",
     "cut_pop": "warn", "cut_flash": "warn", "cut_in_word": "warn", "duration_match": "warn",
     "numbers": "warn",  # on-screen numbers vs speech (reel.numbers); the plan check already sends clear mismatches back
+    "pace": "warn", "static_stretch": "warn",  # G2.1: judged only against the project's reference reel
+    "broll_repeat": "warn",  # G2.3: the same or a near-identical cutaway twice
 }
+GATE_OVERRIDES_FILE = "gates.json"  # in ~/.config/reel (or $REEL_CONFIG_DIR): the owner's warn ↔ block switches (UI C3)
+
+
+def gate_overrides() -> dict[str, str]:
+    """The owner's switches from Reel Studio's Quality lab. Only a gate calibration cleared may be set to block
+    (checked when it is set, studio/app.py); a broken file is ignored, never fatal."""
+    import json
+    import os
+
+    f = Path(os.environ.get("REEL_CONFIG_DIR") or Path.home() / ".config" / "reel") / GATE_OVERRIDES_FILE
+    try:
+        raw = json.loads(f.read_text()) if f.exists() else {}
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in raw.items() if k in QA_GATES and v in ("warn", "block")}
+
+
+def gate_modes() -> dict[str, str]:
+    return QA_GATES | gate_overrides()
+
+
 # The Reviewer can always force `hold`; it drives automatic fixes only once calibrated (ADR-0021 §5).
 REVIEWER_TRUSTED = False
 MAX_FIX_LOOPS = 3

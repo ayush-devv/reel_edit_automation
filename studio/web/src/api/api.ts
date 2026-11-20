@@ -3,6 +3,9 @@ import type {
   BrandEntry,
   Brand,
   Brief,
+  ClipsBoard,
+  Listening,
+  ListenSet,
   Costs,
   Health,
   Job,
@@ -39,6 +42,8 @@ export interface NewProjectInput {
   broll_folder?: string | null;
   /** Stop after rendering the hook in two looks for the client to pick (A/B). */
   preview_first?: boolean;
+  /** "long": a long recording → analysis + a board of candidate reels (Clip Factory). Default "reel". */
+  mode?: "reel" | "long";
 }
 
 /** Saved brief templates (server-side, ~/.config/reel/templates.json): name → form values. */
@@ -83,12 +88,23 @@ export interface Api {
   createReviewLink(id: string, hours: number): Promise<ReviewLink>;
   revokeReviewLink(id: string, linkId: string): Promise<void>;
   label(id: string, sendable: boolean, reason: string): Promise<void>;
+  /** Clip Factory board of a mined long recording (404 while it is still being analysed). */
+  clips(id: string): Promise<ClipsBoard>;
+  /** Make reel projects from the picked candidates; `run` queues an edit of each. */
+  makeClips(id: string, ids: string[], run?: boolean): Promise<{ made: string[]; jobs: Job[] }>;
   libraries(): Promise<Libraries>;
   indexLibrary(kind: "sfx" | "music", folder: string, source: string, license: string): Promise<JobRef>;
   brands(): Promise<BrandEntry[]>;
   saveBrand(id: string, brand: Brand, isNew: boolean): Promise<void>;
   lab(): Promise<Lab>;
-  labAction(action: "eval" | "calibrate" | "improve", body?: Record<string, unknown>): Promise<JobRef>;
+  labAction(action: "eval" | "calibrate" | "improve" | "bakeoff", body?: Record<string, unknown>): Promise<JobRef>;
+  /** G2.5 listening test. */
+  listening(set: ListenSet): Promise<Listening>;
+  prepareListening(set: ListenSet): Promise<JobRef>;
+  voteListening(set: ListenSet, vote: { pair: string; choice: "A" | "B" | "tie"; usable_a: boolean; usable_b: boolean }): Promise<void>;
+  listeningMediaUrl(set: ListenSet, path: string): string;
+  /** C3: switch a QA gate between warn and block (block only once calibration cleared it). */
+  setGateMode(gate: string, mode: "warn" | "block"): Promise<{ gate: string; mode: string; recomputed: number }>;
   costs(days?: number): Promise<Costs>;
   settings(): Promise<Settings>;
   saveSettings(s: Settings): Promise<Settings>;

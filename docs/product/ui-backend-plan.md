@@ -56,6 +56,11 @@ So this plan isn't about connecting the two sides. It's about **closing the gaps
 | **4. Running it** | E1 launcher, E2 notifications, C5 bake-off in the lab | Convenience; the bake-off matters before Hinglish clients | ~1 day |
 | **Owner decision** | E3 sharing outside the Mac | Exposes a page to the internet; needs your explicit yes | — |
 
+**Status (2026-11-20):**
+- Phases 1–2 were built in G1.7.
+- Phases 3–4 (C3, C4, A3, E1, E2, C5) were built in G2.4 (`docs/product/roadmap.md`, "Group 2 as built").
+- E3 is still open.
+
 **For every item, the same definition of done:**
 - an API route with engine tests (a TestClient against a fake workspace);
 - the web client and the mock version;

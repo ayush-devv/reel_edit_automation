@@ -67,6 +67,7 @@ export default function NewEdit() {
   const [templates, setTemplates] = useState<Record<string, Record<string, unknown>>>({});
   const [brollFolder, setBrollFolder] = useState("");
   const [previewFirst, setPreviewFirst] = useState(false);
+  const [longRecording, setLongRecording] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
   // Brief templates live in the engine (~/.config/reel/templates.json); a browser's old copy is moved there once.
@@ -140,7 +141,8 @@ export default function NewEdit() {
     }
     setBusy(true);
     try {
-      const input = { files, name: form.name.trim(), brief: toBrief(form), brand: brand || null, reference_url: refUrl.trim() || null, stock, broll_folder: brollFolder.trim() || null, preview_first: previewFirst };
+      const input = { files, name: form.name.trim(), brief: toBrief(form), brand: brand || null, reference_url: refUrl.trim() || null, stock, broll_folder: brollFolder.trim() || null,
+                      preview_first: previewFirst && !longRecording, mode: longRecording ? ("long" as const) : ("reel" as const) };
       const { id } = await api.createProject(input, (loaded, total) =>
         setSent({ loaded, total }),
       );
@@ -274,7 +276,14 @@ export default function NewEdit() {
                 }
               />
               <Toggle
-                checked={previewFirst}
+                checked={longRecording}
+                onChange={setLongRecording}
+                label="Long recording → several reels"
+                description="For a podcast, webinar or talk: it is analysed once, then the Clip Miner proposes standalone reels. You pick which ones to make; each becomes its own project."
+              />
+              <Toggle
+                checked={previewFirst && !longRecording}
+                disabled={longRecording}
                 onChange={setPreviewFirst}
                 label="Show two looks of the hook first"
                 description="Renders the opening seconds in the Editor's look and an alternative (caption style + colour). The full reel waits for your pick."

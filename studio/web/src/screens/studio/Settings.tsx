@@ -6,7 +6,8 @@ import { friendlyError } from "../../api/errors";
 import type { Settings as SettingsT } from "../../api/types";
 import { Icon } from "../../components/icons";
 import { PageHeader } from "../../components/Shell";
-import { Button, cx, Field, Loading, Mono, Notice, Panel, Segmented, Select, TextInput } from "../../components/ui";
+import { Button, cx, Field, Loading, Mono, Notice, Panel, Segmented, Select, TextInput, Toggle } from "../../components/ui";
+import { notificationsOn, setNotifications } from "../../hooks/notify";
 import { useStatus } from "../../hooks/status";
 import { useQuery } from "../../hooks/useQuery";
 import { usd } from "../../lib/format";
@@ -199,6 +200,29 @@ function SettingsForm() {
   );
 }
 
+/** E2: opt-in browser notifications (this browser only). */
+function Notifications() {
+  const [on, setOn] = useState(notificationsOn());
+  const [msg, setMsg] = useState<string | null>(null);
+  const supported = typeof Notification !== "undefined";
+  return (
+    <Panel title="Notifications">
+      <Toggle
+        checked={on}
+        disabled={!supported}
+        onChange={async (v) => {
+          const res = await setNotifications(v);
+          setOn(res);
+          setMsg(v && !res ? "The browser didn’t allow notifications. Allow them for this page in the browser’s site settings." : null);
+        }}
+        label="Tell me when an edit needs me"
+        description={supported ? "A notification when an edit turns Sendable, Hold or Failed, waits for the A/B pick, or a long recording has reels to pick. This browser only." : "This browser has no notifications."}
+      />
+      {msg && <p className="mt-2 text-label text-st-hold">{msg}</p>}
+    </Panel>
+  );
+}
+
 function ProjectActions() {
   const api = useApi();
   const q = useQuery(() => api.projects(), [api]);
@@ -261,6 +285,7 @@ export default function Settings() {
         </div>
         <div className="col-span-12 xl:col-span-5">
           <SettingsForm />
+          <Notifications />
           <ProjectActions />
         </div>
       </div>

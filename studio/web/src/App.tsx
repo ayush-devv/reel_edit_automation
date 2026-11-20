@@ -15,10 +15,12 @@ const Layers = lazy(() => import("./screens/project/Layers"));
 const Revise = lazy(() => import("./screens/project/Revise"));
 const Adjust = lazy(() => import("./screens/project/Adjust"));
 const Deliver = lazy(() => import("./screens/project/Deliver"));
+const Clips = lazy(() => import("./screens/project/Clips"));
 const Libraries = lazy(() => import("./screens/studio/Libraries"));
 const Brands = lazy(() => import("./screens/studio/Brands"));
 const Quality = lazy(() => import("./screens/studio/Quality"));
 const Settings = lazy(() => import("./screens/studio/Settings"));
+const Listening = lazy(() => import("./screens/studio/Listening"));
 
 function ProjectIndex() {
   const { id } = useParams();
@@ -40,11 +42,13 @@ export function AppRoutes() {
             <Route path="revise" element={<Revise />} />
             <Route path="adjust" element={<Adjust />} />
             <Route path="deliver" element={<Deliver />} />
+            <Route path="clips" element={<Clips />} />
           </Route>
           <Route path="studio/libraries" element={<Libraries />} />
           <Route path="studio/brands" element={<Brands />} />
           <Route path="studio/quality" element={<Quality />} />
           <Route path="studio/settings" element={<Settings />} />
+          <Route path="studio/listening" element={<Listening />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

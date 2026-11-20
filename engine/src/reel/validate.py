@@ -93,8 +93,16 @@ def _nearest_match(words: WordTable, clip: str, idx: int, quote: str, window: in
 # ------------------------------------------------------------------ story
 
 
-def validate_story(plan: StoryPlan, words: WordTable, clips: set[str], knowledge_ids: set[str] | None = None) -> list[Issue]:
+def validate_story(plan: StoryPlan, words: WordTable, clips: set[str], knowledge_ids: set[str] | None = None,
+                   window: list[tuple[str, int, int]] | None = None) -> list[Issue]:
+    """`window` (Clip Factory reels): (clip, first, last) global word ranges the reel may use."""
     issues: list[Issue] = []
+    if window is not None:
+        for n, it in enumerate(plan.items):
+            if not any(c == it.clip and lo <= it.word_start and it.word_end <= hi for c, lo, hi in window):
+                spans = ", ".join(f"{c} words {lo}–{hi}" for c, lo, hi in window)
+                issues.append(Issue("outside_window", f"items[{n}]", f"Item {it.id} uses words {it.word_start}–{it.word_end}, outside this reel's part "
+                                    f"of the recording.", f"Use only {spans} (the words in tables/)."))
     by = words.by_index()
     if not plan.items:
         issues.append(Issue("empty_plan", "items", "The plan keeps no material.", "Add at least one keep item."))

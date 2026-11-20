@@ -21,6 +21,7 @@ const ROUTES: [string, RegExp | string][] = [
   ["/studio/brands", "Brand kits"],
   ["/studio/quality", "Quality lab"],
   ["/studio/settings", "Health"],
+  ["/studio/listening", "Listening test"],
 ];
 
 describe("every route renders in mock mode", () => {
@@ -155,5 +156,55 @@ describe("adjust validation display (FR-8, AC-12)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply longest pause kept" }));
     expect(await screen.findByText("This removes a must-keep line")).toBeInTheDocument();
     expect(screen.getByText("Keep k04 in the story.")).toBeInTheDocument();
+  });
+
+  it("story lines can be dropped in Adjust (C4)", async () => {
+    const api = createMockApi();
+    const calls: unknown[] = [];
+    const orig = api.adjust.bind(api);
+    api.adjust = async (id, kind, value) => {
+      calls.push([kind, value]);
+      return orig(id, kind, value);
+    };
+    render(<TestApp api={api} path={`/p/${HOLD}/adjust`} />);
+    const list = await screen.findByRole("list", { name: "Kept lines in order" }, T);
+    const first = within(list).getAllByRole("button", { name: /^Drop / })[0];
+    fireEvent.click(first);
+    fireEvent.click(screen.getByRole("button", { name: "Apply kept lines" }));
+    await screen.findAllByText(/Applied/, undefined, T);
+    expect(calls[0]).toEqual(["story_lines", expect.any(Array)]);
+    expect((calls[0] as [string, string[]])[1].length).toBeGreaterThan(0);
+  });
+
+  it("a cleared gate can be switched to block in the Quality lab (C3)", async () => {
+    const api = createMockApi();
+    render(<TestApp api={api} path="/studio/quality" />);
+    const frozen = await screen.findByRole("button", { name: /Frozen: warn, switch to block/ }, T);
+    fireEvent.click(frozen);
+    expect(await screen.findByRole("button", { name: /Frozen: block, switch to warn/ }, T)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Black: warn" })).toBeDisabled(); // not cleared by calibration
+  });
+
+  it("the listening test renders a set and takes blind votes (G2.5)", async () => {
+    const api = createMockApi();
+    render(<TestApp api={api} path="/studio/listening" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Render the sfx set" }, T));
+    expect(await screen.findByText("Pair 1 of 3", undefined, T)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "I’d use B in a client reel" }));
+    fireEvent.click(screen.getByRole("button", { name: "B is better" }));
+    expect(await screen.findByText("Pair 2 of 3", undefined, T)).toBeInTheDocument();
+  });
+
+  it("a long recording shows its Clips board and makes the picked reels (G2.2)", async () => {
+    const api = createMockApi();
+    const { id } = await api.createProject({ files: [], name: "Podcast ep 4", brief: { project: "Podcast ep 4" } as never, mode: "long" });
+    render(<TestApp api={api} path={`/p/${id}/clips`} />);
+    expect(await screen.findByText("Reels found in this recording", undefined, T)).toBeInTheDocument();
+    expect(screen.getByText(/Editor's estimate|editor's estimate/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Review" })).toBeNull(); // a source has no edit of its own
+    const pick = screen.getByRole("checkbox", { name: "Pick Pay yourself first, every month" });
+    expect(pick).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: /Make 3 reels/ }));
+    expect(await screen.findByText("3 reel projects queued", undefined, T)).toBeInTheDocument();
   });
 });

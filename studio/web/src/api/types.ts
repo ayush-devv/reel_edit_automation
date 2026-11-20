@@ -21,7 +21,39 @@ export const STAGES = [
 export type StageName = (typeof STAGES)[number];
 
 export type StageStatus = "pending" | "queued" | "running" | "done" | "failed" | "skipped";
-export type ProjectStatus = "draft" | "queued" | "running" | "sendable" | "hold" | "failed" | "awaiting_choice";
+export type ProjectStatus = "draft" | "queued" | "running" | "sendable" | "hold" | "failed" | "awaiting_choice" | "source";
+
+/** Clip Factory (G2.2): a long recording analysed once ("source"), reels made from it ("clip"), or an ordinary reel. */
+export type ProjectKind = "reel" | "source" | "clip";
+
+export interface ClipCandidate {
+  id: string;
+  rank: number;
+  title: string;
+  hook_text: string;
+  family: "hook" | "story" | "tip" | "hot_take" | "proof" | "myth";
+  scores: { hook: number; standalone: number; payoff: number; energy: number; shareability: number };
+  /** The engine's score from the miner's 1–5 marks: the Editor's estimate, never a "viral" prediction. */
+  score: number;
+  duration_s: number;
+  status: "selected" | "rejected";
+  why: string;
+  reason: string;
+  standalone_risks: string[];
+  warnings: string[];
+  excerpt: string;
+  project: { id: string; status: ProjectStatus } | null;
+}
+
+export interface ClipsBoard {
+  source_s: number;
+  yield_cap: number;
+  target_s: [number, number];
+  score_label: string;
+  score_rule: string;
+  candidates: ClipCandidate[];
+  estimate_per_reel: { low_usd: number; high_usd: number; from_edits: number } | null;
+}
 
 /** Hook preview in two looks (engine reel.preview): export/preview/preview.json. */
 export interface HookPreview {
@@ -48,6 +80,10 @@ export interface ProjectSummary {
   client: string | null;
   /** ISO; set by POST …/delivered. Finished + delivered sorts last (FR-1). */
   delivered_at: string | null;
+  /** Absent from older engines: treat as "reel". */
+  kind?: ProjectKind;
+  /** For a Clip Factory reel: the source project's id. */
+  parent?: string | null;
 }
 
 export interface Stage {
@@ -351,6 +387,35 @@ export interface Lab {
   improve_history: ImproveEntry[];
   runs: EvalRun[];
   gold_pairs: GoldPair[];
+  /** C5: the latest speech-to-text bake-off and the engine each language uses now (absent from older engines). */
+  bakeoff?: {
+    engines_now: Record<string, string>;
+    samples: number;
+    latest: { at: string; summary: Record<string, Record<string, number | string | null>> | null } | null;
+  };
+}
+
+/** G2.5 listening test: blind pairs (no model names) and, once votes exist, the per-model result. */
+export type ListenSet = "sfx" | "music" | "voice";
+export interface ListenPair {
+  id: string;
+  prompt: string;
+  A: string;
+  B: string;
+  done: boolean;
+}
+export interface ListenModelResult {
+  comparisons: number;
+  win_rate: number;
+  usable_rate: number;
+  mean_generation_s: number;
+  decision: "adopt" | "adopt (paid)" | "not yet" | "reference";
+}
+export interface Listening {
+  set: ListenSet;
+  prompts: number;
+  pairs: ListenPair[];
+  summary: { votes: number; pairs: number; rule: string; models: Record<string, ListenModelResult>; generators: Record<string, { status: string; why?: string }> } | null;
 }
 
 export interface Costs {
@@ -472,7 +537,9 @@ export type AdjustKind =
   | "punch_ins_off"
   | "grain"
   | "vignette"
-  | "max_pause_ms";
+  | "max_pause_ms"
+  /** C4: the kept line ids in their new order; a line left out is dropped (with what was attached to it). */
+  | "story_lines";
 
 export interface NotesPreview {
   /** anchored[i] belongs to the i-th non-empty line sent. */

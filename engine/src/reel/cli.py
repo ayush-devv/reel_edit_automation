@@ -38,11 +38,76 @@ def _print_state(state: dict, ws) -> None:
 CARRIED_OPTIONS = ("deliverables",)
 
 
+def _run_child(args: argparse.Namespace) -> int:
+    """A Clip Factory reel project: edit stages only, on the source's shared analysis (reel.clipfactory)."""
+    from reel import autofix
+    from reel.stages import CLIP_PIPELINE
+    from reel.workspace import Workspace
+
+    ws = Workspace(Path(args.project).resolve())
+    options = json.loads(ws.path("run_options.json").read_text())
+    options["skip_review"] = bool(getattr(args, "skip_review", False)) or bool(options.get("skip_review"))
+    res = autofix.run(ws, CLIP_PIPELINE, options, force=set(getattr(args, "force", None) or []))
+    _print_state(res["state"], ws)
+    _print_verdict(ws, res["loops"])
+    return 0
+
+
+def _cmd_listen(args: argparse.Namespace) -> int:
+    """G2.5: render the blind listening set, or print its result."""
+    from reel import listen
+
+    try:
+        if args.listen_cmd == "prepare":
+            m = listen.prepare(args.set)
+            for gid, g in m["generators"].items():
+                print(f"{gid:32} {g['status']}" + (f": {g['why']}" if g.get("why") else "") + (f" ({len(g['failures'])} failed)" if g.get("failures") else ""))
+            print(f"{len(m['outputs'])} file(s); listen in Reel Studio → Quality lab → Listening test")
+            return 0
+        print(json.dumps(listen.summary(args.set), indent=2, ensure_ascii=False))
+        return 0
+    except (listen.ListenError, FileNotFoundError) as exc:
+        print(f"not done: {exc}")
+        return 1
+
+
+def _cmd_factory(args: argparse.Namespace) -> int:
+    from reel import clipfactory, mine
+    from reel.workspace import Workspace
+
+    ws = Workspace(Path(args.project).resolve())
+    data = mine.load(ws)
+    if not data:
+        print(f"{ws.root} has no candidates: run `reel run <recording> --project {ws.root} --mine` first")
+        return 2
+    if not args.make:
+        print(ws.path("mine", "board.md").read_text())
+        return 0
+    try:
+        made = clipfactory.spawn(ws, [x.strip() for x in args.make.split(",") if x.strip()])
+    except ValueError as exc:
+        print(f"not made: {exc}")
+        return 1
+    for root in made:
+        print(f"reel project: {root}")
+    if args.run:
+        for root in made:
+            _run_child(argparse.Namespace(project=str(root), skip_review=args.skip_review, force=None))
+    else:
+        print("edit each with `reel run --project <reel project>`")
+    return 0
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     from reel.runner import run_pipeline
     from reel.stages import EDIT_PIPELINE, PIPELINE
     from reel.workspace import Workspace, atomic_write_json
 
+    if not args.input:
+        if args.project and (Path(args.project) / "window.json").exists():
+            return _run_child(args)
+        print("give an input clip or folder (only a Clip Factory reel project runs without one)")
+        return 2
     src = Path(args.input).resolve()
     project = Path(args.project).resolve() if args.project else Path.cwd() / "projects" / src.stem
     ws = Workspace.create(project)
@@ -52,11 +117,24 @@ def _cmd_run(args: argparse.Namespace) -> int:
                "broll": absolute(args.broll), "reference": absolute(args.reference), "stock": bool(args.stock)}
     options["skip_review"] = args.skip_review
     options["voice_enhance"] = not args.no_voice_enhance
+    if getattr(args, "clip_length", None):
+        lo, _, hi = args.clip_length.partition("-")
+        options["clip_target_s"] = [float(lo), float(hi)]
     prev = ws.path("run_options.json")
     if prev.exists():  # options set outside `reel run` (Reel Studio's extra deliverables) survive a re-run
         carried = {k: v for k, v in json.loads(prev.read_text()).items() if k in CARRIED_OPTIONS}
         options = {**carried, **options}
     atomic_write_json(ws.path("run_options.json"), options)  # `reel revise` / `reel proof` reuse them
+    if getattr(args, "mine", False):  # Clip Factory: analyse the long recording once, then find the reels in it
+        from reel.stages import MINE_PIPELINE
+
+        state = run_pipeline(ws, MINE_PIPELINE, options=options, force=set(args.force or []))
+        _print_state(state, ws)
+        board = ws.path("mine", "board.md")
+        if board.exists():
+            print("\n" + board.read_text())
+            print(f"make reels with `reel factory --project {ws.root} --make c01,c02 [--run]`")
+        return 0
     if args.analyse_only:
         state = run_pipeline(ws, PIPELINE, options=options, force=set(args.force or []))
         _print_state(state, ws)
@@ -270,6 +348,13 @@ RERUN_FROM = ("compile", "render", "overlay", "composite", "qa", "package", "var
 def _cmd_studio(args: argparse.Namespace) -> int:
     from reel.studio import server
 
+    if args.install_launcher:
+        plist = server.install_launcher(args.port, args.projects)
+        print(f"Reel Studio now starts at login: {plist}\nlogs: ~/Library/Logs/reel-studio.log · remove with `reel studio --uninstall-launcher`")
+        return 0
+    if args.uninstall_launcher:
+        print("launcher removed" if server.uninstall_launcher() else "no launcher was installed")
+        return 0
     return server.serve(port=args.port, open_browser=args.open, dev=args.dev, projects=args.projects)
 
 
@@ -280,6 +365,8 @@ def _cmd_revise(args: argparse.Namespace) -> int:
     ws, options = _load_ws(args.project)
     res = autofix.apply_revision(ws, options, args.request)
     print(f"Editor: {res['reply']}  ({res['calls']} call(s), ~${res['cost_usd']})")
+    for w in res.get("warnings", []):
+        print(f"warning: {w}")
     _rerun_after_plan_change(ws, options)
     return 0
 
@@ -303,6 +390,8 @@ def _cmd_notes(args: argparse.Namespace) -> int:
         return 0
     res = autofix.apply_revision(ws, options, request)
     print(f"Editor: {res['reply']}  ({res['calls']} call(s), ~${res['cost_usd']})")
+    for w in res.get("warnings", []):
+        print(f"warning: {w}")
     _rerun_after_plan_change(ws, options)
     return 0
 
@@ -462,8 +551,10 @@ def _plan_inputs(args: argparse.Namespace):
 def _cmd_validate(args: argparse.Namespace) -> int:
     from reel.validate import errors, validate_finish, validate_story
 
+    from reel.clipfactory import load_window
+
     ws, story, finish, words, clips, fps, idx, kids = _plan_inputs(args)
-    issues = validate_story(story, words, set(clips), kids)
+    issues = validate_story(story, words, set(clips), kids, window=load_window(ws))
     if finish is not None and not errors(issues):
         issues += validate_finish(finish, story, words, idx, kids)
     print(json.dumps({"ok": not errors(issues), "issues": [i.as_dict() for i in issues]}, indent=2, ensure_ascii=False))
@@ -476,8 +567,10 @@ def _cmd_compile(args: argparse.Namespace) -> int:
     from reel.validate import errors, validate_finish, validate_story
     from reel.workspace import atomic_write_json
 
+    from reel.clipfactory import load_window
+
     ws, story, finish, words, clips, fps, idx, kids = _plan_inputs(args)
-    issues = validate_story(story, words, set(clips), kids) + (validate_finish(finish, story, words, idx, kids) if finish else [])
+    issues = validate_story(story, words, set(clips), kids, window=load_window(ws)) + (validate_finish(finish, story, words, idx, kids) if finish else [])
     if errors(issues):
         print(json.dumps({"ok": False, "issues": [i.as_dict() for i in errors(issues)]}, indent=2, ensure_ascii=False))
         return 2
@@ -493,8 +586,10 @@ def _cmd_dry_run(args: argparse.Namespace) -> int:
     from reel.compile import dry_run
     from reel.validate import errors, validate_story
 
+    from reel.clipfactory import load_window
+
     ws, story, _finish, words, clips, fps, idx, kids = _plan_inputs(args)
-    issues = validate_story(story, words, set(clips), kids)
+    issues = validate_story(story, words, set(clips), kids, window=load_window(ws))
     if errors(issues):
         print(json.dumps({"ok": False, "issues": [i.as_dict() for i in errors(issues)]}, indent=2, ensure_ascii=False))
         return 2
@@ -514,7 +609,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=_cmd_probe)
 
     p = sub.add_parser("run", help="run the pipeline on a clip or folder of clips")
-    p.add_argument("input")
+    p.add_argument("input", nargs="?", help="clip or folder (omit for a Clip Factory reel project: --project only)")
     p.add_argument("--project", help="workspace folder (default: ./projects/<input name>)")
     p.add_argument("--fps", help="override project fps, e.g. 30 or 30000/1001")
     p.add_argument("--encoder", default="prores_ks", choices=["prores_ks", "prores_videotoolbox"])
@@ -531,7 +626,24 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--reference", help="a finished reel the client likes: its pacing, captions and colour become the style to match")
     p.add_argument("--broll", help="folder of client b-roll clips (conformed, described by Claude, offered to the Editor)")
     p.add_argument("--stock", action="store_true", help="find stock b-roll on Pexels for this talk at edit time (needs PEXELS_API_KEY)")
+    p.add_argument("--mine", action="store_true", help="Clip Factory: a long recording → analysis + a ranked board of candidate reels")
+    p.add_argument("--clip-length", help="(--mine) speech length per reel in seconds, e.g. 20-75 (default 20-75 or the brief's)")
     p.set_defaults(func=_cmd_run)
+
+    p = sub.add_parser("listen", help="free-model listening test (G2.5): blind A/B of generated SFX, music, voice")
+    lsub = p.add_subparsers(dest="listen_cmd", required=True)
+    for name, help_text in (("prepare", "render every prompt with the declared generators (~/.config/reel/generators.json) + the fallback"),
+                            ("summary", "win rate, usable rate and the adopt decision per model")):
+        q = lsub.add_parser(name, help=help_text)
+        q.add_argument("--set", required=True, choices=["sfx", "music", "voice"])
+    p.set_defaults(func=_cmd_listen)
+
+    p = sub.add_parser("factory", help="Clip Factory: turn picked candidates of a mined recording into reel projects")
+    p.add_argument("--project", required=True, help="the mined source project (`reel run <long recording> --mine`)")
+    p.add_argument("--make", help="candidate ids, comma-separated (see mine/board.md); omit to print the board")
+    p.add_argument("--run", action="store_true", help="also edit each new reel now, one after another")
+    p.add_argument("--skip-review", action="store_true")
+    p.set_defaults(func=_cmd_factory)
 
     p = sub.add_parser("notes", help="apply a client's timestamped notes (e.g. '0:12 make this faster') as one revision")
     p.add_argument("--project", required=True)
@@ -643,6 +755,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--open", action="store_true", help="open the dashboard in the browser")
     p.add_argument("--dev", action="store_true", help="allow the Vite dev origin http://127.0.0.1:5173 (CORS)")
     p.add_argument("--projects", help="projects folder (default: <repo>/projects, or $REEL_PROJECTS_ROOT)")
+    p.add_argument("--install-launcher", action="store_true", help="start Reel Studio at login (macOS LaunchAgent; still 127.0.0.1 only)")
+    p.add_argument("--uninstall-launcher", action="store_true", help="remove that LaunchAgent")
     p.set_defaults(func=_cmd_studio)
 
     p = sub.add_parser("eval", help="eval harness")

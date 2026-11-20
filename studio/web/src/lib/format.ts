@@ -41,3 +41,15 @@ export function tcToSeconds(tc: string): number {
 export const gateLabel = (id: string) => (id ? id[0].toUpperCase() + id.slice(1).replace(/_/g, " ") : id);
 
 export const prettyId = (id: string) => id.replace(/^[a-z]+\./, "").replace(/_/g, " ");
+
+/** A3: the Editor's beat names (hook, setup, payoff, cta, beat.proof …) as the owner reads them. */
+const BEATS: Record<string, string> = {
+  hook: "Hook", setup: "Setup", context: "Context", point: "Point", proof: "Proof", example: "Example", story: "Story", tip: "Tip",
+  payoff: "Payoff", punchline: "Punchline", callback: "Callback", cta: "Call to action", call_to_action: "Call to action",
+  intro: "Intro", outro: "Outro", turn: "Turn", tension: "Tension", reveal: "Reveal", problem: "Problem", solution: "Solution",
+};
+export function beatLabel(beat: string | null | undefined): string {
+  const k = (beat ?? "").trim().toLowerCase().replace(/^beat\./, "").replace(/[\s-]+/g, "_");
+  if (!k) return "Line";
+  return BEATS[k] ?? k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, " ");
+}

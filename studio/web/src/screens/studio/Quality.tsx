@@ -1,8 +1,9 @@
 // FR-11 Quality lab: gold set (held-out pairs locked, AC-15), score history, calibration, self-improvement.
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useApi } from "../../api/context";
 import { friendlyError } from "../../api/errors";
-import type { EvalRun, GoldPair, ImproveEntry, Lab } from "../../api/types";
+import type { CalibrationGate, EvalRun, GoldPair, ImproveEntry, Lab } from "../../api/types";
 import { Icon } from "../../components/icons";
 import { PageHeader } from "../../components/Shell";
 import { Table } from "../../components/Table";
@@ -76,6 +77,95 @@ function Families({ run }: { run: EvalRun }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** C3: warn ↔ block. Block is offered only when calibration cleared the gate; every verdict is re-decided at once. */
+function GateSwitch({ gate, onChanged }: { gate: CalibrationGate; onChanged: () => void }) {
+  const api = useApi();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const canBlock = gate.mode === "block" || gate.promote_to_block;
+  const next = gate.mode === "block" ? "warn" : "block";
+  return (
+    <span className="flex w-40 items-center justify-end gap-2">
+      {err && <span className="truncate text-label text-st-fail" title={err}>{err}</span>}
+      <Button
+        variant="ghost"
+        busy={busy}
+        disabled={!canBlock}
+        title={canBlock ? `Switch to ${next}` : "Calibration hasn't cleared this check to block yet"}
+        aria-label={`${gateName(gate.name)}: ${gate.mode}${canBlock ? `, switch to ${next}` : ""}`}
+        onClick={async () => {
+          setBusy(true);
+          setErr(null);
+          try {
+            await api.setGateMode(gate.name, next);
+            onChanged();
+          } catch (e) {
+            setErr(friendlyError(e));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <span className={cx("text-meta", gate.mode === "block" ? "text-fg-primary" : "text-fg-muted")}>{gate.mode}</span>
+      </Button>
+    </span>
+  );
+}
+
+/** C5: which speech-to-text engine transcribes the owner's Hinglish clips best. */
+function Bakeoff({ lab, onStarted }: { lab: Lab; onStarted: () => void }) {
+  const api = useApi();
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const b = lab.bakeoff;
+  if (!b) return null;
+  const rows = Object.entries(b.latest?.summary ?? {});
+  const cols = [...new Set(rows.flatMap(([, v]) => Object.keys(v)))].slice(0, 5);
+  return (
+    <Panel title="Speech-to-text bake-off">
+      <p className="text-fg-secondary">
+        Hindi and Hinglish use <Mono>{b.engines_now.hinglish ?? b.engines_now.hi ?? "?"}</Mono> until your own clips are scored. {b.samples} sample clip{b.samples === 1 ? "" : "s"} ready.
+      </p>
+      {rows.length > 0 && (
+        <table className="mt-3 w-full text-meta">
+          <thead>
+            <tr className="text-fg-muted">
+              <th className="text-left font-normal">Engine</th>
+              {cols.map((c) => <th key={c} className="text-right font-normal">{c}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(([name, v]) => (
+              <tr key={name}>
+                <td className="text-fg-primary">{name}</td>
+                {cols.map((c) => <td key={c} className="text-right font-mono">{typeof v[c] === "number" ? (v[c] as number).toFixed(3) : String(v[c] ?? "—")}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {b.latest && <p className="mt-2 text-label text-fg-muted">Last run {b.latest.at}</p>}
+      <Button className="mt-3" icon="play" busy={busy} disabled={b.samples === 0} onClick={async () => {
+        setBusy(true);
+        setMsg(null);
+        try {
+          await api.labAction("bakeoff");
+          setMsg({ tone: "ok", text: "Started — it runs in the background and shows up in Jobs." });
+          onStarted();
+        } catch (e) {
+          setMsg({ tone: "error", text: friendlyError(e) });
+        } finally {
+          setBusy(false);
+        }
+      }}>
+        Run the bake-off
+      </Button>
+      {b.samples === 0 && <p className="mt-2 text-meta text-fg-muted">Add clips to samples/hinglish/&lt;name&gt;/ (clip.mp4 + transcript.txt) first.</p>}
+      {msg && <div className="mt-3"><Notice tone={msg.tone === "ok" ? "ok" : "error"}>{msg.text}</Notice></div>}
+    </Panel>
   );
 }
 
@@ -237,7 +327,7 @@ export default function Quality() {
                       <li key={g.name} className="flex items-center gap-3" title={g.catch_rate !== null ? `Catches ${pct(g.catch_rate)} of its injected defects${g.promote_to_block ? " · ready to block" : ""}` : undefined}>
                         <span className="min-w-0 flex-1 truncate text-ui text-fg-primary">{gateName(g.name)}</span>
                         <Mono className={cx((g.false_alarm_rate ?? 0) > 0.2 ? "text-st-hold" : "text-fg-secondary")}>{pct(g.false_alarm_rate)}</Mono>
-                        <span className={cx("w-12 text-right text-meta", g.mode === "block" ? "text-fg-primary" : "text-fg-muted")}>{g.mode}</span>
+                        <GateSwitch gate={g} onChanged={q.reload} />
                       </li>
                     ))}
                   </ul>
@@ -247,6 +337,11 @@ export default function Quality() {
               )}
             </Panel>
             <Actions lab={lab} onStarted={q.reload} />
+            <Bakeoff lab={lab} onStarted={q.reload} />
+            <Panel title="Listening test">
+              <p className="text-fg-secondary">Blind A/B of free sound-effect, music and voice models against what we have today, before any of them is used in a reel.</p>
+              <Link to="/studio/listening" className="mt-3 inline-flex text-ui text-info underline">Open the listening test</Link>
+            </Panel>
           </div>
         </div>
       )}

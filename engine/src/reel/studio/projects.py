@@ -27,7 +27,17 @@ ID_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 MEDIA_PREFIXES = ("render/", "export/", "qa/sheets/", "qa/cuts/", "versions/")  # the NLE package is export/package/
 COVER_RE = re.compile(r"^cover[^/]*\.jpg$")
 STUDIO_FILE = "studio.json"
-ATTENTION_ORDER = {"hold": 0, "awaiting_choice": 0, "failed": 1, "sendable": 2, "running": 3, "queued": 4, "draft": 5, "delivered": 6}
+ATTENTION_ORDER = {"hold": 0, "awaiting_choice": 0, "source": 1, "failed": 1, "sendable": 2, "running": 3, "queued": 4, "draft": 5, "delivered": 6}
+ANALYSIS_STAGES = ("ingest", "mezzanine", "perception", "tables")
+SOURCE_STAGES = [*ANALYSIS_STAGES, "mine"]  # a Clip Factory source: analysed once, then mined (G2.2)
+
+
+def is_source(ws: Path) -> bool:
+    return (read_json(ws / "run_options.json", {}) or {}).get("mine") is True or (ws / "mine" / "candidates.json").exists()
+
+
+def is_child(ws: Path) -> bool:
+    return (ws / "window.json").exists()
 
 
 def read_json(path: Path, default=None):
@@ -87,9 +97,14 @@ def stages(ws: Path, job: str | None = None) -> list[dict]:
     entries = state.get("stages", {})
     alive = job == "running" or lock_alive(ws)
     out = []
-    for name in STAGES:
+    child = is_child(ws)
+    for name in (SOURCE_STAGES if is_source(ws) else STAGES):
         e = entries.get(name)
         st = {"name": name, "status": "queued" if job == "queued" else "pending", "started": None, "finished": None, "meta": {}}
+        if child and name in ANALYSIS_STAGES:  # a Clip Factory reel shares the source's analysis
+            st.update(status="skipped", meta={"shared_from": (read_json(ws / "window.json", {}) or {}).get("parent")})
+            out.append(st)
+            continue
         if e:
             status = e.get("status", "pending")
             st.update(started=e.get("started"), finished=e.get("finished"), meta=e.get("meta") or {})
@@ -157,6 +172,11 @@ def summary(ws: Path, job: str | None = None) -> dict:
     if status == "draft" and pv and not pv.get("chosen"):  # a --preview-first run ended at the hook previews (G1.6)
         status = "awaiting_choice"
         attention.append("pick the hook look (A/B)")
+    source = is_source(ws)
+    if source and status == "draft" and (ws / "mine" / "candidates.json").exists():
+        status = "source"
+        if not (ws / "mine" / "children.json").exists():
+            attention.append("pick the reels to make")
     if status == "failed":
         attention.append(f"failed: {stage}")
     proof = (verdict or {}).get("proof_open") or []
@@ -169,11 +189,36 @@ def summary(ws: Path, job: str | None = None) -> dict:
     done = sum(1 for s in st if s["status"] in ("done", "skipped"))
     return {"id": ws.name, "name": meta.get("name") or ws.name, "client": meta.get("client"),
             "created": iso(_created(ws, meta)), "updated": iso(_updated(ws)),
-            "status": status, "stage": stage, "progress": round(done / len(STAGES), 3),
+            "kind": "source" if source else ("clip" if is_child(ws) else "reel"), "parent": meta.get("parent"),
+            "status": status, "stage": stage, "progress": round(done / max(1, len(st)), 3),
             "duration_s": _reel_duration(ws, state), "cost_usd": costs.project_total(ws / "log" / "runs.jsonl"),
             "verdict": (verdict or {}).get("status") if (verdict or {}).get("status") in ("sendable", "hold") else None,
             "needs_attention": attention, "thumb": "cover.jpg" if (ws / "cover.jpg").exists() else None,
             "delivered_at": iso(meta.get("delivered"))}
+
+
+def clips_view(ws: Path, root: Path, job_state) -> dict:
+    """The Clips board (G2.2): every candidate with the engine's score, why it was or wasn't picked, the transcript
+    excerpt, and the reel project made from it (with its status). Scores are labelled as the Editor's estimate."""
+    data = read_json(ws / "mine" / "candidates.json")
+    if not data:
+        raise FileNotFoundError("no candidates")
+    text = words_text(ws)
+    made = {Path(p).name.rsplit("__", 1)[-1]: ws.parent / Path(p).name for p in (read_json(ws / "mine" / "children.json", {}) or {}).get("children", [])}
+    out = []
+    for c in data["candidates"]:
+        excerpt = " … ".join(" ".join(text.get(i, "") for i in range(r["word_start"], r["word_end"] + 1)) for r in c["ranges"])
+        child = made.get(c["id"])
+        row = {k: c[k] for k in ("id", "rank", "title", "hook_text", "family", "scores", "score", "duration_s", "status", "why", "reason",
+                                  "standalone_risks", "warnings")}
+        row["excerpt"] = excerpt[:600] + ("…" if len(excerpt) > 600 else "")
+        row["project"] = None
+        if child is not None and child.exists():
+            row["project"] = {"id": child.name, "status": summary(child, job_state(child.name))["status"]}
+        out.append(row)
+    return {"source_s": data["source_s"], "yield_cap": data["yield_cap"], "target_s": data["target_s"],
+            "score_label": "Editor's estimate", "score_rule": data["score_rule"], "candidates": out,
+            "estimate_per_reel": costs.per_reel_estimate(root)}
 
 
 def is_delivered(s: dict) -> bool:

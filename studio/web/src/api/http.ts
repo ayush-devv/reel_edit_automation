@@ -54,6 +54,7 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
     if (input.stock) form.append("stock", "1");
     if (input.broll_folder) form.append("broll_folder", input.broll_folder);
     if (input.preview_first) form.append("preview_first", "1");
+    if (input.mode === "long") form.append("mode", "long");
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${base}/api/projects`);
@@ -108,6 +109,8 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
     createReviewLink: (id, hours) => post(`/api/projects/${enc(id)}/review-links`, { hours }),
     revokeReviewLink: (id, linkId) => request("DELETE", `/api/projects/${enc(id)}/review-links/${enc(linkId)}`),
     label: (id, sendable, reason) => post(`/api/projects/${enc(id)}/label`, { sendable, reason }),
+    clips: (id) => get(`/api/projects/${enc(id)}/clips`),
+    makeClips: (id, ids, run = true) => post(`/api/projects/${enc(id)}/clips/make`, { ids, run }),
     libraries: () => get("/api/libraries"),
     indexLibrary: (kind, folder, source, license) => post("/api/libraries/index", { kind, folder, source, license }),
     brands: () => get("/api/brands"),
@@ -115,6 +118,11 @@ export function createHttpApi(fetchImpl: FetchLike = (...a) => fetch(...a), base
       isNew ? post(`/api/brands`, { id, brand }) : request("PUT", `/api/brands/${enc(id)}`, brand),
     lab: () => get("/api/lab"),
     labAction: (action, body) => post(`/api/lab/${action}`, body ?? {}),
+    setGateMode: (gate, mode) => request("PUT", `/api/lab/gates/${enc(gate)}`, { mode }),
+    listening: (set) => get(`/api/listening/${set}`),
+    prepareListening: (set) => post<JobRef>(`/api/listening/${set}/prepare`),
+    voteListening: (set, vote) => post(`/api/listening/${set}/vote`, vote),
+    listeningMediaUrl: (set, path) => withToken(`/api/listening/${set}/media/${path.split("/").map(enc).join("/")}`),
     costs: (days = 30) => get(`/api/costs?days=${days}`),
     settings: () => get("/api/settings"),
     saveSettings: (s: Settings) => request("PUT", "/api/settings", s),

@@ -21,7 +21,7 @@ from reel.compile import compile_timeline, proof_list
 from reel.runner import Stage, StageContext
 from reel.schemas.plan import FinishPlan, StoryPlan
 from reel.schemas.timeline import FFMPEG_FIELDS, REMOTION_FIELDS, Timeline, part
-from reel.validate import errors, validate_finish, validate_story
+from reel.validate import errors, validate_finish
 from reel.workspace import atomic_write_json, file_fingerprint, hash_inputs
 
 VERSION = 2
@@ -171,7 +171,8 @@ REFERENCE = Stage(name="reference", input_hash=_reference_hash, run=_reference,
 
 
 def _story_hash(ctx: StageContext) -> str:
-    return hash_inputs({"tables": [_fp(ctx, f) for f in TABLE_FILES], "reference": _fp(ctx, "context/reference_style.md"), "brief": _opt_file(ctx.options.get("brief")),
+    window = {"window": _fp(ctx, "window.json")} if ctx.ws.path("window.json").exists() else {}  # absent: old hashes unchanged
+    return hash_inputs({**window, "tables": [_fp(ctx, f) for f in TABLE_FILES], "reference": _fp(ctx, "context/reference_style.md"), "brief": _opt_file(ctx.options.get("brief")),
                         "brand": _opt_file(ctx.options.get("brand")), "persona": file_fingerprint(decide.STORY_PERSONA),
                         "knowledge": _knowledge_fp(), "schema": decide.schema(StoryPlan), "effort": decide.STORY_EFFORT,
                         "prompts": [decide.STORY_PROMPT, decide.READBACK_PROMPT], **_model_key(ctx)})
@@ -180,7 +181,7 @@ def _story_hash(ctx: StageContext) -> str:
 def _story_valid(ctx: StageContext) -> bool:
     inp = _inputs(ctx)
     story = project.load_json_model(StoryPlan, ctx.ws.path("plan", "story.json"))
-    return not errors(validate_story(story, inp.words, set(inp.clips), inp.kids))
+    return not errors(inp.story_issues(story))
 
 
 STORY = Stage(name="story", input_hash=_story_hash,
@@ -192,7 +193,13 @@ STORY = Stage(name="story", input_hash=_story_hash,
 
 
 def _finish_hash(ctx: StageContext) -> str:
-    return hash_inputs({"story": _fp(ctx, "plan/story.json"), "brand": _opt_file(ctx.options.get("brand")), "broll": _fp(ctx, "broll/index.json"),
+    from reel.clipfactory import batch_style
+
+    # Clip Factory siblings only (old hashes unchanged). Sibling b-roll use is a menu hint, deliberately not hashed:
+    # a reel that finished first must not re-run because a later sibling picked clips.
+    style = batch_style(ctx.ws)
+    batch = {"batch_style": style} if style else {}
+    return hash_inputs({**batch, "story": _fp(ctx, "plan/story.json"), "brand": _opt_file(ctx.options.get("brand")), "broll": _fp(ctx, "broll/index.json"),
                         "reference": _fp(ctx, "context/reference_style.md"), "persona": file_fingerprint(decide.FINISH_PERSONA), "knowledge": _knowledge_fp(), "assets": _assets_fp(),
                         "schema": decide.schema(FinishPlan), "effort": decide.FINISH_EFFORT, "prompt": decide.FINISH_PROMPT,
                         **_model_key(ctx)})
@@ -205,8 +212,16 @@ def _finish_valid(ctx: StageContext) -> bool:
     return not errors(validate_finish(fin, story, inp.words, inp.idx, inp.kids))
 
 
+def _finish(ctx: StageContext) -> dict:
+    from reel.clipfactory import record_batch_style
+
+    meta = decide.finish_pass(_inputs(ctx), _caller(ctx))
+    record_batch_style(ctx.ws)  # Clip Factory: the first reel of a set fixes its look for the siblings
+    return meta
+
+
 FINISH = Stage(name="finish", input_hash=_finish_hash, outputs=lambda ctx: [ctx.ws.path("plan", "finish.json")],
-               run=lambda ctx: decide.finish_pass(_inputs(ctx), _caller(ctx)), validate=_finish_valid)
+               run=_finish, validate=_finish_valid)
 
 
 # ------------------------------------------------------------------ compile
@@ -545,7 +560,8 @@ def _qa_hash(ctx: StageContext) -> str:
     from reel.schemas.review import Review
 
     return hash_inputs({"final": _fp(ctx, "render/final.mp4"), "proof": _fp(ctx, "qa/proof_confirmed.json"),
-                        "brief": _opt_file(ctx.options.get("brief")), "persona": file_fingerprint(verdict.REVIEWER_PERSONA),
+                        "brief": _opt_file(ctx.options.get("brief")), "reference": _opt_file(ctx.options.get("reference")),
+                        "persona": file_fingerprint(verdict.REVIEWER_PERSONA),
                         "schema": decide.schema(Review), "gates": config.QA_GATES, "trusted": config.REVIEWER_TRUSTED,
                         "code": hash_inputs([file_fingerprint(Path(m.__file__)) for m in (verdict, qa_mod, cuts)]),
                         "cut_inputs": [_fp(ctx, f) for f in ("timeline/timeline.json", "perception/words.json", "perception/edges.json")],

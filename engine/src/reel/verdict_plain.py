@@ -25,6 +25,9 @@ PLAIN: dict[str, tuple[str, str]] = {
     "cut_flash": ("Flashes at cuts", "{n} cut(s) flash a frame of the wrong picture."),
     "cut_in_word": ("Cuts inside words", "{n} cut(s) clip the start or end of a word."),
     "duration_match": ("Length vs the brief", "The reel's length is outside the target the brief asks for."),
+    "pace": ("Pace", "The cut rhythm is off from the reference reel: {detail}."),
+    "static_stretch": ("Long unchanged stretch", "One stretch goes too long with no cut, punch-in or cutaway: {detail}."),
+    "broll_repeat": ("Repeated cutaway", "The same (or a near-identical) b-roll clip appears twice: {detail}."),
 }
 
 

@@ -44,6 +44,33 @@ def project_total(log_file: Path) -> float:
     return round(sum(c["cost_usd"] for c in calls(log_file)), 4)
 
 
+REEL_CALLS = ("story", "story_readback", "finish", "review", "copy")  # one ordinary edit, before any fix or revision
+
+
+def per_reel_estimate(projects_root: Path) -> dict | None:
+    """What one more edit is likely to cost: per call label, the median of past projects' own calls (fix calls folded
+    into their label), summed over an edit's calls. A range: low = medians, high = upper quartiles. None with < 3 edits."""
+    import statistics
+
+    per_label: dict[str, list[float]] = {}
+    edits = 0
+    for log in sorted(projects_root.glob("*/log/runs.jsonl")):
+        totals: dict[str, float] = {}
+        for c in calls(log):
+            base = c["label"].split(":", 1)[0]
+            if base in REEL_CALLS:
+                totals[base] = totals.get(base, 0.0) + c["cost_usd"]
+        if "story" in totals and "finish" in totals:
+            edits += 1
+            for k, v in totals.items():
+                per_label.setdefault(k, []).append(v)
+    if edits < 3:
+        return None
+    low = sum(statistics.median(v) for v in per_label.values())
+    high = sum(sorted(v)[int(0.75 * (len(v) - 1))] for v in per_label.values())
+    return {"low_usd": round(low, 3), "high_usd": round(max(low, high), 3), "from_edits": edits}
+
+
 def summary(projects_root: Path, days: int = 30, now: float | None = None) -> dict:
     since = (now or time.time()) - days * 86400
     by_project: dict[str, float] = {}

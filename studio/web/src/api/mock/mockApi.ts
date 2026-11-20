@@ -2,7 +2,7 @@
 // simulator so the live view, the queue and the job-driven screens behave like the real thing.
 import type { Api, JobRef } from "../api";
 import { ApiError } from "../errors";
-import { STAGES, type AdjustKind, type BrandEntry, type Job, type JobStatus, type Project, type ProjectSummary, type ReviewLink, type ReviewNote, type SseEvent, type Stage } from "../types";
+import { STAGES, type AdjustKind, type BrandEntry, type ClipCandidate, type Job, type JobStatus, type Project, type ProjectSummary, type ReviewLink, type ReviewNote, type SseEvent, type Stage } from "../types";
 import { parseNotes } from "../../lib/notes";
 import { validateAdjust } from "../../lib/adjust";
 import { BRANDS, COSTS, HEALTH, LAB, LIBRARIES, PACKAGE, SETTINGS, makeProjects, makeTimeline } from "./fixtures";
@@ -25,6 +25,7 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
   const subs =new Map<string, Set<(ev: SseEvent) => void>>();
   let timer: ReturnType<typeof setInterval> | null = null;
   let jobSeq = 100;
+  const listenPairs = new Map<string, { id: string; prompt: string; A: string; B: string; done: boolean }[]>();
 
   const now = () => Date.now() / 1000;
   const makeJob = (project: string, kind: string, label: string, status: JobStatus = "running"): Job => ({
@@ -207,6 +208,7 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
         needs_attention: [],
         thumb: null,
         delivered_at: null,
+        kind: input.mode === "long" ? "source" : "reel",
         brief: input.brief as unknown as Record<string, unknown>,
         brand: input.brand ?? null,
         stages: STAGES.map((name, i) => ({ name, status: slotFree ? (i === 0 ? "running" : "pending") : "queued", started: slotFree && i === 0 ? Date.now() / 1000 : null, finished: null, meta: {} })),
@@ -429,6 +431,51 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
     async label() {
       await guard();
     },
+    async clips(id) {
+      await guard();
+      const p = must(id);
+      if (p.kind !== "source") throw new ApiError(404, "no candidates yet");
+      const made = new Map([...projects.values()].filter((x) => x.parent === id).map((x) => [x.id.split("__").pop()!, x]));
+      const c = (n: number, title: string, family: ClipCandidate["family"], score: number, status: ClipCandidate["status"], why = ""): ClipCandidate => {
+        const cid = `c${String(n).padStart(2, "0")}`;
+        const child = made.get(cid);
+        return {
+          id: cid, rank: n, title, hook_text: `${title}.`, family, score, duration_s: 30 + n * 6, status, why,
+          scores: { hook: 4, standalone: 4, payoff: 4, energy: 3, shareability: 4 }, reason: "A complete thought with a clear payoff.",
+          standalone_risks: n === 3 ? ["mentions 'the second rule' from earlier"] : [], warnings: [],
+          excerpt: "Most people save what is left after spending. Flip it: save first, then spend what is left …",
+          project: child ? { id: child.id, status: child.status } : null,
+        };
+      };
+      return {
+        source_s: 2460, yield_cap: 9, target_s: [20, 75], score_label: "Editor's estimate",
+        score_rule: "(hook×3 + standalone×3 + payoff×2 + shareability×2 + energy×1) / 11; keep ≥ 3.0",
+        estimate_per_reel: { low_usd: 0.42, high_usd: 0.61, from_edits: 7 },
+        candidates: [
+          c(1, "Pay yourself first, every month", "tip", 4.45, "selected"),
+          c(2, "The ₹5 lakh mistake I made at 25", "story", 4.18, "selected"),
+          c(3, "Why the second rule matters", "hot_take", 3.6, "selected"),
+          c(4, "Pay yourself first (again)", "tip", 3.9, "rejected", "62% of its words are in a better-ranked pick"),
+          c(5, "Small talk about the weather", "story", 2.1, "rejected", "score 2.1 < 3.0"),
+        ],
+      };
+    },
+    async makeClips(id, ids, run = true) {
+      await guard();
+      const src = must(id);
+      const jobs: Job[] = [];
+      for (const cid of ids) {
+        const pid = `${id}__${cid}`;
+        if (!projects.has(pid)) {
+          const child: Project = { ...clone(src), id: pid, name: `Reel ${cid}`, kind: "clip", parent: id, status: run ? "queued" : "draft",
+                                   needs_attention: [], stages: STAGES.map((name) => ({ name, status: "pending", started: null, finished: null, meta: {} })) };
+          projects.set(pid, child);
+        }
+        if (run) jobs.push(makeJob(pid, "run", "Edit", "queued"));
+      }
+      src.needs_attention = src.needs_attention.filter((a) => a !== "pick the reels to make");
+      return { made: ids.map((cid) => `${id}__${cid}`), jobs };
+    },
     async libraries() {
       await guard();
       return clone(LIBRARIES);
@@ -458,6 +505,32 @@ export function createMockApi(opts: { engineDown?: boolean } = {}): Api {
       await guard();
       if (action === "eval" && body?.release && LAB.release_locked) throw new ApiError(409, LAB.lock_reason ?? "Release check is locked.", { error: LAB.lock_reason, detail: { release_locked: true } });
       return job("_lab", action, action);
+    },
+    async listening(set) {
+      await guard();
+      const list = listenPairs.get(set) ?? [];
+      return { set, prompts: 4, pairs: clone(list), summary: list.length ? { votes: list.filter((p) => p.done).length, pairs: list.length,
+        rule: "adopt when usable ≥ 70% and it beats the fallback in more than 50% of comparisons", models: {}, generators: {} } : null };
+    },
+    async prepareListening(set) {
+      await guard();
+      listenPairs.set(set, [1, 2, 3].map((n) => ({ id: `p${n}`, prompt: `prompt ${n}`, A: `${set}/p${n}/a.wav`, B: `${set}/p${n}/b.wav`, done: false })));
+      return job("_lab", "listen", `Listening test: render ${set}`);
+    },
+    async voteListening(set, vote) {
+      await guard();
+      const p = (listenPairs.get(set) ?? []).find((x) => x.id === vote.pair);
+      if (!p) throw new ApiError(400, `unknown pair ${vote.pair}`);
+      p.done = true;
+    },
+    listeningMediaUrl: () => "",
+    async setGateMode(gate, mode) {
+      await guard();
+      const g = LAB.calibration?.gates.find((x) => x.name === gate);
+      if (!g) throw new ApiError(404, `no gate ${gate}`);
+      if (mode === "block" && g.mode !== "block" && !g.promote_to_block) throw new ApiError(409, `calibration hasn't cleared ${gate} to block yet`);
+      g.mode = mode;
+      return { gate, mode, recomputed: projects.size };
     },
     async costs() {
       await guard();

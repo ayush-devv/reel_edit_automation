@@ -80,8 +80,10 @@ const BADGE: Record<Badge, { label: string; color: string }> = {
   queued: { label: "Queued", color: "text-fg-secondary" },
   delivered: { label: "Delivered", color: "text-fg-secondary" },
   draft: { label: "Draft", color: "text-fg-secondary" },
+  source: { label: "Pick reels", color: "text-st-hold" },
 };
 const DOT: Record<Badge, string> = {
+  source: "bg-st-hold",
   hold: "bg-st-hold",
   failed: "bg-st-fail",
   sendable: "bg-st-sendable",

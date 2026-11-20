@@ -8,7 +8,8 @@ import { Icon } from "../../components/icons";
 import { Button, cx, Loading, Notice, Panel, Select, TextInput, Toggle } from "../../components/ui";
 import { useQuery } from "../../hooks/useQuery";
 import { LOOKS, validateAdjust } from "../../lib/adjust";
-import { prettyId } from "../../lib/format";
+import { beatLabel, prettyId } from "../../lib/format";
+import { storyBlocks } from "../../lib/layers";
 import { NotYet, useProject } from "./ProjectLayout";
 
 export function IssueList({ issues }: { issues: ValidatorIssue[] }) {
@@ -139,6 +140,47 @@ function colourTokens(lib: Libraries, family: string, overrides: Record<string, 
   return Object.keys(out).length ? out : { emph_color: "#FFD400" };
 }
 
+/** C4: the kept lines in order; drop one or move it. The validator checks the result like any adjustment. */
+function StoryLines({ tl, ctx, onApplied }: { tl: TimelineView; ctx: { families: string[]; tracks: string[] }; onApplied: () => void }) {
+  const base = storyBlocks(tl).map((b) => b.id);
+  const [order, setOrder] = useState<string[]>(base);
+  const [dropped, setDropped] = useState<Set<string>>(new Set());
+  const value = order.filter((id) => !dropped.has(id));
+  const dirty = value.join(",") !== base.join(",");
+  const move = (i: number, d: -1 | 1) => {
+    const j = i + d;
+    if (j < 0 || j >= order.length) return;
+    const next = [...order];
+    [next[i], next[j]] = [next[j], next[i]];
+    setOrder(next);
+  };
+  return (
+    <Row title="Kept lines" hint="Drop a line or change the order. What was attached to a dropped line (punch-ins, sound effects, b-roll, graphics) goes with it."
+         kind="story_lines" value={value} dirty={dirty && value.length > 0} ctx={ctx} onApplied={onApplied}>
+      <ol className="space-y-1.5" aria-label="Kept lines in order">
+        {order.map((id, i) => {
+          const line = tl.story[id];
+          const off = dropped.has(id);
+          return (
+            <li key={id} className={cx("flex items-center gap-2 rounded-control bg-bg-raised px-2 py-1.5", off && "opacity-50")}>
+              <span className="w-12 shrink-0 font-mono text-label text-fg-muted">{id}</span>
+              <span className={cx("min-w-0 flex-1 truncate text-meta", off ? "line-through text-fg-muted" : "text-fg-secondary")} title={line?.text}>
+                {beatLabel(line?.beat)} · {line?.text}
+              </span>
+              <Button variant="ghost" aria-label={`Move ${id} up`} disabled={i === 0} onClick={() => move(i, -1)}>↑</Button>
+              <Button variant="ghost" aria-label={`Move ${id} down`} disabled={i === order.length - 1} onClick={() => move(i, 1)}>↓</Button>
+              <Button variant="ghost" aria-label={off ? `Keep ${id}` : `Drop ${id}`}
+                      onClick={() => setDropped((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; })}>
+                {off ? "Keep" : "Drop"}
+              </Button>
+            </li>
+          );
+        })}
+      </ol>
+    </Row>
+  );
+}
+
 function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
   const a = tl.adjust;
   const family = a.caption_family ?? tl.timeline.captions?.family ?? "";
@@ -261,6 +303,9 @@ function AdjustForm({ tl, lib }: { tl: TimelineView; lib: Libraries }) {
           <Row title="Sound effects" hint={base.sfxOff ? "None in this edit. Ask the Editor (Revise) to add some." : `${a.sfx} in this edit.`} kind="sfx_off" value={true} dirty={v.sfxOff && !base.sfxOff} ctx={ctx} onApplied={done(["sfxOff"])}>
             <Toggle checked={v.sfxOff} onChange={(x) => !base.sfxOff && set("sfxOff", x)} label="Turn all sound effects off" />
           </Row>
+        </Panel>
+        <Panel title="Story">
+          <StoryLines tl={tl} ctx={ctx} onApplied={() => undefined} />
         </Panel>
         <Panel title="Pacing">
           <Row title="Punch-ins" hint={base.punchOff ? "None in this edit. Ask the Editor (Revise) to add some." : `${a.punch_ins} in this edit.`} kind="punch_ins_off" value={true} dirty={v.punchOff && !base.punchOff} ctx={ctx} onApplied={done(["punchOff"])}>
